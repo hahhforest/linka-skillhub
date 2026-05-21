@@ -91,6 +91,21 @@ await shot("02-search-lark");
 const searchText = await visibleText();
 if (!searchText.includes("lark")) issues.push({ severity: "medium", area: "search", text: "搜索后没有明显反馈当前筛选条件" });
 
+await page.getByRole("button", { name: /交汇中心/ }).click();
+const intersectText = await visibleText();
+for (const required of ["来源路径", "目标路径", "预览交汇复制"]) {
+  if (!intersectText.includes(required)) issues.push({ severity: "high", area: "intersect", text: `交汇中心缺少必要元素：${required}` });
+}
+
+await page.getByRole("button", { name: /分发管理/ }).click();
+const distributeText = await visibleText();
+for (const unclear of ["生成分发计划", "执行分发"]) {
+  if (distributeText.includes(unclear)) issues.push({ severity: "high", area: "distribution", text: `分发管理存在不清楚文案：${unclear}` });
+}
+for (const required of ["预览复制结果", "确认复制到选中的目标 Agent"]) {
+  if (!distributeText.includes(required)) issues.push({ severity: "high", area: "distribution", text: `分发管理缺少必要文案：${required}` });
+}
+
 await fs.writeFile(path.join(outDir, "audit.json"), JSON.stringify({ baseUrl, outDir, issues, consoleMessages }, null, 2), "utf8");
 await browser.close();
 console.log(JSON.stringify({ outDir, issues }, null, 2));

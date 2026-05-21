@@ -112,6 +112,35 @@ function SkillRow({ skill, selected, onToggle, lang }: { readonly skill: SkillPa
   );
 }
 
+function actionLabel(action: string, lang: Language): string {
+  const t = messages[lang];
+  if (action === "copy") return t.copyAction;
+  if (action === "overwrite") return t.overwriteAction;
+  if (action === "skip") return t.skipAction;
+  return action;
+}
+
+function PlanItems({ plan, lang }: { readonly plan: DistributionPlan; readonly lang: Language }) {
+  const t = messages[lang];
+  return (
+    <div className="plan-items">
+      {plan.items.map((item) => (
+        <div key={`${item.target.agent}-${item.skill.id}`} className={`plan-item plan-${item.action}`}>
+          <div className="plan-item-title">
+            <strong>{actionLabel(item.action, lang)}</strong>
+            <span>{item.skill.name} → {item.target.label}</span>
+          </div>
+          <dl>
+            <dt>{t.reason}</dt><dd>{item.reason}</dd>
+            {item.existingPath && <><dt>{t.existingPath}</dt><dd><code>{item.existingPath}</code></dd></>}
+            {item.backupPath && <><dt>{t.backupPath}</dt><dd><code>{item.backupPath}</code></dd></>}
+          </dl>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function Sidebar({ view, setView, agents, selectedAgent, setSelectedAgent, lang }: {
   readonly view: View;
   readonly setView: (view: View) => void;
@@ -251,8 +280,8 @@ export function App() {
   const runScan = async () => { setBusy(true); try { const scan = await api.scan(includeBuiltin); setSkills(scan.skills); setMessage(`${t.scan}: ${scan.summary.total}`); setDialog(null); } catch (error) { setMessage(error instanceof Error ? error.message : String(error)); } finally { setBusy(false); } };
   const importRepo = async () => { setBusy(true); try { const result = await api.import(); setMessage(`${t.imported} ${result.imported} skills → ${result.repoPath}`); await loadShell(); } catch (error) { setMessage(error instanceof Error ? error.message : String(error)); } finally { setBusy(false); } };
   const runReview = async () => { setBusy(true); try { const ids = selected.size ? [...selected] : visibleSkills.map((skill) => skill.id); const result = await api.review(ids, reviewer, lang); setMessage(`${t.reviewed} ${result.reviews.length} skills`); setDialog(null); } catch (error) { setMessage(error instanceof Error ? error.message : String(error)); } finally { setBusy(false); } };
-  const planDistribution = async (targetAgents: string[]) => { setBusy(true); try { const result = await api.distributionPlan(targetAgents, [...selected]); setPlan(result.plan); setMessage(`Plan ${result.plan.id}: ${result.plan.items.length}`); } catch (error) { setMessage(error instanceof Error ? error.message : String(error)); } finally { setBusy(false); } };
-  const applyDistribution = async (targetAgents: string[]) => { setBusy(true); try { const run = await api.distributionApply(targetAgents, [...selected]); setMessage(`${t.copied} ${run.copied}, ${t.skipped} ${run.skipped}`); await loadShell(); } catch (error) { setMessage(error instanceof Error ? error.message : String(error)); } finally { setBusy(false); } };
+  const planDistribution = async (targetAgents: string[], skillIds?: string[]) => { setBusy(true); try { const result = await api.distributionPlan(targetAgents, skillIds ?? [...selected]); setPlan(result.plan); setMessage(`${t.planSummary}: ${result.plan.items.length}`); } catch (error) { setMessage(error instanceof Error ? error.message : String(error)); } finally { setBusy(false); } };
+  const applyDistribution = async (targetAgents: string[], skillIds?: string[]) => { setBusy(true); try { const run = await api.distributionApply(targetAgents, skillIds ?? [...selected]); setMessage(`${t.copied} ${run.copied}, ${t.skipped} ${run.skipped}`); await loadShell(); } catch (error) { setMessage(error instanceof Error ? error.message : String(error)); } finally { setBusy(false); } };
 
   return (
     <main className="app-shell">
@@ -275,28 +304,62 @@ export function App() {
   );
 }
 
-function Placeholder(props: { readonly view: View; readonly lang: Language; readonly skills: SkillPackage[]; readonly targets: DistributionTarget[]; readonly selected: Set<string>; readonly toggleSkill: (id: string) => void; readonly plan?: DistributionPlan; readonly onPlan: (agents: string[]) => void; readonly onApply: (agents: string[]) => void; readonly selectedSkill?: SkillPackage }) {
+function Placeholder(props: { readonly view: View; readonly lang: Language; readonly skills: SkillPackage[]; readonly targets: DistributionTarget[]; readonly selected: Set<string>; readonly toggleSkill: (id: string) => void; readonly plan?: DistributionPlan; readonly onPlan: (agents: string[], skillIds?: string[]) => void; readonly onApply: (agents: string[], skillIds?: string[]) => void; readonly selectedSkill?: SkillPackage }) {
   const t = messages[props.lang];
   if (props.view === "distribute") return <Distribute targets={props.targets} selected={props.selected} onPlan={props.onPlan} onApply={props.onApply} plan={props.plan} busy={false} lang={props.lang} />;
   if (props.view === "detail") return <Detail skill={props.selectedSkill} lang={props.lang} />;
-  return <Intersect skills={props.skills} selected={props.selected} toggleSkill={props.toggleSkill} lang={props.lang} />;
+  return <Intersect skills={props.skills} targets={props.targets} selected={props.selected} toggleSkill={props.toggleSkill} lang={props.lang} plan={props.plan} onPlan={props.onPlan} onApply={props.onApply} />;
 }
 
-function Intersect({ skills, selected, toggleSkill, lang }: { readonly skills: SkillPackage[]; readonly selected: Set<string>; readonly toggleSkill: (id: string) => void; readonly lang: Language }) {
+function Intersect({ skills, targets, selected, toggleSkill, lang, plan, onPlan, onApply }: { readonly skills: SkillPackage[]; readonly targets: DistributionTarget[]; readonly selected: Set<string>; readonly toggleSkill: (id: string) => void; readonly lang: Language; readonly plan?: DistributionPlan; readonly onPlan: (agents: string[], skillIds?: string[]) => void; readonly onApply: (agents: string[], skillIds?: string[]) => void }) {
   const t = messages[lang];
   const [from, setFrom] = useState("mavis");
   const [to, setTo] = useState("claude");
   const left = skills.filter((skill) => skill.source.agent === from).slice(0, 40);
   const right = skills.filter((skill) => skill.source.agent === to).slice(0, 40);
-  const selectedSkills = skills.filter((skill) => selected.has(skill.id));
-  return <section className="intersect-layout"><div className="section-head span-all"><div><h2>{t.navIntersect}</h2><p>{t.intersectDesc}</p></div><div className="agent-selects"><select value={from} onChange={(event) => setFrom(event.target.value)}>{Object.keys(agentTone).map((agent) => <option key={agent} value={agent}>{agentTone[agent]?.label}</option>)}</select><ArrowRight size={18} /><select value={to} onChange={(event) => setTo(event.target.value)}>{Object.keys(agentTone).map((agent) => <option key={agent} value={agent}>{agentTone[agent]?.label}</option>)}</select></div></div><div className="work-card lane-card"><h3><AgentLogo agent={from} /> {t.sourceSkills}</h3><div className="skill-list compact scrollable-list">{left.map((skill) => <SkillRow key={skill.id} skill={skill} selected={selected.has(skill.id)} onToggle={toggleSkill} lang={lang} />)}</div></div><div className="drop-zone"><GitCompareArrows size={26} /><strong>{selectedSkills.length} {t.selectedSkills}</strong><div>{selectedSkills.slice(0, 8).map((skill) => <span key={skill.id}>{skill.name}</span>)}</div></div><div className="work-card lane-card"><h3><AgentLogo agent={to} /> {t.targetExisting}</h3><div className="skill-list compact scrollable-list">{right.map((skill) => <SkillRow key={skill.id} skill={skill} selected={selected.has(skill.id)} onToggle={toggleSkill} lang={lang} />)}</div></div></section>;
+  const selectedSkills = skills.filter((skill) => selected.has(skill.id) && skill.source.agent === from);
+  const selectedIds = selectedSkills.map((skill) => skill.id);
+  const sourcePath = left[0]?.source.rootPath ?? "-";
+  const targetPath = targets.find((target) => target.agent === to)?.targetDir ?? "-";
+  const agents = Object.keys(agentTone);
+  return (
+    <section className="intersect-layout">
+      <div className="section-head span-all">
+        <div><h2>{t.navIntersect}</h2><p>{t.intersectDesc}</p></div>
+        <div className="agent-selects">
+          <select value={from} onChange={(event) => setFrom(event.target.value)}>{agents.map((agent) => <option key={agent} value={agent}>{agentTone[agent]?.label}</option>)}</select>
+          <ArrowRight size={18} />
+          <select value={to} onChange={(event) => setTo(event.target.value)}>{agents.map((agent) => <option key={agent} value={agent}>{agentTone[agent]?.label}</option>)}</select>
+        </div>
+      </div>
+      <div className="work-card lane-card">
+        <h3><AgentLogo agent={from} /> {t.sourceSkills}</h3>
+        <div className="path-note"><strong>{t.sourcePath}</strong><code>{sourcePath}</code></div>
+        <div className="skill-list compact scrollable-list">{left.map((skill) => <SkillRow key={skill.id} skill={skill} selected={selected.has(skill.id)} onToggle={toggleSkill} lang={lang} />)}</div>
+      </div>
+      <div className="work-card intersection-actions">
+        <GitCompareArrows size={26} />
+        <strong>{selectedSkills.length} {t.selectedSkills}</strong>
+        <div className="selected-chip-list">{selectedSkills.slice(0, 8).map((skill) => <span key={skill.id}>{skill.name}</span>)}</div>
+        {selectedSkills.length === 0 && <p className="muted-copy">{t.noSourceSelection}</p>}
+        <button className="primary" disabled={selectedSkills.length === 0} onClick={() => onPlan([to], selectedIds)}><UploadCloud size={16} /> {t.previewIntersection}</button>
+        {plan && selectedSkills.length > 0 && <button className="primary" onClick={() => onApply([to], selectedIds)}><Check size={16} /> {t.applyIntersection}</button>}
+        {plan && <><h3>{t.planSummary}</h3><PlanItems plan={plan} lang={lang} /></>}
+      </div>
+      <div className="work-card lane-card">
+        <h3><AgentLogo agent={to} /> {t.targetExisting}</h3>
+        <div className="path-note"><strong>{t.targetPath}</strong><code>{targetPath}</code></div>
+        <div className="skill-list compact scrollable-list">{right.map((skill) => <SkillRow key={skill.id} skill={skill} selected={selected.has(skill.id)} onToggle={toggleSkill} lang={lang} />)}</div>
+      </div>
+    </section>
+  );
 }
 
-function Distribute({ targets, selected, onPlan, onApply, plan, busy, lang }: { readonly targets: DistributionTarget[]; readonly selected: Set<string>; readonly onPlan: (agents: string[]) => void; readonly onApply: (agents: string[]) => void; readonly plan?: DistributionPlan; readonly busy: boolean; readonly lang: Language }) {
+function Distribute({ targets, selected, onPlan, onApply, plan, busy, lang }: { readonly targets: DistributionTarget[]; readonly selected: Set<string>; readonly onPlan: (agents: string[], skillIds?: string[]) => void; readonly onApply: (agents: string[], skillIds?: string[]) => void; readonly plan?: DistributionPlan; readonly busy: boolean; readonly lang: Language }) {
   const t = messages[lang];
   const [chosen, setChosen] = useState<Set<string>>(new Set(["codex", "claude"]));
   const toggle = (agent: string) => { const next = new Set(chosen); next.has(agent) ? next.delete(agent) : next.add(agent); setChosen(next); };
-  return <section className="panel-grid distribute-grid"><div className="section-head span-all"><div><h2>{t.navDistribute}</h2><p>{t.distributeDesc}</p></div><button className="primary" disabled={busy || selected.size === 0 || chosen.size === 0} onClick={() => onPlan([...chosen])}><UploadCloud size={16} /> {t.generatePlan}</button></div><div className="work-card target-card"><h3>{t.targets}</h3><div className="target-grid">{targets.map((target) => <button key={target.agent} className={chosen.has(target.agent) ? "target selected" : "target"} onClick={() => toggle(target.agent)}><AgentLogo agent={target.agent} /><span>{target.label}<small>{target.targetDir}</small></span>{chosen.has(target.agent) && <Check size={16} />}</button>)}</div></div><div className="work-card plan-card"><h3>{t.planSummary}</h3>{plan ? <div className="plan-list"><strong>{plan.items.filter((item) => item.action !== "skip").length} {t.toCopyOrOverwrite}</strong>{plan.items.slice(0, 12).map((item) => <span key={`${item.target.agent}-${item.skill.id}`}>{item.action} · {item.skill.name} → {item.target.label}</span>)}<button className="primary" disabled={busy || chosen.size === 0 || selected.size === 0} onClick={() => onApply([...chosen])}><Check size={16} /> {t.applyDistribution}</button></div> : <div className="empty-state"><Info size={18} />{t.waitingPlan}</div>}</div></section>;
+  return <section className="panel-grid distribute-grid"><div className="section-head span-all"><div><h2>{t.navDistribute}</h2><p>{t.distributeDesc}</p></div><button className="primary" disabled={busy || selected.size === 0 || chosen.size === 0} onClick={() => onPlan([...chosen])}><UploadCloud size={16} /> {t.generatePlan}</button></div><div className="work-card target-card"><h3>{t.targets}</h3><div className="target-grid">{targets.map((target) => <button key={target.agent} className={chosen.has(target.agent) ? "target selected" : "target"} onClick={() => toggle(target.agent)}><AgentLogo agent={target.agent} /><span>{target.label}<small>{target.targetDir}</small></span>{chosen.has(target.agent) && <Check size={16} />}</button>)}</div></div><div className="work-card plan-card"><h3>{t.planSummary}</h3>{plan ? <div className="plan-list"><strong>{plan.items.filter((item) => item.action !== "skip").length} {t.toCopyOrOverwrite}</strong><PlanItems plan={plan} lang={lang} /><button className="primary" disabled={busy || chosen.size === 0 || selected.size === 0} onClick={() => onApply([...chosen])}><Check size={16} /> {t.applyDistribution}</button></div> : <div className="empty-state"><Info size={18} />{t.waitingPlan}<button className="primary" disabled><Check size={16} /> {t.applyDistribution}</button></div>}</div></section>;
 }
 
 function Detail({ skill, lang }: { readonly skill?: SkillPackage; readonly lang: Language }) {

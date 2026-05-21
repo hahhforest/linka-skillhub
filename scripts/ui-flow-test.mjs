@@ -53,6 +53,22 @@ await page.getByRole("button", { name: /运行确定性规则审查/ }).click();
 await expectText("选择审查方式", "review dialog");
 await expectText("规则审查", "reviewer choice");
 await screenshot("06-review-dialog");
+await page.getByRole("button", { name: /取消/ }).click();
+
+await page.getByRole("button", { name: /交汇中心/ }).click();
+await expectText("来源路径", "intersection source path");
+await expectText("目标路径", "intersection target path");
+await expectText("预览交汇复制", "intersection preview button");
+await page.locator(".lane-card").first().locator(".skill-row").first().click();
+await page.getByRole("button", { name: /预览交汇复制/ }).click();
+await page.waitForFunction(() => document.body.innerText.includes("复制预览"), undefined, { timeout: 30000 });
+await expectText("复制预览", "intersection copy preview");
+await screenshot("07-intersection-preview");
+
+await page.getByRole("button", { name: /分发管理/ }).click();
+await expectText("预览复制结果", "distribution preview button");
+await expectText("确认复制到选中的目标 Agent", "distribution apply button text");
+await screenshot("08-distribution-copy");
 
 await browser.close();
 await fs.writeFile(path.join(outDir, "result.json"), JSON.stringify({ failures }, null, 2), "utf8");

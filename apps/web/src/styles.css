@@ -395,3 +395,87 @@ button:disabled { cursor: not-allowed; opacity: 0.62; }
 .checkbox-line { display: flex; align-items: center; gap: 8px; margin-top: 12px; }
 .full-select { width: 100%; height: 38px; border: 1px solid var(--border); border-radius: 8px; padding: 0 10px; background: #fff; }
 .muted-copy { font-size: 12px; }
+
+.path-note {
+  display: grid;
+  gap: 6px;
+  margin: 0 0 12px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.path-note code {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  background: #eef2f7;
+  color: #334155;
+  border-radius: 6px;
+  padding: 7px 8px;
+}
+.intersection-actions {
+  min-height: 420px;
+  align-self: start;
+  display: grid;
+  align-content: start;
+  gap: 12px;
+}
+.intersection-actions > svg { color: var(--blue); }
+.selected-chip-list {
+  display: grid;
+  gap: 6px;
+  max-height: 128px;
+  overflow: auto;
+}
+.selected-chip-list span {
+  border: 1px solid #dbeafe;
+  background: #fff;
+  border-radius: 8px;
+  padding: 7px;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.plan-items {
+  display: grid;
+  gap: 8px;
+  max-height: 340px;
+  overflow: auto;
+}
+.plan-item {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #fff;
+  padding: 10px;
+}
+.plan-item-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.plan-item-title strong {
+  color: var(--blue);
+  white-space: nowrap;
+}
+.plan-item-title span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.plan-skip .plan-item-title strong { color: var(--muted); }
+.plan-overwrite .plan-item-title strong { color: var(--yellow); }
+.plan-copy .plan-item-title strong { color: var(--green); }
+.plan-item dl {
+  display: grid;
+  grid-template-columns: 72px minmax(0, 1fr);
+  gap: 6px 8px;
+  margin: 0;
+  font-size: 12px;
+}
+.plan-item dt { color: var(--muted); }
+.plan-item dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+.plan-item code { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
