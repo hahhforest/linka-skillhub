@@ -1,0 +1,58 @@
+version: 1
+name: "linka-skillhub safe mirror testing"
+objective: "<最终目标和交付物>"
+workspace: ".agents/team-work/skillhub-safe-mirror"
+mode: "single-tui"
+status: "in_progress"
+owner: "Owner"
+constraints: []
+gates: []
+tasks:
+  - id: "T1"
+    title: "Copy real skills into sandbox mirror"
+    role: "producer"
+    status: "ready"
+    depends_on: []
+    owner: "Producer"
+    scope:
+      include: []
+      exclude: []
+    prompt_file: "tasks/T1/prompt.md"
+    deliverable_file: "tasks/T1/deliverable.md"
+    verify:
+      verifier: "Verifier"
+      prompt_file: "tasks/T1/verify-prompt.md"
+      verdict_file: "tasks/T1/verdict.md"
+      required_checks: []
+  - id: "T2"
+    title: "Config and CLI profile hardening"
+    role: "producer"
+    status: "ready"
+    depends_on: []
+    owner: "Producer"
+    scope:
+      include: []
+      exclude: []
+    prompt_file: "tasks/T2/prompt.md"
+    deliverable_file: "tasks/T2/deliverable.md"
+    verify:
+      verifier: "Verifier"
+      prompt_file: "tasks/T2/verify-prompt.md"
+      verdict_file: "tasks/T2/verdict.md"
+      required_checks: []
+  - id: "T3"
+    title: "UI/API browser smoke and GitHub sandbox repo test"
+    role: "producer"
+    status: "ready"
+    depends_on: []
+    owner: "Producer"
+    scope:
+      include: []
+      exclude: []
+    prompt_file: "tasks/T3/prompt.md"
+    deliverable_file: "tasks/T3/deliverable.md"
+    verify:
+      verifier: "Verifier"
+      prompt_file: "tasks/T3/verify-prompt.md"
+      verdict_file: "tasks/T3/verdict.md"
+      required_checks: []

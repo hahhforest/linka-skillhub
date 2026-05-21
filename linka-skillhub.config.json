@@ -1,0 +1,236 @@
+{
+  "version": 1,
+  "activeProfile": "mirror",
+  "profiles": {
+    "sandbox": {
+      "stateDir": "./.sandbox/state",
+      "registryRepo": "./.sandbox/registry-repo",
+      "agents": {
+        "mavis": {
+          "targetDir": "./.sandbox/agents/mavis/skills",
+          "sourceDirs": [
+            {
+              "path": "./.sandbox/agents/mavis/skills",
+              "scope": "user",
+              "defaultSelected": true
+            },
+            {
+              "path": "./.sandbox/agents/mavis/private",
+              "scope": "private",
+              "defaultSelected": true
+            },
+            {
+              "path": "./.sandbox/agents/mavis/builtin",
+              "scope": "builtin",
+              "defaultSelected": false
+            }
+          ]
+        },
+        "opencode": {
+          "targetDir": "./.sandbox/agents/opencode/skills",
+          "sourceDirs": [
+            {
+              "path": "./.sandbox/agents/opencode/skills",
+              "scope": "user",
+              "defaultSelected": true
+            },
+            {
+              "path": "./.sandbox/project/.opencode/skills",
+              "scope": "project",
+              "defaultSelected": true
+            }
+          ]
+        },
+        "claude": {
+          "targetDir": "./.sandbox/agents/claude/skills",
+          "sourceDirs": [
+            {
+              "path": "./.sandbox/agents/claude/skills",
+              "scope": "user",
+              "defaultSelected": true
+            },
+            {
+              "path": "./.sandbox/project/.claude/skills",
+              "scope": "project",
+              "defaultSelected": true
+            }
+          ]
+        },
+        "codex": {
+          "targetDir": "./.sandbox/agents/codex/skills",
+          "sourceDirs": [
+            {
+              "path": "./.sandbox/agents/codex/skills",
+              "scope": "user",
+              "defaultSelected": true
+            },
+            {
+              "path": "./.sandbox/agents/codex/system",
+              "scope": "system",
+              "defaultSelected": false
+            }
+          ]
+        }
+      }
+    },
+    "local": {
+      "stateDir": "~/.linka-skillhub",
+      "registryRepo": "./.linka-skillhub/registry-repo",
+      "agents": {
+        "mavis": {
+          "targetDir": "~/.mavis/skills",
+          "sourceDirs": [
+            {
+              "path": "~/.mavis/skills",
+              "scope": "user",
+              "defaultSelected": true
+            },
+            {
+              "path": "~/.mavis/agents",
+              "scope": "private",
+              "defaultSelected": true,
+              "includeNested": true
+            },
+            {
+              "path": "~/.mavis/.builtin-skills",
+              "scope": "builtin",
+              "defaultSelected": false
+            }
+          ]
+        },
+        "opencode": {
+          "targetDir": "~/.config/opencode/skills",
+          "sourceDirs": [
+            {
+              "path": "~/.config/opencode/skills",
+              "scope": "user",
+              "defaultSelected": true
+            },
+            {
+              "path": "~/.opencode/skills",
+              "scope": "user",
+              "defaultSelected": true
+            },
+            {
+              "path": "${cwd}/.opencode/skills",
+              "scope": "project",
+              "defaultSelected": true
+            },
+            {
+              "path": "~/.agents/skills",
+              "scope": "user",
+              "defaultSelected": true
+            }
+          ]
+        },
+        "claude": {
+          "targetDir": "~/.claude/skills",
+          "sourceDirs": [
+            {
+              "path": "~/.claude/skills",
+              "scope": "user",
+              "defaultSelected": true
+            },
+            {
+              "path": "${cwd}/.claude/skills",
+              "scope": "project",
+              "defaultSelected": true
+            }
+          ]
+        },
+        "codex": {
+          "targetDir": "~/.codex/skills",
+          "sourceDirs": [
+            {
+              "path": "~/.codex/skills",
+              "scope": "user",
+              "defaultSelected": true
+            },
+            {
+              "path": "~/.codex/skills/.system",
+              "scope": "system",
+              "defaultSelected": false
+            }
+          ]
+        }
+      }
+    },
+    "mirror": {
+      "stateDir": "./.sandbox/mirror-state",
+      "registryRepo": "./.sandbox/my-skills-registry",
+      "agents": {
+        "mavis": {
+          "targetDir": "./.sandbox/local-mirror/targets/mavis/skills",
+          "sourceDirs": [
+            {
+              "path": "./.sandbox/local-mirror/sources/mavis/skills",
+              "scope": "user",
+              "defaultSelected": true
+            },
+            {
+              "path": "./.sandbox/local-mirror/sources/mavis/agent-private",
+              "scope": "private",
+              "defaultSelected": true,
+              "includeNested": true
+            },
+            {
+              "path": "./.sandbox/local-mirror/sources/mavis/builtin",
+              "scope": "builtin",
+              "defaultSelected": false
+            }
+          ]
+        },
+        "opencode": {
+          "targetDir": "./.sandbox/local-mirror/targets/opencode/skills",
+          "sourceDirs": [
+            {
+              "path": "./.sandbox/local-mirror/sources/opencode/config-skills",
+              "scope": "user",
+              "defaultSelected": true
+            },
+            {
+              "path": "./.sandbox/local-mirror/sources/opencode/home-skills",
+              "scope": "user",
+              "defaultSelected": true
+            }
+          ]
+        },
+        "claude": {
+          "targetDir": "./.sandbox/local-mirror/targets/claude/skills",
+          "sourceDirs": [
+            {
+              "path": "./.sandbox/local-mirror/sources/claude/skills",
+              "scope": "user",
+              "defaultSelected": true
+            }
+          ]
+        },
+        "codex": {
+          "targetDir": "./.sandbox/local-mirror/targets/codex/skills",
+          "sourceDirs": [
+            {
+              "path": "./.sandbox/local-mirror/sources/codex/skills",
+              "scope": "user",
+              "defaultSelected": true
+            },
+            {
+              "path": "./.sandbox/local-mirror/sources/codex/system",
+              "scope": "system",
+              "defaultSelected": false
+            }
+          ]
+        },
+        "shared": {
+          "targetDir": "./.sandbox/local-mirror/targets/shared-agents/skills",
+          "sourceDirs": [
+            {
+              "path": "./.sandbox/local-mirror/sources/shared-agents/skills",
+              "scope": "user",
+              "defaultSelected": true
+            }
+          ]
+        }
+      }
+    }
+  }
+}

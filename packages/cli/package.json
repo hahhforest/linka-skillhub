@@ -1,0 +1,21 @@
+{
+  "name": "@linka-skillhub/cli",
+  "version": "0.1.0",
+  "type": "module",
+  "bin": {
+    "linka-skillhub": "dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run --passWithNoTests",
+    "start": "pnpm --filter @linka-skillhub/core build && tsx src/index.ts"
+  },
+  "dependencies": {
+    "@linka-skillhub/core": "workspace:*",
+    "commander": "^12.1.0"
+  },
+  "devDependencies": {
+    "vitest": "^2.1.8"
+  }
+}

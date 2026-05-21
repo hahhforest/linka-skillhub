@@ -1,0 +1,32 @@
+{
+  "name": "linka-skillhub",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@9.15.9",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "pnpm -r build",
+    "typecheck": "pnpm --filter @linka-skillhub/core build && pnpm --filter @linka-skillhub/cli typecheck && pnpm --filter @linka-skillhub/web typecheck",
+    "test": "pnpm -r test",
+    "dev": "pnpm --filter @linka-skillhub/web dev",
+    "serve": "pnpm --filter @linka-skillhub/cli start -- serve",
+    "seed:sandbox": "node scripts/seed-sandbox.mjs",
+    "mirror:local": "node scripts/mirror-local-skills.mjs",
+    "smoke:ui": "node scripts/ui-smoke.mjs",
+    "scan": "pnpm --filter @linka-skillhub/cli start -- scan",
+    "format": "prettier --check ."
+  },
+  "devDependencies": {
+    "@types/node": "^20.17.16",
+    "@vitejs/plugin-react": "^4.3.4",
+    "playwright-core": "^1.60.0",
+    "prettier": "^3.4.2",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.3",
+    "vite": "^5.4.11",
+    "vitest": "^2.1.8"
+  }
+}
