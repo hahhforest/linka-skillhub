@@ -60,5 +60,7 @@ export const api = {
     request<{ plan: DistributionPlan }>("/api/distributions/plan", { method: "POST", body: JSON.stringify({ targetAgents, skillIds }) }),
   distributionApply: (targetAgents: string[], skillIds: string[]) =>
     request<DistributionRun>("/api/distributions/apply", { method: "POST", body: JSON.stringify({ targetAgents, skillIds }) }),
-  repoStatus: () => request<{ status: string }>("/api/repo/status")
+  repoStatus: () => request<{ status: string }>("/api/repo/status"),
+  repoPush: (message: string) => request<{ commit: string; output: string }>("/api/repo/push", { method: "POST", body: JSON.stringify({ message }) }),
+  repoPull: () => request<{ output: string }>("/api/repo/pull", { method: "POST", body: JSON.stringify({}) })
 };

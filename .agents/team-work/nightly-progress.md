@@ -21,3 +21,10 @@
 - 已完成：后端新增 `/api/reviewers` 检测本机审核器；审查弹框展示审查范围、输出语言、写入位置、规则审核和 Code Agent 可用/不可用原因；浏览器流程测试覆盖审核弹框信息。
 - 最近测试：`pnpm typecheck`、`pnpm build`、`node scripts/ui-audit.mjs`、`node scripts/ui-flow-test.mjs`、`pnpm test` 均通过；浏览器巡检 issues 为 0。
 - 下一步：推进 Commit 3，Registry/GitHub 同步和 local profile 安全确认。
+
+## 2026-05-22 01:24 +08:00
+
+- 当前 phase：Commit 3，Registry/GitHub 同步和 local profile 安全确认。
+- 已完成：Registry 页面增加 Git 状态面板、刷新状态、pull、commit+push 入口；push 支持用户提供提交说明；浏览器流程测试覆盖 Git 状态和推送入口可见。
+- 最近测试：`pnpm typecheck`、`pnpm build`、`node scripts/ui-audit.mjs`、`node scripts/ui-flow-test.mjs`、`pnpm test` 均通过；浏览器巡检 issues 为 0。
+- 下一步：推进 Commit 4，补全测试矩阵、浏览器巡检断言和最终收敛。

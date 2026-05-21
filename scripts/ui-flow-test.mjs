@@ -47,6 +47,9 @@ await page.getByRole("button", { name: /仓库管理/ }).click();
 await expectText("导入到 Registry", "import action");
 await expectText("运行确定性规则审查", "rule review action");
 await expectText("不调用 LLM", "rule review explanation");
+await expectText("Git 状态", "git status panel");
+await expectText("刷新 Git 状态", "refresh git status button");
+await expectText("提交并推送 Registry", "push registry button");
 await screenshot("05-repo");
 
 await page.getByRole("button", { name: /运行确定性规则审查/ }).click();

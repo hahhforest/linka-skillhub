@@ -224,7 +224,7 @@ function Overview({ skills, summary, selected, toggleSkill, lang, selectedAgent 
   );
 }
 
-function RepoView({ onImport, onReview, onAgentReview, busy, message, lang }: { readonly onImport: () => void; readonly onReview: () => void; readonly onAgentReview: () => void; readonly busy: boolean; readonly message: string; readonly lang: Language }) {
+function RepoView({ onImport, onReview, onAgentReview, onRefreshGit, onPull, onPush, gitStatus, commitMessage, setCommitMessage, busy, message, lang }: { readonly onImport: () => void; readonly onReview: () => void; readonly onAgentReview: () => void; readonly onRefreshGit: () => void; readonly onPull: () => void; readonly onPush: () => void; readonly gitStatus: string; readonly commitMessage: string; readonly setCommitMessage: (value: string) => void; readonly busy: boolean; readonly message: string; readonly lang: Language }) {
   const t = messages[lang];
   return (
     <section className="panel-grid repo-grid">
@@ -232,6 +232,13 @@ function RepoView({ onImport, onReview, onAgentReview, busy, message, lang }: { 
       <button className="action-card" onClick={onImport} disabled={busy}><Database size={22} /><strong>{t.importToRegistry}</strong><span>{t.importToRegistryDesc}</span></button>
       <button className="action-card" onClick={onReview} disabled={busy}><Sparkles size={22} /><strong>{t.runRuleReview}</strong><span>{t.runRuleReviewDesc}</span></button>
       <button className="action-card" onClick={onAgentReview} disabled={busy}><Sparkles size={22} /><strong>{t.runAgentReview}</strong><span>{t.runAgentReviewDesc}</span></button>
+      <div className="work-card git-card">
+        <h3>{t.gitStatus}</h3>
+        <p className="muted-copy">{t.remoteSyncDesc}</p>
+        <pre>{gitStatus || t.waitingOperation}</pre>
+        <label className="field-label">{t.commitMessage}<input value={commitMessage} onChange={(event) => setCommitMessage(event.target.value)} /></label>
+        <div className="button-row"><button className="ghost" onClick={onRefreshGit} disabled={busy}>{t.refreshGitStatus}</button><button className="ghost" onClick={onPull} disabled={busy}>{t.pullRegistry}</button><button className="primary" onClick={onPush} disabled={busy}>{t.pushRegistry}</button></div>
+      </div>
       <div className="work-card span-all log-panel"><h3>{t.operationLog}</h3><pre>{message || t.waitingOperation}</pre></div>
     </section>
   );
@@ -260,12 +267,16 @@ export function App() {
   const [includeBuiltin, setIncludeBuiltin] = useState(false);
   const [reviewer, setReviewer] = useState("rules");
   const [reviewers, setReviewers] = useState<ReviewerInfo[]>([]);
+  const [gitStatusText, setGitStatusText] = useState("");
+  const [commitMessage, setCommitMessage] = useState<string>(t.commitMessageDefault);
 
   const loadShell = async () => {
     const [agentData, registry] = await Promise.all([api.agents(), api.skills()]);
     setAgents(agentData.agents); setTargets(agentData.targets); setProfile(agentData.profile ?? "unknown"); setRegistryRepo(agentData.registryRepo ?? ""); setSkills(registry.skills);
     if (registry.missingRegistry) setMessage(lang === "zh" ? "Registry 还没有导入记录，请先扫描或导入。" : "Registry is empty. Scan or import first.");
   };
+
+  useEffect(() => { setCommitMessage(messages[lang].commitMessageDefault); }, [lang]);
 
   useEffect(() => { void loadShell().catch((error) => setMessage(error instanceof Error ? error.message : String(error))); }, []);
 
@@ -293,6 +304,9 @@ export function App() {
   };
   const planDistribution = async (targetAgents: string[], skillIds?: string[]) => { setBusy(true); try { const result = await api.distributionPlan(targetAgents, skillIds ?? [...selected]); setPlan(result.plan); setMessage(`${t.planSummary}: ${result.plan.items.length}`); } catch (error) { setMessage(error instanceof Error ? error.message : String(error)); } finally { setBusy(false); } };
   const applyDistribution = async (targetAgents: string[], skillIds?: string[]) => { setBusy(true); try { const run = await api.distributionApply(targetAgents, skillIds ?? [...selected]); setMessage(`${t.copied} ${run.copied}, ${t.skipped} ${run.skipped}`); await loadShell(); } catch (error) { setMessage(error instanceof Error ? error.message : String(error)); } finally { setBusy(false); } };
+  const refreshGit = async () => { setBusy(true); try { const result = await api.repoStatus(); setGitStatusText(result.status || "clean"); } catch (error) { setMessage(error instanceof Error ? error.message : String(error)); } finally { setBusy(false); } };
+  const pullRegistry = async () => { setBusy(true); try { const result = await api.repoPull(); setMessage(result.output || "pull ok"); await refreshGit(); } catch (error) { setMessage(error instanceof Error ? error.message : String(error)); } finally { setBusy(false); } };
+  const pushRegistry = async () => { setBusy(true); try { const result = await api.repoPush(commitMessage || t.commitMessageDefault); setMessage(`${result.commit}\n${result.output}`); await refreshGit(); } catch (error) { setMessage(error instanceof Error ? error.message : String(error)); } finally { setBusy(false); } };
 
   return (
     <main className="app-shell">
@@ -304,7 +318,7 @@ export function App() {
         <Sidebar view={view} setView={setView} agents={agents} selectedAgent={selectedAgent} setSelectedAgent={setSelectedAgent} lang={lang} />
         <div className="content">
           {view === "overview" && <Overview skills={visibleSkills} summary={summary} selected={selected} toggleSkill={toggleSkill} lang={lang} selectedAgent={selectedAgent} />}
-          {view === "repo" && <RepoView onImport={importRepo} onReview={() => void openReviewDialog("rules")} onAgentReview={() => void openReviewDialog("codex")} busy={busy} message={message} lang={lang} />}
+          {view === "repo" && <RepoView onImport={importRepo} onReview={() => void openReviewDialog("rules")} onAgentReview={() => void openReviewDialog("codex")} onRefreshGit={refreshGit} onPull={pullRegistry} onPush={pushRegistry} gitStatus={gitStatusText} commitMessage={commitMessage} setCommitMessage={setCommitMessage} busy={busy} message={message} lang={lang} />}
           {view !== "overview" && view !== "repo" && <Placeholder view={view} lang={lang} skills={visibleSkills} targets={targets} selected={selected} toggleSkill={toggleSkill} plan={plan} onPlan={planDistribution} onApply={applyDistribution} selectedSkill={selectedSkill} />}
           <footer className="status-footer"><span>{agents.length} agents</span><span>{selected.size} {t.selectedCount}</span><span>{message}</span></footer>
         </div>

@@ -256,7 +256,8 @@ export const startServer = (options: ServerOptions): http.Server => {
       }
 
       if (request.method === "POST" && url.pathname === "/api/repo/push") {
-        sendJson(response, 200, { commit: await gitCommitAll(options.repoPath), output: await gitPush(options.repoPath) });
+        const body = await readJsonBody<{ message?: string }>(request);
+        sendJson(response, 200, { commit: await gitCommitAll(options.repoPath, body.message ?? "更新技能仓库"), output: await gitPush(options.repoPath) });
         return;
       }
 
