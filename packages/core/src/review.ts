@@ -1,11 +1,11 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { spawn } from "node:child_process";
-import type { AgentKind, ReviewResult, SkillPackage, SkillStatus } from "./types.js";
+import type { AgentKind, ReviewLanguage, ReviewResult, SkillPackage, SkillStatus } from "./types.js";
 
 export const PROMPT_VERSION = "skill-review-v1";
 
-export const reviewSkillWithRules = (skill: SkillPackage): ReviewResult => {
+export const reviewSkillWithRules = (skill: SkillPackage, language: ReviewLanguage = "zh"): ReviewResult => {
   const statuses = skill.status.filter((status) => status !== "unreviewed");
   const hasInvalid = statuses.includes("invalid");
   const hasUnsafe = statuses.includes("unsafe");
@@ -19,19 +19,23 @@ export const reviewSkillWithRules = (skill: SkillPackage): ReviewResult => {
     reviewer: "rules",
     statuses,
     summary: shareable
-      ? "Looks valid and portable by deterministic checks."
-      : "Needs attention before default cross-agent distribution.",
+      ? language === "zh"
+        ? "规则检查认为该 skill 合法且可共享。"
+        : "Looks valid and portable by deterministic checks."
+      : language === "zh"
+        ? "默认跨 Agent 分发前需要处理或确认。"
+        : "Needs attention before default cross-agent distribution.",
     evidence: [...skill.issues.map((issue) => issue.code), ...skill.evidence],
     recommendation,
     createdAt: new Date().toISOString()
   };
 };
 
-export const buildReviewPrompt = async (skill: SkillPackage): Promise<string> => {
+export const buildReviewPrompt = async (skill: SkillPackage, language: ReviewLanguage = "zh"): Promise<string> => {
   const content = await fs.readFile(skill.skillFile, "utf8");
   return [
-    "Review this agent skill for cross-agent portability.",
-    "Return only JSON matching the configured prompt schema.",
+    language === "zh" ? "请审查这个 agent skill 是否适合跨 Agent 共享。" : "Review this agent skill for cross-agent portability.",
+    language === "zh" ? "只返回符合 prompt schema 的 JSON，摘要和建议使用中文。" : "Return only JSON matching the configured prompt schema.",
     "",
     `Skill id: ${skill.id}`,
     `Name: ${skill.name}`,
@@ -96,14 +100,15 @@ const coerceStatuses = (input: unknown, fallback: readonly SkillStatus[]): Skill
 export const reviewSkillWithAgent = async (
   skill: SkillPackage,
   agent: AgentKind,
-  options: { readonly command?: readonly string[]; readonly timeoutMs?: number } = {}
+  options: { readonly command?: readonly string[]; readonly timeoutMs?: number; readonly language?: ReviewLanguage } = {}
 ): Promise<ReviewResult> => {
-  const fallback = reviewSkillWithRules(skill);
+  const language = options.language ?? "zh";
+  const fallback = reviewSkillWithRules(skill, language);
   const command = options.command ?? defaultAgentCommand(agent);
   if (!command) return { ...fallback, reviewer: agent, summary: `No default runner is configured for ${agent}; used rule review.` };
 
   try {
-    const output = await runCommand(command, await buildReviewPrompt(skill), options.timeoutMs ?? 120000);
+    const output = await runCommand(command, await buildReviewPrompt(skill, language), options.timeoutMs ?? 120000);
     const parsed = JSON.parse(output) as Partial<ReviewResult> & { statuses?: unknown; evidence?: unknown };
     return {
       skillId: skill.id,

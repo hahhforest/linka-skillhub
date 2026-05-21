@@ -12,15 +12,17 @@ import {
   PackageCheck,
   RefreshCw,
   Search,
-  Settings,
   ShieldAlert,
   Sparkles,
-  UploadCloud
+  UploadCloud,
+  X
 } from "lucide-react";
 import type { AgentDefinition, DistributionPlan, DistributionTarget, SkillPackage, SkillStatus } from "@linka-skillhub/core";
 import { api, type Summary } from "./api.js";
+import { messages, type Language } from "./i18n.js";
 
 type View = "overview" | "intersect" | "distribute" | "detail" | "repo";
+type Dialog = "scan" | "review" | null;
 
 const emptySummary: Summary = { total: 0, valid: 0, portable: 0, agentBound: 0, unsafe: 0, invalid: 0 };
 
@@ -32,14 +34,14 @@ const agentTone: Record<string, { label: string; mark: string; className: string
   shared: { label: ".agents/skills", mark: "S", className: "agent-shared" }
 };
 
-const statusLabel: Record<SkillStatus, string> = {
-  valid: "可共享",
-  portable: "可共享",
-  invalid: "存在问题",
-  agent_bound: "仅限当前 Agent",
-  unsafe: "存在风险",
-  unreviewed: "未审查"
-};
+const statusLabel = (lang: Language): Record<SkillStatus, string> => ({
+  valid: messages[lang].shareable,
+  portable: messages[lang].shareable,
+  invalid: messages[lang].problematic,
+  agent_bound: messages[lang].agentBound,
+  unsafe: messages[lang].problematic,
+  unreviewed: lang === "zh" ? "未审查" : "Unreviewed"
+});
 
 const statusClass = (skill: SkillPackage): string => {
   if (skill.status.includes("unsafe") || skill.status.includes("invalid")) return "status-danger";
@@ -48,20 +50,32 @@ const statusClass = (skill: SkillPackage): string => {
   return "status-muted";
 };
 
-const displayStatus = (skill: SkillPackage): string => {
-  if (skill.status.includes("unsafe") || skill.status.includes("invalid")) return statusLabel.invalid;
-  if (skill.status.includes("agent_bound")) return statusLabel.agent_bound;
-  if (skill.status.includes("portable") && skill.status.includes("valid")) return statusLabel.portable;
-  return statusLabel.unreviewed;
+const bucket = (skill: SkillPackage): "problem" | "agentBound" | "shareable" | "other" => {
+  if (skill.status.includes("unsafe") || skill.status.includes("invalid")) return "problem";
+  if (skill.status.includes("agent_bound")) return "agentBound";
+  if (skill.status.includes("valid") && skill.status.includes("portable")) return "shareable";
+  return "other";
 };
+
+const summarizeSkills = (skills: readonly SkillPackage[]): Summary => ({
+  total: skills.length,
+  valid: skills.filter((skill) => skill.status.includes("valid")).length,
+  portable: skills.filter((skill) => bucket(skill) === "shareable").length,
+  agentBound: skills.filter((skill) => bucket(skill) === "agentBound").length,
+  unsafe: skills.filter((skill) => skill.status.includes("unsafe")).length,
+  invalid: skills.filter((skill) => bucket(skill) === "problem").length
+});
 
 function AgentLogo({ agent }: { readonly agent: string }) {
   const tone = agentTone[agent] ?? { label: agent, mark: agent.slice(0, 1).toUpperCase(), className: "agent-generic" };
-  return (
-    <span className={`agent-logo ${tone.className}`} title={tone.label}>
-      {tone.mark}
-    </span>
-  );
+  return <span className={`agent-logo ${tone.className}`} title={tone.label}>{tone.mark}</span>;
+}
+
+function profileLabel(profile: string, lang: Language): string {
+  if (profile === "mirror") return messages[lang].profileMirror;
+  if (profile === "sandbox") return messages[lang].profileSandbox;
+  if (profile === "local") return messages[lang].profileLocal;
+  return profile;
 }
 
 function StatCard({ title, value, sub, icon }: { readonly title: string; readonly value: number; readonly sub: string; readonly icon: React.ReactNode }) {
@@ -77,418 +91,216 @@ function StatCard({ title, value, sub, icon }: { readonly title: string; readonl
   );
 }
 
-function SkillRow({ skill, selected, onToggle }: { readonly skill: SkillPackage; readonly selected: boolean; readonly onToggle: (id: string) => void }) {
+function SkillRow({ skill, selected, onToggle, lang }: { readonly skill: SkillPackage; readonly selected: boolean; readonly onToggle: (id: string) => void; readonly lang: Language }) {
+  const labels = statusLabel(lang);
+  const displayStatus = skill.status.includes("unsafe") || skill.status.includes("invalid")
+    ? labels.invalid
+    : skill.status.includes("agent_bound")
+      ? labels.agent_bound
+      : skill.status.includes("portable") && skill.status.includes("valid")
+        ? labels.portable
+        : labels.unreviewed;
   return (
-    <button className={`skill-row ${selected ? "selected" : ""}`} onClick={() => onToggle(skill.id)}>
+    <button className={`skill-row ${selected ? "selected" : ""}`} onClick={() => onToggle(skill.id)} title={messages[lang].selectionHint}>
       <AgentLogo agent={skill.source.agent} />
       <span className="skill-main">
         <strong>{skill.name}</strong>
         <small>{skill.description || "No description"}</small>
       </span>
-      <span className={`status-pill ${statusClass(skill)}`}>{displayStatus(skill)}</span>
+      <span className={`status-pill ${statusClass(skill)}`}>{displayStatus}</span>
     </button>
   );
 }
 
-function Sidebar({ view, setView }: { readonly view: View; readonly setView: (view: View) => void }) {
+function Sidebar({ view, setView, agents, selectedAgent, setSelectedAgent, lang }: {
+  readonly view: View;
+  readonly setView: (view: View) => void;
+  readonly agents: AgentDefinition[];
+  readonly selectedAgent: string | null;
+  readonly setSelectedAgent: (agent: string | null) => void;
+  readonly lang: Language;
+}) {
+  const t = messages[lang];
   const items: readonly [View, React.ReactNode, string][] = [
-    ["overview", <Database size={16} />, "总览"],
-    ["intersect", <GitCompareArrows size={16} />, "交汇中心"],
-    ["distribute", <HardDriveDownload size={16} />, "分发管理"],
-    ["detail", <PackageCheck size={16} />, "技能详情"],
-    ["repo", <GitBranch size={16} />, "仓库管理"]
+    ["overview", <Database size={16} />, t.navOverview],
+    ["intersect", <GitCompareArrows size={16} />, t.navIntersect],
+    ["distribute", <HardDriveDownload size={16} />, t.navDistribute],
+    ["detail", <PackageCheck size={16} />, t.navDetail],
+    ["repo", <GitBranch size={16} />, t.navRepo]
   ];
   return (
     <aside className="sidebar">
       <div className="brand-lockup">
         <div className="brand-cube">◆</div>
-        <div>
-          <strong>SkillHub</strong>
-          <span>linka-skillhub</span>
-        </div>
+        <div><strong>SkillHub</strong><span>linka-skillhub</span></div>
       </div>
-      <nav>
-        {items.map(([key, icon, label]) => (
-          <button key={key} className={view === key ? "active" : ""} onClick={() => setView(key)}>
-            {icon}
-            {label}
+      <nav>{items.map(([key, icon, label]) => <button key={key} className={view === key ? "active" : ""} onClick={() => setView(key)}>{icon}{label}</button>)}</nav>
+      <div className="agent-legend selectable">
+        <button className={selectedAgent === null ? "agent-filter active" : "agent-filter"} onClick={() => setSelectedAgent(null)}>{t.allSources}</button>
+        {agents.map((agent) => (
+          <button key={agent.kind} className={selectedAgent === agent.kind ? "agent-filter active" : "agent-filter"} onClick={() => setSelectedAgent(selectedAgent === agent.kind ? null : agent.kind)}>
+            <AgentLogo agent={agent.kind} /> {agentTone[agent.kind]?.label ?? agent.label}
           </button>
-        ))}
-      </nav>
-      <div className="agent-legend">
-        {Object.keys(agentTone).map((agent) => (
-          <span key={agent}>
-            <AgentLogo agent={agent} /> {agentTone[agent]?.label}
-          </span>
         ))}
       </div>
     </aside>
   );
 }
 
-function Overview({ skills, summary, selected, toggleSkill, refresh, busy }: { readonly skills: SkillPackage[]; readonly summary: Summary; readonly selected: Set<string>; readonly toggleSkill: (id: string) => void; readonly refresh: () => void; readonly busy: boolean }) {
+function Overview({ skills, summary, selected, toggleSkill, lang, selectedAgent }: {
+  readonly skills: SkillPackage[];
+  readonly summary: Summary;
+  readonly selected: Set<string>;
+  readonly toggleSkill: (id: string) => void;
+  readonly lang: Language;
+  readonly selectedAgent: string | null;
+}) {
+  const t = messages[lang];
   const byAgent = useMemo(() => {
     const counts = new Map<string, number>();
     for (const skill of skills) counts.set(skill.source.agent, (counts.get(skill.source.agent) ?? 0) + 1);
     return [...counts.entries()].sort((a, b) => b[1] - a[1]);
   }, [skills]);
-  const donutStyle = {
-    "--ok": summary.portable,
-    "--warn": summary.agentBound,
-    "--bad": summary.invalid + summary.unsafe,
-    "--all": Math.max(summary.total, 1)
-  } as React.CSSProperties;
+  const donutStyle = { "--ok": summary.portable, "--warn": summary.agentBound, "--bad": summary.invalid, "--all": Math.max(summary.total, 1) } as React.CSSProperties;
 
-  const recent = skills.slice(0, 8);
+  if (summary.total === 0) {
+    return <section className="work-card empty-state span-all"><Info size={24} /><h2>{t.noScanTitle}</h2><p>{t.noScanBody}</p></section>;
+  }
+
   return (
     <section className="panel-grid overview-grid">
-      <div className="section-head span-all">
-        <div>
-          <h2>概览</h2>
-          <p>汇总、分发、交汇、版本追溯</p>
-        </div>
-        <button className="icon-button" onClick={refresh} disabled={busy} title="刷新扫描">
-          {busy ? <Loader2 className="spin" size={16} /> : <RefreshCw size={16} />}
-        </button>
-      </div>
-
-      <StatCard title="Skills" value={summary.total} sub={`${summary.valid} 合法`} icon={<PackageCheck size={18} />} />
-      <StatCard title="可共享" value={summary.portable} sub="默认交汇范围" icon={<Check size={18} />} />
-      <StatCard title="仅限 Agent" value={summary.agentBound} sub="需确认" icon={<AlertTriangle size={18} />} />
-      <StatCard title="存在问题" value={summary.invalid + summary.unsafe} sub="默认阻断" icon={<ShieldAlert size={18} />} />
+      <div className="section-head span-all"><div><h2>{t.overview}</h2><p>{t.currentScope}: {selectedAgent ? agentTone[selectedAgent]?.label : t.allSources}</p></div></div>
+      <StatCard title={t.totalSkills} value={summary.total} sub={`${summary.valid} ${t.valid}`} icon={<PackageCheck size={18} />} />
+      <StatCard title={t.shareable} value={summary.portable} sub={t.defaultDistributionScope} icon={<Check size={18} />} />
+      <StatCard title={t.agentBound} value={summary.agentBound} sub={t.needsConfirmation} icon={<AlertTriangle size={18} />} />
+      <StatCard title={t.problematic} value={summary.invalid} sub={t.blockedByDefault} icon={<ShieldAlert size={18} />} />
 
       <div className="work-card source-card">
-        <h3>按来源分布</h3>
+        <h3>{t.sourceDistribution}</h3>
         <div className="source-bars">
           {byAgent.map(([agent, count]) => (
-            <div key={agent}>
-              <span>
-                <AgentLogo agent={agent} /> {agentTone[agent]?.label ?? agent}
-              </span>
-              <strong>{count}</strong>
-              <div className="bar-track">
-                <i style={{ width: `${summary.total ? (count / summary.total) * 100 : 0}%` }} />
-              </div>
-            </div>
+            <div key={agent}><span><AgentLogo agent={agent} /> {agentTone[agent]?.label ?? agent}</span><strong>{count}</strong><div className="bar-track"><i style={{ width: `${summary.total ? (count / summary.total) * 100 : 0}%` }} /></div></div>
           ))}
         </div>
       </div>
-
       <div className="work-card donut-card">
-        <h3>状态分布</h3>
-        <div className="donut" style={donutStyle} />
-        <div className="status-list">
-          <span><i className="dot ok" />可共享 {summary.portable}</span>
-          <span><i className="dot warn" />仅限 Agent {summary.agentBound}</span>
-          <span><i className="dot bad" />存在问题 {summary.invalid + summary.unsafe}</span>
-        </div>
+        <h3>{t.statusDistribution}</h3><div className="donut" style={donutStyle} />
+        <div className="status-list"><span><i className="dot ok" />{t.shareable} {summary.portable}</span><span><i className="dot warn" />{t.agentBound} {summary.agentBound}</span><span><i className="dot bad" />{t.problematic} {summary.invalid}</span></div>
       </div>
-
       <div className="work-card table-card span-all">
-        <div className="card-head">
-          <h3>最近扫描</h3>
-          <span>{selected.size} selected</span>
-        </div>
-        <div className="skill-table">
-          {recent.map((skill) => <SkillRow key={skill.id} skill={skill} selected={selected.has(skill.id)} onToggle={toggleSkill} />)}
-        </div>
+        <div className="card-head"><div><h3>{t.scanResults}</h3><p>{t.selectionHint}</p></div><span>{selected.size} {t.selectedCount}</span></div>
+        <div className="skill-table scrollable-list">{skills.map((skill) => <SkillRow key={skill.id} skill={skill} selected={selected.has(skill.id)} onToggle={toggleSkill} lang={lang} />)}</div>
       </div>
     </section>
   );
 }
 
-function Intersect({ skills, selected, toggleSkill }: { readonly skills: SkillPackage[]; readonly selected: Set<string>; readonly toggleSkill: (id: string) => void }) {
-  const [from, setFrom] = useState("mavis");
-  const [to, setTo] = useState("claude");
-  const left = skills.filter((skill) => skill.source.agent === from).slice(0, 12);
-  const right = skills.filter((skill) => skill.source.agent === to).slice(0, 12);
-  const selectedSkills = skills.filter((skill) => selected.has(skill.id));
-  return (
-    <section className="intersect-layout">
-      <div className="section-head span-all">
-        <div>
-          <h2>交汇中心</h2>
-          <p>从来源 Agent 到目标 Agent</p>
-        </div>
-        <div className="agent-selects">
-          <select value={from} onChange={(event) => setFrom(event.target.value)}>
-            {Object.keys(agentTone).map((agent) => <option key={agent} value={agent}>{agentTone[agent]?.label}</option>)}
-          </select>
-          <ArrowRight size={18} />
-          <select value={to} onChange={(event) => setTo(event.target.value)}>
-            {Object.keys(agentTone).map((agent) => <option key={agent} value={agent}>{agentTone[agent]?.label}</option>)}
-          </select>
-        </div>
-      </div>
-      <div className="work-card lane-card">
-        <h3><AgentLogo agent={from} /> 来源 Skills</h3>
-        <div className="skill-list compact">{left.map((skill) => <SkillRow key={skill.id} skill={skill} selected={selected.has(skill.id)} onToggle={toggleSkill} />)}</div>
-      </div>
-      <div className="drop-zone">
-        <GitCompareArrows size={26} />
-        <strong>{selectedSkills.length} Skills</strong>
-        <div>{selectedSkills.slice(0, 5).map((skill) => <span key={skill.id}>{skill.name}</span>)}</div>
-      </div>
-      <div className="work-card lane-card">
-        <h3><AgentLogo agent={to} /> 目标现有</h3>
-        <div className="skill-list compact">{right.map((skill) => <SkillRow key={skill.id} skill={skill} selected={selected.has(skill.id)} onToggle={toggleSkill} />)}</div>
-      </div>
-    </section>
-  );
-}
-
-function Distribute({ targets, selected, onPlan, onApply, plan, busy }: { readonly targets: DistributionTarget[]; readonly selected: Set<string>; readonly onPlan: (agents: string[]) => void; readonly onApply: (agents: string[]) => void; readonly plan?: DistributionPlan; readonly busy: boolean }) {
-  const [chosen, setChosen] = useState<Set<string>>(new Set(["codex", "claude"]));
-  const toggle = (agent: string) => {
-    const next = new Set(chosen);
-    if (next.has(agent)) next.delete(agent);
-    else next.add(agent);
-    setChosen(next);
-  };
-  return (
-    <section className="panel-grid distribute-grid">
-      <div className="section-head span-all">
-        <div>
-          <h2>分发管理</h2>
-          <p>目标 Agent 与覆盖计划</p>
-        </div>
-        <button className="primary" disabled={busy || selected.size === 0 || chosen.size === 0} onClick={() => onPlan([...chosen])}>
-          {busy ? <Loader2 className="spin" size={16} /> : <UploadCloud size={16} />} 生成计划
-        </button>
-      </div>
-      <div className="work-card target-card">
-        <h3>目标 Agent</h3>
-        <div className="target-grid">
-          {targets.map((target) => (
-            <button key={target.agent} className={chosen.has(target.agent) ? "target selected" : "target"} onClick={() => toggle(target.agent)}>
-              <AgentLogo agent={target.agent} />
-              <span>{target.label}<small>{target.targetDir}</small></span>
-              {chosen.has(target.agent) && <Check size={16} />}
-            </button>
-          ))}
-        </div>
-      </div>
-      <div className="work-card plan-card">
-        <h3>计划摘要</h3>
-        {plan ? (
-          <div className="plan-list">
-            <strong>{plan.items.filter((item) => item.action !== "skip").length} 待复制 / 覆盖</strong>
-            {plan.items.slice(0, 10).map((item) => (
-              <span key={`${item.target.agent}-${item.skill.id}`}>{item.action} · {item.skill.name} → {item.target.label}</span>
-            ))}
-            <button className="primary" disabled={busy || chosen.size === 0 || selected.size === 0} onClick={() => onApply([...chosen])}>
-              <Check size={16} /> 执行分发
-            </button>
-          </div>
-        ) : (
-          <div className="empty-state"><Info size={18} />等待生成分发计划</div>
-        )}
-      </div>
-    </section>
-  );
-}
-
-function Detail({ skill }: { readonly skill?: SkillPackage }) {
-  if (!skill) return <section className="work-card detail-empty"><PackageCheck size={24} /><h2>选择一个 Skill</h2></section>;
-  return (
-    <section className="detail-layout">
-      <div className="section-head span-all">
-        <div>
-          <h2>{skill.name}</h2>
-          <p>{skill.description}</p>
-        </div>
-        <span className={`status-pill ${statusClass(skill)}`}>{displayStatus(skill)}</span>
-      </div>
-      <div className="work-card">
-        <h3>元信息</h3>
-        <dl className="meta-list">
-          <dt>来源</dt><dd><AgentLogo agent={skill.source.agent} /> {agentTone[skill.source.agent]?.label}</dd>
-          <dt>Scope</dt><dd>{skill.source.scope}</dd>
-          <dt>Hash</dt><dd>{skill.hash.slice(0, 16)}</dd>
-          <dt>Variant</dt><dd>{skill.variantId}</dd>
-        </dl>
-      </div>
-      <div className="work-card">
-        <h3>状态证据</h3>
-        <div className="evidence-list">
-          {skill.issues.map((issue) => <span key={issue.code} className="danger-line">{issue.code}: {issue.message}</span>)}
-          {skill.evidence.map((item) => <span key={item}>{item}</span>)}
-          {skill.issues.length === 0 && skill.evidence.length === 0 && <span>无阻断证据</span>}
-        </div>
-      </div>
-      <div className="work-card span-all path-card">
-        <h3>路径</h3>
-        <code>{skill.skillDir}</code>
-      </div>
-    </section>
-  );
-}
-
-function RepoView({ onImport, onReview, busy, message }: { readonly onImport: () => void; readonly onReview: () => void; readonly busy: boolean; readonly message: string }) {
+function RepoView({ onImport, onReview, onAgentReview, busy, message, lang }: { readonly onImport: () => void; readonly onReview: () => void; readonly onAgentReview: () => void; readonly busy: boolean; readonly message: string; readonly lang: Language }) {
+  const t = messages[lang];
   return (
     <section className="panel-grid repo-grid">
-      <div className="section-head span-all">
-        <div>
-          <h2>仓库管理</h2>
-          <p>Git 版本化与审查缓存</p>
-        </div>
-      </div>
-      <button className="action-card" onClick={onImport} disabled={busy}>
-        <Database size={22} />
-        <strong>汇总到仓库</strong>
-        <span>复制原始包并更新 registry/skills.json</span>
-      </button>
-      <button className="action-card" onClick={onReview} disabled={busy}>
-        <Sparkles size={22} />
-        <strong>规则审查</strong>
-        <span>写入 registry/reviews/*.json</span>
-      </button>
-      <div className="work-card span-all log-panel"><pre>{message || "Ready"}</pre></div>
+      <div className="section-head span-all"><div><h2>{t.repositoryTitle}</h2><p>{t.repositoryDesc}</p></div></div>
+      <button className="action-card" onClick={onImport} disabled={busy}><Database size={22} /><strong>{t.importToRegistry}</strong><span>{t.importToRegistryDesc}</span></button>
+      <button className="action-card" onClick={onReview} disabled={busy}><Sparkles size={22} /><strong>{t.runRuleReview}</strong><span>{t.runRuleReviewDesc}</span></button>
+      <button className="action-card" onClick={onAgentReview} disabled={busy}><Sparkles size={22} /><strong>{t.runAgentReview}</strong><span>{t.runAgentReviewDesc}</span></button>
+      <div className="work-card span-all log-panel"><h3>{t.operationLog}</h3><pre>{message || t.waitingOperation}</pre></div>
     </section>
   );
+}
+
+function DialogFrame({ title, children, onClose }: { readonly title: string; readonly children: React.ReactNode; readonly onClose: () => void }) {
+  return <div className="dialog-backdrop"><div className="dialog"><button className="dialog-close" onClick={onClose}><X size={16} /></button><h2>{title}</h2>{children}</div></div>;
 }
 
 export function App() {
+  const [lang, setLang] = useState<Language>("zh");
+  const t = messages[lang];
   const [view, setView] = useState<View>("overview");
   const [skills, setSkills] = useState<SkillPackage[]>([]);
-  const [summary, setSummary] = useState<Summary>(emptySummary);
   const [agents, setAgents] = useState<AgentDefinition[]>([]);
   const [targets, setTargets] = useState<DistributionTarget[]>([]);
   const [profile, setProfile] = useState("unknown");
   const [registryRepo, setRegistryRepo] = useState("");
+  const [selectedAgent, setSelectedAgent] = useState<string | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [plan, setPlan] = useState<DistributionPlan | undefined>();
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [query, setQuery] = useState("");
+  const [dialog, setDialog] = useState<Dialog>(null);
+  const [includeBuiltin, setIncludeBuiltin] = useState(false);
+  const [reviewer, setReviewer] = useState("rules");
 
-  const refresh = async () => {
-    setBusy(true);
-    try {
-      const [agentData, scan] = await Promise.all([api.agents(), api.scan(true)]);
-      setAgents(agentData.agents);
-      setTargets(agentData.targets);
-      setProfile(agentData.profile ?? "unknown");
-      setRegistryRepo(agentData.registryRepo ?? "");
-      setSkills(scan.skills);
-      setSummary(scan.summary);
-      setMessage(`Scanned ${scan.summary.total} skills.`);
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : String(error));
-    } finally {
-      setBusy(false);
-    }
+  const loadShell = async () => {
+    const [agentData, registry] = await Promise.all([api.agents(), api.skills()]);
+    setAgents(agentData.agents); setTargets(agentData.targets); setProfile(agentData.profile ?? "unknown"); setRegistryRepo(agentData.registryRepo ?? ""); setSkills(registry.skills);
+    if (registry.missingRegistry) setMessage(lang === "zh" ? "Registry 还没有导入记录，请先扫描或导入。" : "Registry is empty. Scan or import first.");
   };
 
-  useEffect(() => {
-    void refresh();
-  }, []);
+  useEffect(() => { void loadShell().catch((error) => setMessage(error instanceof Error ? error.message : String(error))); }, []);
 
-  const toggleSkill = (id: string) => {
-    const next = new Set(selected);
-    if (next.has(id)) next.delete(id);
-    else next.add(id);
-    setSelected(next);
-  };
-
-  const filtered = useMemo(() => {
+  const visibleSkills = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return skills;
-    return skills.filter((skill) => `${skill.name} ${skill.description} ${skill.source.agent}`.toLowerCase().includes(q));
-  }, [query, skills]);
+    return skills.filter((skill) => (!selectedAgent || skill.source.agent === selectedAgent) && (!q || `${skill.name} ${skill.description} ${skill.source.agent}`.toLowerCase().includes(q)));
+  }, [query, selectedAgent, skills]);
+  const summary = useMemo(() => summarizeSkills(visibleSkills), [visibleSkills]);
+  const selectedSkill = visibleSkills.find((skill) => selected.has(skill.id)) ?? visibleSkills[0];
 
-  const selectedSkill = filtered.find((skill) => selected.has(skill.id)) ?? filtered[0];
+  const toggleSkill = (id: string) => { const next = new Set(selected); next.has(id) ? next.delete(id) : next.add(id); setSelected(next); };
 
-  const importRepo = async () => {
-    setBusy(true);
-    try {
-      const result = await api.import();
-      setMessage(`Imported ${result.imported} skills into ${result.repoPath}.`);
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : String(error));
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const reviewSelected = async () => {
-    setBusy(true);
-    try {
-      const ids = selected.size ? [...selected] : skills.slice(0, 20).map((skill) => skill.id);
-      const result = await api.review(ids, "rules");
-      setMessage(`Reviewed ${result.reviews.length} skills.`);
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : String(error));
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const planDistribution = async (targetAgents: string[]) => {
-    setBusy(true);
-    try {
-      const result = await api.distributionPlan(targetAgents, [...selected]);
-      setPlan(result.plan);
-      setMessage(`Plan ${result.plan.id}: ${result.plan.items.length} items.`);
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : String(error));
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const applyDistribution = async (targetAgents: string[]) => {
-    setBusy(true);
-    try {
-      const run = await api.distributionApply(targetAgents, [...selected]);
-      setMessage(`Applied distribution: copied ${run.copied}, skipped ${run.skipped}.`);
-      await refresh();
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : String(error));
-    } finally {
-      setBusy(false);
-    }
-  };
+  const runScan = async () => { setBusy(true); try { const scan = await api.scan(includeBuiltin); setSkills(scan.skills); setMessage(`${t.scan}: ${scan.summary.total}`); setDialog(null); } catch (error) { setMessage(error instanceof Error ? error.message : String(error)); } finally { setBusy(false); } };
+  const importRepo = async () => { setBusy(true); try { const result = await api.import(); setMessage(`${t.imported} ${result.imported} skills → ${result.repoPath}`); await loadShell(); } catch (error) { setMessage(error instanceof Error ? error.message : String(error)); } finally { setBusy(false); } };
+  const runReview = async () => { setBusy(true); try { const ids = selected.size ? [...selected] : visibleSkills.map((skill) => skill.id); const result = await api.review(ids, reviewer, lang); setMessage(`${t.reviewed} ${result.reviews.length} skills`); setDialog(null); } catch (error) { setMessage(error instanceof Error ? error.message : String(error)); } finally { setBusy(false); } };
+  const planDistribution = async (targetAgents: string[]) => { setBusy(true); try { const result = await api.distributionPlan(targetAgents, [...selected]); setPlan(result.plan); setMessage(`Plan ${result.plan.id}: ${result.plan.items.length}`); } catch (error) { setMessage(error instanceof Error ? error.message : String(error)); } finally { setBusy(false); } };
+  const applyDistribution = async (targetAgents: string[]) => { setBusy(true); try { const run = await api.distributionApply(targetAgents, [...selected]); setMessage(`${t.copied} ${run.copied}, ${t.skipped} ${run.skipped}`); await loadShell(); } catch (error) { setMessage(error instanceof Error ? error.message : String(error)); } finally { setBusy(false); } };
 
   return (
     <main className="app-shell">
       <header className="topbar">
-        <div className="product-title">
-          <div className="brand-cube large">◆</div>
-          <div>
-            <h1>Skill 管理工具</h1>
-            <p>汇总 · 分发 · 交汇 · 版本追溯</p>
-          </div>
-        </div>
-        <div className="top-actions">
-          <div className="search-box"><Search size={16} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索 skills..." /></div>
-          <button className="ghost" onClick={refresh}>{busy ? <Loader2 className="spin" size={16} /> : <RefreshCw size={16} />} 同步扫描</button>
-        </div>
+        <div className="product-title"><div className="brand-cube large">◆</div><div><h1>{t.appTitle}</h1><p>{profileLabel(profile, lang)} · {t.registry}: {registryRepo || "-"}</p></div></div>
+        <div className="top-actions"><div className="search-box"><Search size={16} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t.search} /></div><button className="ghost" onClick={() => setDialog("scan")}>{busy ? <Loader2 className="spin" size={16} /> : <RefreshCw size={16} />} {busy ? t.scanning : t.scan}</button><button className="ghost" onClick={() => setLang(lang === "zh" ? "en" : "zh")}>{t.language}</button></div>
       </header>
-
       <div className="workspace">
-        <Sidebar view={view} setView={setView} />
+        <Sidebar view={view} setView={setView} agents={agents} selectedAgent={selectedAgent} setSelectedAgent={setSelectedAgent} lang={lang} />
         <div className="content">
-          <div className="mode-strip">
-            <span><Database size={16} /> 统一管理</span>
-            <span><GitBranch size={16} /> 版本可追溯</span>
-            <span><Sparkles size={16} /> 智能校验</span>
-            <span><GitCompareArrows size={16} /> 自由分发</span>
-            <span className={profile === "local" ? "profile-danger" : "profile-safe"}>Profile: {profile}</span>
-          </div>
-          {view === "overview" && <Overview skills={filtered} summary={summary} selected={selected} toggleSkill={toggleSkill} refresh={refresh} busy={busy} />}
-          {view === "intersect" && <Intersect skills={filtered} selected={selected} toggleSkill={toggleSkill} />}
-          {view === "distribute" && <Distribute targets={targets} selected={selected} onPlan={planDistribution} onApply={applyDistribution} plan={plan} busy={busy} />}
-          {view === "detail" && <Detail skill={selectedSkill} />}
-          {view === "repo" && <RepoView onImport={importRepo} onReview={reviewSelected} busy={busy} message={message} />}
-          <footer className="status-footer">
-            <span>{agents.length} supported agents</span>
-            <span>{registryRepo}</span>
-            <span>{message}</span>
-            <button onClick={() => setView("repo")}><Settings size={14} /> 设置</button>
-          </footer>
+          {view === "overview" && <Overview skills={visibleSkills} summary={summary} selected={selected} toggleSkill={toggleSkill} lang={lang} selectedAgent={selectedAgent} />}
+          {view === "repo" && <RepoView onImport={importRepo} onReview={() => { setReviewer("rules"); setDialog("review"); }} onAgentReview={() => setDialog("review")} busy={busy} message={message} lang={lang} />}
+          {view !== "overview" && view !== "repo" && <Placeholder view={view} lang={lang} skills={visibleSkills} targets={targets} selected={selected} toggleSkill={toggleSkill} plan={plan} onPlan={planDistribution} onApply={applyDistribution} selectedSkill={selectedSkill} />}
+          <footer className="status-footer"><span>{agents.length} agents</span><span>{selected.size} {t.selectedCount}</span><span>{message}</span></footer>
         </div>
       </div>
+      {dialog === "scan" && <DialogFrame title={t.scanDialogTitle} onClose={() => setDialog(null)}><p>{t.scanDialogBody}</p><label className="checkbox-line"><input type="checkbox" checked={includeBuiltin} onChange={(event) => setIncludeBuiltin(event.target.checked)} /> {t.includeBuiltin}</label><div className="dialog-actions"><button className="ghost" onClick={() => setDialog(null)}>{t.cancel}</button><button className="primary" onClick={runScan} disabled={busy}>{t.confirmScan}</button></div></DialogFrame>}
+      {dialog === "review" && <DialogFrame title={t.reviewDialogTitle} onClose={() => setDialog(null)}><p>{t.reviewDialogBody}</p><select className="full-select" value={reviewer} onChange={(event) => setReviewer(event.target.value)}><option value="rules">{t.reviewerRules}</option>{agents.filter((agent) => agent.kind !== "shared").map((agent) => <option key={agent.kind} value={agent.kind}>{agent.label}</option>)}</select><p className="muted-copy">{t.agentUnavailable}</p><div className="dialog-actions"><button className="ghost" onClick={() => setDialog(null)}>{t.cancel}</button><button className="primary" onClick={runReview} disabled={busy}>{t.startReview}</button></div></DialogFrame>}
     </main>
   );
+}
+
+function Placeholder(props: { readonly view: View; readonly lang: Language; readonly skills: SkillPackage[]; readonly targets: DistributionTarget[]; readonly selected: Set<string>; readonly toggleSkill: (id: string) => void; readonly plan?: DistributionPlan; readonly onPlan: (agents: string[]) => void; readonly onApply: (agents: string[]) => void; readonly selectedSkill?: SkillPackage }) {
+  const t = messages[props.lang];
+  if (props.view === "distribute") return <Distribute targets={props.targets} selected={props.selected} onPlan={props.onPlan} onApply={props.onApply} plan={props.plan} busy={false} lang={props.lang} />;
+  if (props.view === "detail") return <Detail skill={props.selectedSkill} lang={props.lang} />;
+  return <Intersect skills={props.skills} selected={props.selected} toggleSkill={props.toggleSkill} lang={props.lang} />;
+}
+
+function Intersect({ skills, selected, toggleSkill, lang }: { readonly skills: SkillPackage[]; readonly selected: Set<string>; readonly toggleSkill: (id: string) => void; readonly lang: Language }) {
+  const t = messages[lang];
+  const [from, setFrom] = useState("mavis");
+  const [to, setTo] = useState("claude");
+  const left = skills.filter((skill) => skill.source.agent === from).slice(0, 40);
+  const right = skills.filter((skill) => skill.source.agent === to).slice(0, 40);
+  const selectedSkills = skills.filter((skill) => selected.has(skill.id));
+  return <section className="intersect-layout"><div className="section-head span-all"><div><h2>{t.navIntersect}</h2><p>{t.intersectDesc}</p></div><div className="agent-selects"><select value={from} onChange={(event) => setFrom(event.target.value)}>{Object.keys(agentTone).map((agent) => <option key={agent} value={agent}>{agentTone[agent]?.label}</option>)}</select><ArrowRight size={18} /><select value={to} onChange={(event) => setTo(event.target.value)}>{Object.keys(agentTone).map((agent) => <option key={agent} value={agent}>{agentTone[agent]?.label}</option>)}</select></div></div><div className="work-card lane-card"><h3><AgentLogo agent={from} /> {t.sourceSkills}</h3><div className="skill-list compact scrollable-list">{left.map((skill) => <SkillRow key={skill.id} skill={skill} selected={selected.has(skill.id)} onToggle={toggleSkill} lang={lang} />)}</div></div><div className="drop-zone"><GitCompareArrows size={26} /><strong>{selectedSkills.length} {t.selectedSkills}</strong><div>{selectedSkills.slice(0, 8).map((skill) => <span key={skill.id}>{skill.name}</span>)}</div></div><div className="work-card lane-card"><h3><AgentLogo agent={to} /> {t.targetExisting}</h3><div className="skill-list compact scrollable-list">{right.map((skill) => <SkillRow key={skill.id} skill={skill} selected={selected.has(skill.id)} onToggle={toggleSkill} lang={lang} />)}</div></div></section>;
+}
+
+function Distribute({ targets, selected, onPlan, onApply, plan, busy, lang }: { readonly targets: DistributionTarget[]; readonly selected: Set<string>; readonly onPlan: (agents: string[]) => void; readonly onApply: (agents: string[]) => void; readonly plan?: DistributionPlan; readonly busy: boolean; readonly lang: Language }) {
+  const t = messages[lang];
+  const [chosen, setChosen] = useState<Set<string>>(new Set(["codex", "claude"]));
+  const toggle = (agent: string) => { const next = new Set(chosen); next.has(agent) ? next.delete(agent) : next.add(agent); setChosen(next); };
+  return <section className="panel-grid distribute-grid"><div className="section-head span-all"><div><h2>{t.navDistribute}</h2><p>{t.distributeDesc}</p></div><button className="primary" disabled={busy || selected.size === 0 || chosen.size === 0} onClick={() => onPlan([...chosen])}><UploadCloud size={16} /> {t.generatePlan}</button></div><div className="work-card target-card"><h3>{t.targets}</h3><div className="target-grid">{targets.map((target) => <button key={target.agent} className={chosen.has(target.agent) ? "target selected" : "target"} onClick={() => toggle(target.agent)}><AgentLogo agent={target.agent} /><span>{target.label}<small>{target.targetDir}</small></span>{chosen.has(target.agent) && <Check size={16} />}</button>)}</div></div><div className="work-card plan-card"><h3>{t.planSummary}</h3>{plan ? <div className="plan-list"><strong>{plan.items.filter((item) => item.action !== "skip").length} {t.toCopyOrOverwrite}</strong>{plan.items.slice(0, 12).map((item) => <span key={`${item.target.agent}-${item.skill.id}`}>{item.action} · {item.skill.name} → {item.target.label}</span>)}<button className="primary" disabled={busy || chosen.size === 0 || selected.size === 0} onClick={() => onApply([...chosen])}><Check size={16} /> {t.applyDistribution}</button></div> : <div className="empty-state"><Info size={18} />{t.waitingPlan}</div>}</div></section>;
+}
+
+function Detail({ skill, lang }: { readonly skill?: SkillPackage; readonly lang: Language }) {
+  const t = messages[lang];
+  if (!skill) return <section className="work-card detail-empty"><PackageCheck size={24} /><h2>{t.detailEmpty}</h2></section>;
+  return <section className="detail-layout"><div className="section-head span-all"><div><h2>{skill.name}</h2><p>{skill.description}</p></div><span className={`status-pill ${statusClass(skill)}`}>{bucket(skill)}</span></div><div className="work-card"><h3>{t.metadata}</h3><dl className="meta-list"><dt>{t.source}</dt><dd><AgentLogo agent={skill.source.agent} /> {agentTone[skill.source.agent]?.label}</dd><dt>Scope</dt><dd>{skill.source.scope}</dd><dt>Hash</dt><dd>{skill.hash.slice(0, 16)}</dd><dt>Variant</dt><dd>{skill.variantId}</dd></dl></div><div className="work-card"><h3>{t.evidence}</h3><div className="evidence-list">{skill.issues.map((issue) => <span key={issue.code} className="danger-line">{issue.code}: {issue.message}</span>)}{skill.evidence.map((item) => <span key={item}>{item}</span>)}{skill.issues.length === 0 && skill.evidence.length === 0 && <span>{lang === "zh" ? "无阻断证据" : "No blocking evidence"}</span>}</div></div><div className="work-card span-all path-card"><h3>{t.path}</h3><code>{skill.skillDir}</code></div></section>;
 }

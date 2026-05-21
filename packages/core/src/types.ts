@@ -3,6 +3,7 @@ export type AgentKind = "mavis" | "opencode" | "claude" | "codex" | "shared";
 export type SkillScope = "user" | "private" | "builtin" | "system" | "project" | "unknown";
 
 export type SkillStatus = "valid" | "invalid" | "portable" | "agent_bound" | "unsafe" | "unreviewed";
+export type ReviewLanguage = "zh" | "en";
 
 export interface AgentDefinition {
   readonly kind: AgentKind;

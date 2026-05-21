@@ -4,6 +4,7 @@ export interface ScanResponse {
   readonly skills: SkillPackage[];
   readonly summary: Summary;
   readonly manifest?: RegistryManifest;
+  readonly missingRegistry?: boolean;
 }
 
 export interface Summary {
@@ -44,7 +45,7 @@ export const api = {
   scan: (includeDefaultExcluded = true) => request<ScanResponse>("/api/scan", { method: "POST", body: JSON.stringify({ includeDefaultExcluded }) }),
   import: (repoPath?: string) => request<{ manifest: RegistryManifest; imported: number; skipped: number; repoPath: string }>("/api/import", { method: "POST", body: JSON.stringify({ repoPath }) }),
   skills: () => request<ScanResponse>("/api/skills"),
-  review: (skillIds: string[], reviewer: string) => request<{ reviews: ReviewResult[] }>("/api/reviews/run", { method: "POST", body: JSON.stringify({ skillIds, reviewer }) }),
+  review: (skillIds: string[], reviewer: string, language: "zh" | "en") => request<{ reviews: ReviewResult[] }>("/api/reviews/run", { method: "POST", body: JSON.stringify({ skillIds, reviewer, language }) }),
   distributionPlan: (targetAgents: string[], skillIds: string[]) =>
     request<{ plan: DistributionPlan }>("/api/distributions/plan", { method: "POST", body: JSON.stringify({ targetAgents, skillIds }) }),
   distributionApply: (targetAgents: string[], skillIds: string[]) =>

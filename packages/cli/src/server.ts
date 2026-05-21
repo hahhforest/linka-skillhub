@@ -142,21 +142,20 @@ export const startServer = (options: ServerOptions): http.Server => {
           const manifest = await readRegistryManifest(registryPath);
           sendJson(response, 200, { skills: manifest.skills, summary: summarize(manifest.skills), manifest });
         } catch {
-          const skills = await scanSkills({ cwd: options.cwd, config: options.config, profileName: options.profileName, includeDefaultExcluded: true });
-          sendJson(response, 200, { skills, summary: summarize(skills) });
+          sendJson(response, 200, { skills: [], summary: summarize([]), missingRegistry: true });
         }
         return;
       }
 
       if (request.method === "POST" && url.pathname === "/api/reviews/run") {
-        const body = await readJsonBody<{ repoPath?: string; skillIds?: string[]; reviewer?: AgentKind | "rules" }>(request);
+        const body = await readJsonBody<{ repoPath?: string; skillIds?: string[]; reviewer?: AgentKind | "rules"; language?: "zh" | "en" }>(request);
         const repoPath = resolveRepoPath(body.repoPath);
         const manifest = await readRegistryManifest(repoPath);
         const selected = body.skillIds ? new Set(body.skillIds) : undefined;
         const reviews = [];
         for (const skill of manifest.skills) {
           if (selected && !selected.has(skill.id)) continue;
-          const review = body.reviewer && body.reviewer !== "rules" ? await reviewSkillWithAgent(skill, body.reviewer) : reviewSkillWithRules(skill);
+          const review = body.reviewer && body.reviewer !== "rules" ? await reviewSkillWithAgent(skill, body.reviewer, { language: body.language ?? "zh" }) : reviewSkillWithRules(skill, body.language ?? "zh");
           await writeReviewResult(repoPath, review);
           reviews.push(review);
         }

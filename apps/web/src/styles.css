@@ -342,3 +342,56 @@ button:disabled { cursor: not-allowed; opacity: 0.62; }
   .skill-row .status-pill { grid-column: 2; justify-self: start; }
   .donut-card { grid-template-columns: 1fr; justify-items: start; }
 }
+
+.agent-legend.selectable { gap: 6px; }
+.agent-filter {
+  min-height: 30px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0 8px;
+  text-align: left;
+}
+.agent-filter.active { background: #e8f0ff; color: var(--blue); font-weight: 700; }
+.card-head p { margin: 4px 0 0; color: var(--muted); font-size: 12px; }
+.scrollable-list { max-height: 430px; overflow: auto; padding-right: 4px; }
+.dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(15, 23, 42, 0.32);
+}
+.dialog {
+  width: min(520px, 100%);
+  position: relative;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: var(--shadow);
+  padding: 22px;
+}
+.dialog h2 { margin: 0 32px 12px 0; font-size: 18px; }
+.dialog p { color: var(--muted); line-height: 1.6; }
+.dialog-close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 30px;
+  height: 30px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #fff;
+  display: grid;
+  place-items: center;
+}
+.dialog-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 18px; }
+.checkbox-line { display: flex; align-items: center; gap: 8px; margin-top: 12px; }
+.full-select { width: 100%; height: 38px; border: 1px solid var(--border); border-radius: 8px; padding: 0 10px; background: #fff; }
+.muted-copy { font-size: 12px; }
