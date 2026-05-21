@@ -148,3 +148,12 @@
 5. 下一步动作。
 
 记录位置：`.agents/team-work/nightly-progress.md`。
+
+## 当前实现状态
+
+截至 2026-05-22 01:25：
+
+- Commit 1 已完成：交汇中心具备 A -> B 来源/目标路径展示、预览交汇复制、确认复制；分发管理文案改为预览/确认，并展示 action/reason/path。
+- Commit 2 已完成：审查弹框显示规则审核和本机 Code Agent 可用性、审查范围、输出语言、写入位置。
+- Commit 3 已完成：Registry 页面具备 Git 状态、pull、commit+push 入口。
+- Commit 4 进行中：收敛测试矩阵和浏览器巡检，使用 `pnpm verify` 作为退出门槛。

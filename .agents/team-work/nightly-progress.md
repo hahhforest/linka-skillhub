@@ -28,3 +28,10 @@
 - 已完成：Registry 页面增加 Git 状态面板、刷新状态、pull、commit+push 入口；push 支持用户提供提交说明；浏览器流程测试覆盖 Git 状态和推送入口可见。
 - 最近测试：`pnpm typecheck`、`pnpm build`、`node scripts/ui-audit.mjs`、`node scripts/ui-flow-test.mjs`、`pnpm test` 均通过；浏览器巡检 issues 为 0。
 - 下一步：推进 Commit 4，补全测试矩阵、浏览器巡检断言和最终收敛。
+
+## 2026-05-22 01:26 +08:00
+
+- 当前 phase：Commit 4，测试体系与产品收敛。
+- 已完成：增加 `pnpm verify` 统一退出门槛；浏览器巡检增加 Registry/GitHub 区域断言；README 和 north-star plan 记录当前实现状态。
+- 最近测试：`pnpm verify` 通过，包含 typecheck、unit tests、build、ui-audit、ui-flow-test；浏览器巡检 issues 为 0。
+- 下一步：保持服务运行，等待用户审核；后续继续从 north-star plan 的待确认项和更完整 local profile 二次确认推进。

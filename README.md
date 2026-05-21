@@ -37,10 +37,13 @@ pnpm mirror:local
 pnpm typecheck
 pnpm test
 pnpm build
+pnpm verify
 pnpm --filter @linka-skillhub/cli start -- serve
 ```
 
 默认 Web/API 地址：`http://127.0.0.1:4873`。
+
+`pnpm verify` 是每轮迭代的退出门槛：类型检查、单元测试、构建、浏览器巡检、浏览器流程测试都必须通过。
 
 ## CLI
 

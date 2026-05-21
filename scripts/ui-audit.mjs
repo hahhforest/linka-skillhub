@@ -106,6 +106,12 @@ for (const required of ["预览复制结果", "确认复制到选中的目标 Ag
   if (!distributeText.includes(required)) issues.push({ severity: "high", area: "distribution", text: `分发管理缺少必要文案：${required}` });
 }
 
+await page.getByRole("button", { name: /仓库管理/ }).click();
+const repoFinalText = await visibleText();
+for (const required of ["Git 状态", "刷新 Git 状态", "提交并推送 Registry", "只作用于当前 Registry 仓库"]) {
+  if (!repoFinalText.includes(required)) issues.push({ severity: "high", area: "repo-git", text: `Registry/GitHub 区域缺少必要元素：${required}` });
+}
+
 await fs.writeFile(path.join(outDir, "audit.json"), JSON.stringify({ baseUrl, outDir, issues, consoleMessages }, null, 2), "utf8");
 await browser.close();
 console.log(JSON.stringify({ outDir, issues }, null, 2));
