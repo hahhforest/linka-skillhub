@@ -25,6 +25,15 @@ export interface AgentsResponse {
   readonly stateDir?: string;
 }
 
+export interface ReviewerInfo {
+  readonly kind: string;
+  readonly label: string;
+  readonly available: boolean;
+  readonly command?: string;
+  readonly path?: string;
+  readonly reason: string;
+}
+
 const request = async <T>(path: string, options: RequestInit = {}): Promise<T> => {
   const response = await fetch(path, {
     ...options,
@@ -45,6 +54,7 @@ export const api = {
   scan: (includeDefaultExcluded = true) => request<ScanResponse>("/api/scan", { method: "POST", body: JSON.stringify({ includeDefaultExcluded }) }),
   import: (repoPath?: string) => request<{ manifest: RegistryManifest; imported: number; skipped: number; repoPath: string }>("/api/import", { method: "POST", body: JSON.stringify({ repoPath }) }),
   skills: () => request<ScanResponse>("/api/skills"),
+  reviewers: () => request<{ reviewers: ReviewerInfo[] }>("/api/reviewers"),
   review: (skillIds: string[], reviewer: string, language: "zh" | "en") => request<{ reviews: ReviewResult[] }>("/api/reviews/run", { method: "POST", body: JSON.stringify({ skillIds, reviewer, language }) }),
   distributionPlan: (targetAgents: string[], skillIds: string[]) =>
     request<{ plan: DistributionPlan }>("/api/distributions/plan", { method: "POST", body: JSON.stringify({ targetAgents, skillIds }) }),

@@ -14,3 +14,10 @@
 - 已完成：交汇中心增加来源/目标绝对路径、预览交汇复制、确认复制到目标 Agent；分发管理文案改为预览复制结果/确认复制，并展示 action/reason/path 详情。
 - 最近测试：`pnpm typecheck`、`pnpm build`、`node scripts/ui-audit.mjs`、`node scripts/ui-flow-test.mjs`、`pnpm test` 均通过；浏览器巡检 issues 为 0。
 - 下一步：推进 Commit 2，显式 Code Agent 审核中心和中英文审核输出。
+
+## 2026-05-22 01:19 +08:00
+
+- 当前 phase：Commit 2，显式 Code Agent 审核中心。
+- 已完成：后端新增 `/api/reviewers` 检测本机审核器；审查弹框展示审查范围、输出语言、写入位置、规则审核和 Code Agent 可用/不可用原因；浏览器流程测试覆盖审核弹框信息。
+- 最近测试：`pnpm typecheck`、`pnpm build`、`node scripts/ui-audit.mjs`、`node scripts/ui-flow-test.mjs`、`pnpm test` 均通过；浏览器巡检 issues 为 0。
+- 下一步：推进 Commit 3，Registry/GitHub 同步和 local profile 安全确认。

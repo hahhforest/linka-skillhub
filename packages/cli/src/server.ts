@@ -1,6 +1,7 @@
 import http from "node:http";
 import fs from "node:fs/promises";
 import path from "node:path";
+import { execFile } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import {
   applyDistributionPlan,
@@ -92,6 +93,40 @@ const summarize = (skills: readonly SkillPackage[]) => ({
   invalid: skills.filter((skill) => skill.status.includes("invalid")).length
 });
 
+const reviewerCommand: Partial<Record<AgentKind, string>> = {
+  codex: "codex",
+  claude: "claude",
+  opencode: "opencode",
+  mavis: "mavis"
+};
+
+const commandExists = (command: string): Promise<string | undefined> =>
+  new Promise((resolve) => {
+    execFile("sh", ["-lc", `command -v ${command}`], (error, stdout) => {
+      resolve(error ? undefined : stdout.trim() || undefined);
+    });
+  });
+
+const listReviewers = async (cwd: string, config?: SkillHubConfig, profileName?: string) => {
+  const agents = getAgentDefinitions(cwd, config, profileName).filter((agent) => agent.kind !== "shared");
+  const reviewers: Array<{ kind: string; label: string; available: boolean; reason: string; command?: string; path?: string }> = [
+    { kind: "rules", label: "Rules", available: true, reason: "Deterministic local checks; no Code Agent call." }
+  ];
+  for (const agent of agents) {
+    const command = reviewerCommand[agent.kind];
+    const path = command ? await commandExists(command) : undefined;
+    reviewers.push({
+      kind: agent.kind,
+      label: agent.label,
+      available: Boolean(path),
+      command,
+      path,
+      reason: path ? `Found ${command} at ${path}.` : `Command not found: ${command ?? agent.kind}.`
+    });
+  }
+  return reviewers;
+};
+
 export const startServer = (options: ServerOptions): http.Server => {
   const allowedRepoRoot = path.resolve(options.repoPath);
   const resolveRepoPath = (repoPath?: string): string => {
@@ -119,6 +154,11 @@ export const startServer = (options: ServerOptions): http.Server => {
           registryRepo: options.repoPath,
           stateDir: options.stateDir
         });
+        return;
+      }
+
+      if (request.method === "GET" && url.pathname === "/api/reviewers") {
+        sendJson(response, 200, { reviewers: await listReviewers(options.cwd, options.config, options.profileName) });
         return;
       }
 

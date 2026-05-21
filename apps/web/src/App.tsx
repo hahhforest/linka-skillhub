@@ -18,7 +18,7 @@ import {
   X
 } from "lucide-react";
 import type { AgentDefinition, DistributionPlan, DistributionTarget, SkillPackage, SkillStatus } from "@linka-skillhub/core";
-import { api, type Summary } from "./api.js";
+import { api, type ReviewerInfo, type Summary } from "./api.js";
 import { messages, type Language } from "./i18n.js";
 
 type View = "overview" | "intersect" | "distribute" | "detail" | "repo";
@@ -259,6 +259,7 @@ export function App() {
   const [dialog, setDialog] = useState<Dialog>(null);
   const [includeBuiltin, setIncludeBuiltin] = useState(false);
   const [reviewer, setReviewer] = useState("rules");
+  const [reviewers, setReviewers] = useState<ReviewerInfo[]>([]);
 
   const loadShell = async () => {
     const [agentData, registry] = await Promise.all([api.agents(), api.skills()]);
@@ -280,6 +281,16 @@ export function App() {
   const runScan = async () => { setBusy(true); try { const scan = await api.scan(includeBuiltin); setSkills(scan.skills); setMessage(`${t.scan}: ${scan.summary.total}`); setDialog(null); } catch (error) { setMessage(error instanceof Error ? error.message : String(error)); } finally { setBusy(false); } };
   const importRepo = async () => { setBusy(true); try { const result = await api.import(); setMessage(`${t.imported} ${result.imported} skills → ${result.repoPath}`); await loadShell(); } catch (error) { setMessage(error instanceof Error ? error.message : String(error)); } finally { setBusy(false); } };
   const runReview = async () => { setBusy(true); try { const ids = selected.size ? [...selected] : visibleSkills.map((skill) => skill.id); const result = await api.review(ids, reviewer, lang); setMessage(`${t.reviewed} ${result.reviews.length} skills`); setDialog(null); } catch (error) { setMessage(error instanceof Error ? error.message : String(error)); } finally { setBusy(false); } };
+  const openReviewDialog = async (preferred = "rules") => {
+    setReviewer(preferred);
+    setDialog("review");
+    try {
+      const result = await api.reviewers();
+      setReviewers(result.reviewers);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : String(error));
+    }
+  };
   const planDistribution = async (targetAgents: string[], skillIds?: string[]) => { setBusy(true); try { const result = await api.distributionPlan(targetAgents, skillIds ?? [...selected]); setPlan(result.plan); setMessage(`${t.planSummary}: ${result.plan.items.length}`); } catch (error) { setMessage(error instanceof Error ? error.message : String(error)); } finally { setBusy(false); } };
   const applyDistribution = async (targetAgents: string[], skillIds?: string[]) => { setBusy(true); try { const run = await api.distributionApply(targetAgents, skillIds ?? [...selected]); setMessage(`${t.copied} ${run.copied}, ${t.skipped} ${run.skipped}`); await loadShell(); } catch (error) { setMessage(error instanceof Error ? error.message : String(error)); } finally { setBusy(false); } };
 
@@ -293,13 +304,13 @@ export function App() {
         <Sidebar view={view} setView={setView} agents={agents} selectedAgent={selectedAgent} setSelectedAgent={setSelectedAgent} lang={lang} />
         <div className="content">
           {view === "overview" && <Overview skills={visibleSkills} summary={summary} selected={selected} toggleSkill={toggleSkill} lang={lang} selectedAgent={selectedAgent} />}
-          {view === "repo" && <RepoView onImport={importRepo} onReview={() => { setReviewer("rules"); setDialog("review"); }} onAgentReview={() => setDialog("review")} busy={busy} message={message} lang={lang} />}
+          {view === "repo" && <RepoView onImport={importRepo} onReview={() => void openReviewDialog("rules")} onAgentReview={() => void openReviewDialog("codex")} busy={busy} message={message} lang={lang} />}
           {view !== "overview" && view !== "repo" && <Placeholder view={view} lang={lang} skills={visibleSkills} targets={targets} selected={selected} toggleSkill={toggleSkill} plan={plan} onPlan={planDistribution} onApply={applyDistribution} selectedSkill={selectedSkill} />}
           <footer className="status-footer"><span>{agents.length} agents</span><span>{selected.size} {t.selectedCount}</span><span>{message}</span></footer>
         </div>
       </div>
       {dialog === "scan" && <DialogFrame title={t.scanDialogTitle} onClose={() => setDialog(null)}><p>{t.scanDialogBody}</p><label className="checkbox-line"><input type="checkbox" checked={includeBuiltin} onChange={(event) => setIncludeBuiltin(event.target.checked)} /> {t.includeBuiltin}</label><div className="dialog-actions"><button className="ghost" onClick={() => setDialog(null)}>{t.cancel}</button><button className="primary" onClick={runScan} disabled={busy}>{t.confirmScan}</button></div></DialogFrame>}
-      {dialog === "review" && <DialogFrame title={t.reviewDialogTitle} onClose={() => setDialog(null)}><p>{t.reviewDialogBody}</p><select className="full-select" value={reviewer} onChange={(event) => setReviewer(event.target.value)}><option value="rules">{t.reviewerRules}</option>{agents.filter((agent) => agent.kind !== "shared").map((agent) => <option key={agent.kind} value={agent.kind}>{agent.label}</option>)}</select><p className="muted-copy">{t.agentUnavailable}</p><div className="dialog-actions"><button className="ghost" onClick={() => setDialog(null)}>{t.cancel}</button><button className="primary" onClick={runReview} disabled={busy}>{t.startReview}</button></div></DialogFrame>}
+      {dialog === "review" && <DialogFrame title={t.reviewDialogTitle} onClose={() => setDialog(null)}><p>{t.reviewDialogBody}</p><div className="review-meta"><span>{t.reviewScope}: {selected.size ? `${selected.size} ${t.selectedCount}` : `${visibleSkills.length} visible`}</span><span>{t.reviewOutputLanguage}: {lang === "zh" ? "中文" : "English"}</span><span>{t.reviewWriteTarget}: registry/reviews/*.json</span></div><div className="reviewer-list">{reviewers.map((item) => <label key={item.kind} className={`reviewer-option ${reviewer === item.kind ? "active" : ""} ${!item.available ? "disabled" : ""}`}><input type="radio" name="reviewer" value={item.kind} checked={reviewer === item.kind} disabled={!item.available} onChange={() => setReviewer(item.kind)} /><strong>{item.kind === "rules" ? t.reviewerRules : item.label}</strong><span>{item.available ? t.reviewerAvailable : t.reviewerUnavailable}</span><small>{item.reason}</small></label>)}</div><p className="muted-copy">{t.agentUnavailable}</p><div className="dialog-actions"><button className="ghost" onClick={() => setDialog(null)}>{t.cancel}</button><button className="primary" onClick={runReview} disabled={busy || !reviewers.find((item) => item.kind === reviewer)?.available}>{t.startReview}</button></div></DialogFrame>}
     </main>
   );
 }

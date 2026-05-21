@@ -52,6 +52,10 @@ await screenshot("05-repo");
 await page.getByRole("button", { name: /运行确定性规则审查/ }).click();
 await expectText("选择审查方式", "review dialog");
 await expectText("规则审查", "reviewer choice");
+await expectText("审查范围", "review scope");
+await expectText("输出语言", "review output language");
+await expectText("写入位置", "review write target");
+await expectText("Codex", "codex reviewer option");
 await screenshot("06-review-dialog");
 await page.getByRole("button", { name: /取消/ }).click();
 
