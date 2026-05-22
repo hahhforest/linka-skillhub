@@ -29,6 +29,11 @@
 - 审阅结果，打回不合格产物。
 - 控制 commit 边界。
 
+Commit message 必须遵守 `docs/commit-conventions.md`。格式使用
+Conventional Commits，例如 `feat(intersection): ...`、
+`fix(review): ...`、`docs(plan): ...`。有风险、测试或跨模块改动时，
+commit body 必须写明 Why / What / Risk / Validation。
+
 协作者负责：
 
 - 独立审查代码和设计差距。
