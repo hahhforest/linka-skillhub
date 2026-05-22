@@ -1,0 +1,234 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>SkillHub 产品功能整理</title>
+  <style>
+    :root {
+      --paper: #f6f1e7;
+      --ink: #1f2421;
+      --muted: #697066;
+      --line: #d8cdb9;
+      --card: rgba(255, 252, 245, 0.88);
+      --dark: #17231f;
+      --green: #0b6b57;
+      --blue: #275f7e;
+      --amber: #a56100;
+      --red: #a34032;
+      --shadow: 0 22px 70px rgba(58, 45, 26, 0.14);
+      --mono: "SFMono-Regular", "Cascadia Code", Menlo, Consolas, monospace;
+      --serif: "Iowan Old Style", "Songti SC", STSong, Georgia, serif;
+      --sans: "Avenir Next", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      color: var(--ink);
+      font-family: var(--sans);
+      line-height: 1.75;
+      background:
+        linear-gradient(rgba(31, 36, 33, 0.035) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(31, 36, 33, 0.025) 1px, transparent 1px),
+        var(--paper);
+      background-size: 28px 28px;
+    }
+    .shell { display: grid; grid-template-columns: 286px minmax(0, 1fr); min-height: 100vh; }
+    aside { position: sticky; top: 0; height: 100vh; padding: 32px 24px; overflow: auto; border-right: 1px solid var(--line); background: rgba(246, 241, 231, 0.86); backdrop-filter: blur(10px); }
+    aside .label { margin-bottom: 18px; color: var(--muted); font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; }
+    nav a { display: block; padding: 9px 0; color: var(--muted); text-decoration: none; border-bottom: 1px solid rgba(216, 205, 185, 0.58); }
+    nav a.active, nav a:hover { color: var(--green); }
+    main { width: min(1120px, 100%); padding: 52px 56px 88px; }
+    .hero { margin-bottom: 34px; padding-bottom: 30px; border-bottom: 2px solid var(--dark); }
+    h1, h2, h3 { font-family: var(--serif); line-height: 1.25; }
+    h1 { margin: 0 0 18px; font-size: clamp(36px, 5vw, 64px); letter-spacing: 0; }
+    h2 { margin: 48px 0 16px; padding-top: 6px; font-size: 30px; border-top: 1px solid var(--line); }
+    h3 { margin-top: 28px; font-size: 22px; }
+    p { margin: 0 0 14px; }
+    .dek { max-width: 800px; color: var(--muted); font-size: 18px; }
+    .meta { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-top: 28px; }
+    .meta div, .note, .warn, .decision, blockquote { padding: 16px 18px; background: var(--card); border: 1px solid var(--line); box-shadow: var(--shadow); }
+    .meta strong { display: block; margin-bottom: 4px; color: var(--dark); }
+    blockquote { margin: 22px 0; border-left: 5px solid var(--green); font-size: 18px; }
+    .warn { border-left: 5px solid var(--amber); }
+    .note { border-left: 5px solid var(--blue); }
+    .decision { border-left: 5px solid var(--green); }
+    .table-wrap { margin: 20px 0; overflow-x: auto; border: 1px solid var(--line); background: var(--card); }
+    table { width: 100%; border-collapse: collapse; min-width: 760px; }
+    th, td { padding: 12px 14px; text-align: left; vertical-align: top; border-bottom: 1px solid var(--line); }
+    th { color: var(--dark); background: rgba(255, 252, 245, 0.72); }
+    ul, ol { padding-left: 22px; }
+    li { margin: 4px 0; }
+    code { font-family: var(--mono); background: rgba(23, 35, 31, 0.08); padding: 2px 5px; border-radius: 4px; }
+    pre { overflow: auto; padding: 18px; color: #f6f1e7; background: var(--dark); border-radius: 6px; }
+    .rule { height: 1px; margin: 36px 0; background: var(--line); }
+    .figure { margin: 22px 0; padding: 14px; background: var(--card); border: 1px solid var(--line); box-shadow: var(--shadow); }
+    .figure img { display: block; width: 100%; height: auto; border: 1px solid var(--line); background: white; }
+    .figure figcaption { margin-top: 10px; color: var(--muted); font-size: 14px; }
+    .tags { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0 18px; }
+    .tag { display: inline-flex; align-items: center; height: 26px; padding: 0 9px; border-radius: 999px; background: rgba(11, 107, 87, 0.12); color: var(--green); font-size: 13px; font-weight: 700; }
+    .flow { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 12px 0; }
+    .node { border: 1px solid var(--line); background: rgba(255, 252, 245, 0.92); border-radius: 8px; padding: 8px 10px; font-weight: 700; }
+    .arrow { color: var(--muted); }
+    @media (max-width: 860px) { .shell { display: block; } aside { position: static; height: auto; border-right: 0; border-bottom: 1px solid var(--line); } main { padding: 34px 20px 64px; } .meta { grid-template-columns: 1fr 1fr; } }
+    @media (max-width: 560px) { .meta { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <aside>
+      <div class="label">Product Brief</div>
+      <nav aria-label="页面目录">
+        <a href="#summary">一句话结论</a>
+        <a href="#origin">原始需求复述</a>
+        <a href="#principles">产品原则</a>
+        <a href="#features">功能总表</a>
+        <a href="#webui">Web UI 草图解读</a>
+        <a href="#cli">CLI 优先设计</a>
+        <a href="#workflows">关键流程</a>
+        <a href="#boundaries">边界和不做什么</a>
+        <a href="#next">下一步</a>
+      </nav>
+    </aside>
+
+    <main>
+      <header class="hero">
+        <h1>SkillHub 产品功能整理</h1>
+        <p class="dek">这份文档整理用户最初提出的 Skill 管理工具设想，并在不违背原意的前提下，补齐必要的软件工程细节。它不是实现方案的替代品，而是后续 CLI 和 Web UI 设计的产品边界。</p>
+        <section class="meta" aria-label="文档元信息">
+          <div><strong>状态</strong>待审核</div>
+          <div><strong>读者</strong>产品 / 工程协作</div>
+          <div><strong>默认入口</strong>CLI first</div>
+          <div><strong>更新时间</strong>2026-05-22</div>
+        </section>
+      </header>
+
+      <article>
+        <section id="summary">
+          <h2>一句话结论</h2>
+          <blockquote>SkillHub 的北极星不是“做一个漂亮控制台”，而是让用户在本机和远程 Linux 环境中，可靠地发现、汇总、审核、追溯、交汇和分发多个 Code Agent 的 skills。</blockquote>
+          <p>Web UI 是可视化管理层；CLI 是完整产品能力的基础入口。所有危险写操作必须先展示源路径、目标路径、动作和影响范围，默认要求用户输入 <code>y/N</code> 确认；非交互环境必须显式传入确认参数。</p>
+        </section>
+
+        <section id="origin">
+          <h2>原始需求复述</h2>
+          <p>用户本机有多个 Code Agent，例如 Mavis、OpenCode、Codex、Claude Code，以及一个不完全归属于某个 Agent 的 <code>.agents/skills</code> 目录。它们各自维护 skills。用户经常需要找某个 skill，却发现它只存在于另一个 Agent 的目录里，还要手动找绝对路径、复制、安装，非常低效。</p>
+          <p>用户希望做一个管理 skills 的工具，让 skill 能被汇总、版本追溯、审核、交汇和分发。这个工具要支持 GitHub 仓库作为统一 Registry；要能加载已有 Registry；要能判断 skill 是否合法、是否依赖特定 Agent；还要用颜色或状态把可共享、仅限当前 Agent、存在问题等情况表达清楚。</p>
+          <div class="tags"><span class="tag">汇总</span><span class="tag">分发</span><span class="tag">交汇</span><span class="tag">可选交汇</span><span class="tag">GitHub Registry</span><span class="tag">Code Agent 审核</span></div>
+        </section>
+
+        <section id="principles">
+          <h2>产品原则</h2>
+          <ol>
+            <li><strong>CLI first。</strong>远程 Linux 环境没有 Web UI，CLI 必须完整可用。</li>
+            <li><strong>真实内容，安全镜像。</strong>默认从真实 skill 复制到 mirror 后测试，不直接写真实目录。</li>
+            <li><strong>显式确认。</strong>写入命令默认展示 source、target、action，然后要求 <code>y/N</code>。</li>
+            <li><strong>可解释。</strong>用户必须知道 copy / overwrite / skip 是什么、为什么发生。</li>
+            <li><strong>可追溯。</strong>Registry 用 Git 管理，manifest、review、prompt 和 skill 原样包可追踪。</li>
+            <li><strong>审核不静默。</strong>调用 Codex、Claude Code、OpenCode、Mavis 做审核必须由用户选择并确认。</li>
+            <li><strong>CLI 英文。</strong>CLI 命令、help、输出默认英文；Web UI 可以多语言。</li>
+          </ol>
+        </section>
+
+        <section id="features">
+          <h2>功能总表</h2>
+          <div class="table-wrap"><table>
+            <thead><tr><th>功能</th><th>用户目标</th><th>输入</th><th>输出</th><th>确认点</th></tr></thead>
+            <tbody>
+              <tr><td>List</td><td>列出当前 profile 可见 skills。</td><td>Agent sources、profile、过滤条件。</td><td>skills 列表、状态、来源路径。</td><td>只读，无需确认。</td></tr>
+              <tr><td>Registry Import</td><td>把扫描到的 skills 汇总到统一 Registry。</td><td>当前 scan/list 结果。</td><td>原样 skill 包、<code>registry/skills.json</code>。</td><td>写 Registry 前确认。</td></tr>
+              <tr><td>Review</td><td>判断 skill 是否合法、可共享、agent-bound 或 unsafe。</td><td>Registry skill、规则或本机 Code Agent。</td><td>review JSON、摘要、证据。</td><td>选择审核器后确认。</td></tr>
+              <tr><td>Copy</td><td>从 A Agent 复制选中 skills 到 B Agent。</td><td>来源 Agent、目标 Agent、skill ids。</td><td>copy / overwrite / skip 预览和执行结果。</td><td>写目标前确认。</td></tr>
+              <tr><td>Distribute</td><td>从 Registry 批量分发到多个 Agent。</td><td>Registry skills、目标 Agent 列表。</td><td>批量复制预览和执行结果。</td><td>写目标前确认。</td></tr>
+              <tr><td>Repo Sync</td><td>把 Registry 同步到 GitHub。</td><td>registry repo、remote、commit message。</td><td>Git commit、push/pull 结果。</td><td>push 前确认。</td></tr>
+              <tr><td>Profile / Config</td><td>管理 source/target 路径和运行环境。</td><td>配置文件、XDG / 环境变量。</td><td>active profile、路径、策略。</td><td>切换到 local 或改写路径前确认。</td></tr>
+            </tbody>
+          </table></div>
+        </section>
+
+        <section id="webui">
+          <h2>Web UI 草图解读</h2>
+          <figure class="figure">
+            <img src="assets/webui-concept.png" alt="用户绘制的 Skill 管理工具 Web UI 草图" />
+            <figcaption>用户最初绘制的 UI 草图。它传达的是功能结构和信息优先级，不应被理解成“照着画卡片”。</figcaption>
+          </figure>
+          <h3>图中的功能块</h3>
+          <div class="table-wrap"><table>
+            <thead><tr><th>区域</th><th>原始意图</th><th>需要补齐的工程逻辑</th></tr></thead>
+            <tbody>
+              <tr><td>总览</td><td>看所有来源的 skills 数量、状态和最近变化。</td><td>统计必须跟当前筛选范围一致；列表可滚动；选择 skill 后要出现下一步。</td></tr>
+              <tr><td>交互页面 / 可视化交汇</td><td>从来源 Agent 选择 skills，复制到目标 Agent。</td><td>必须展示来源/目标绝对路径；必须有预览交汇复制和确认复制按钮。</td></tr>
+              <tr><td>分发管理</td><td>选择目标 Agent 并批量分发。</td><td>文案要说明 Registry -> 多目标；copy/overwrite/skip 要解释原因。</td></tr>
+              <tr><td>技能详情</td><td>看 skill 的描述、来源、状态、依赖和版本。</td><td>要展示 frontmatter、review 结果、证据、路径和可执行动作。</td></tr>
+              <tr><td>状态特性 / 图例</td><td>用颜色区分可共享、仅限 Agent、存在问题、未知。</td><td>状态必须来自审核和规则，不是 UI 静态标签。</td></tr>
+              <tr><td>仓库管理</td><td>管理 Registry 和 GitHub。</td><td>导入、commit、push、pull、加载已有 repo 都要可解释。</td></tr>
+            </tbody>
+          </table></div>
+          <div class="warn"><p>图中“生成计划”“执行分发”这类内部工程语义，在最终产品里必须转成用户能理解的动作，例如“预览复制结果”和“确认复制到目标 Agent”。</p></div>
+        </section>
+
+        <section id="cli">
+          <h2>CLI 优先设计</h2>
+          <p>产品名 <code>linka-skillhub</code> 过长。建议主命令为 <code>lsh</code>，长命令 <code>linka-skillhub</code> 保留为别名。CLI 完全使用英文。</p>
+          <pre><code>lsh list
+lsh registry import
+lsh registry list
+lsh registry show &lt;skill&gt;
+lsh registry review --reviewer rules --language zh
+lsh copy preview --from mavis --to codex --skill smart-commit
+lsh copy apply --from mavis --to codex --skill smart-commit
+lsh distribute preview --target codex,claude --skill smart-commit
+lsh distribute apply --target codex,claude --skill smart-commit
+lsh repo status
+lsh repo push --message "feat: update skills"
+lsh config list
+lsh profile show</code></pre>
+          <h3>写操作确认</h3>
+          <p>交互模式下，写操作默认展示路径和动作，并要求输入 <code>y/N</code>：</p>
+          <pre><code>Source: /abs/source/path
+Target: /abs/target/path
+Action: copy 1, overwrite 0, skip 0
+Continue? [y/N]</code></pre>
+          <p>非交互环境不能等待输入，必须要求显式确认，例如 <code>--yes</code>。真实 <code>local</code> profile 写入需要更强提示。</p>
+        </section>
+
+        <section id="workflows">
+          <h2>关键流程</h2>
+          <h3>List / Import</h3>
+          <div class="flow"><span class="node">list sources</span><span class="arrow">→</span><span class="node">parse skills</span><span class="arrow">→</span><span class="node">show status</span><span class="arrow">→</span><span class="node">import to registry</span></div>
+          <h3>Review</h3>
+          <div class="flow"><span class="node">select skills</span><span class="arrow">→</span><span class="node">choose reviewer</span><span class="arrow">→</span><span class="node">confirm</span><span class="arrow">→</span><span class="node">write review</span></div>
+          <h3>Copy A -> B</h3>
+          <div class="flow"><span class="node">choose source</span><span class="arrow">→</span><span class="node">choose target</span><span class="arrow">→</span><span class="node">preview</span><span class="arrow">→</span><span class="node">y/N</span><span class="arrow">→</span><span class="node">copy</span></div>
+          <h3>Distribute Registry -> many targets</h3>
+          <div class="flow"><span class="node">select registry skills</span><span class="arrow">→</span><span class="node">choose targets</span><span class="arrow">→</span><span class="node">preview</span><span class="arrow">→</span><span class="node">y/N</span><span class="arrow">→</span><span class="node">copy with backups</span></div>
+        </section>
+
+        <section id="boundaries">
+          <h2>边界和不做什么</h2>
+          <ul>
+            <li>不默认写真实 Agent skills 目录。</li>
+            <li>不静默调用本机 Code Agent 审核。</li>
+            <li>不把 <code>.agents/skills</code> 硬归属给 OpenCode；它是 shared source。</li>
+            <li>不把 Web UI 当成唯一产品入口；CLI 必须完整可用。</li>
+            <li>不在 CLI 中使用模糊文案，例如裸露的 “generate plan / execute plan” 而不解释。</li>
+            <li>不让前端或命令参数传入可执行路径绕过 profile 安全边界。</li>
+          </ul>
+        </section>
+
+        <section id="next">
+          <h2>下一步</h2>
+          <ol>
+            <li>先冻结 CLI v1 命令树和输出格式。</li>
+            <li>把当前 <code>scan</code> 命令迁移为 <code>list</code>，保留兼容别名。</li>
+            <li>实现 <code>copy preview/apply</code>，作为交汇的 CLI 原型。</li>
+            <li>补写所有写操作的 <code>y/N</code> 确认和非交互 <code>--yes</code> 策略。</li>
+            <li>再让 Web UI 调用同一套 core workflow，而不是单独设计一套流程。</li>
+          </ol>
+        </section>
+      </article>
+    </main>
+  </div>
+</body>
+</html>
