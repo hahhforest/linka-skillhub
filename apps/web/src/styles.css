@@ -104,6 +104,11 @@ select:focus-visible,
   outline: 2px solid var(--primary);
   outline-offset: 2px;
 }
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  transition: box-shadow var(--t-fast), outline-color var(--t-fast);
+}
 .action-card:focus-visible,
 .skill-row:focus-visible,
 .target:focus-visible,
@@ -203,12 +208,16 @@ select:focus-visible,
   height: var(--ctrl-md);
   padding: 0 var(--sp-4);
   white-space: nowrap;
-  transition: background var(--t-fast), border-color var(--t-fast), box-shadow var(--t-base), color var(--t-fast);
+  transition: background var(--t-fast), border-color var(--t-fast), box-shadow var(--t-base), color var(--t-fast), transform var(--t-fast);
 }
 .ghost, .primary { min-width: 100px; }
 .ghost:hover:not(:disabled) {
   background: var(--surface-2);
   border-color: var(--border-hover);
+}
+.ghost:active:not(:disabled) {
+  transform: translateY(1px);
+  box-shadow: var(--shadow-sm);
 }
 .primary {
   background: var(--primary);
@@ -220,6 +229,10 @@ select:focus-visible,
   background: var(--primary-hover);
   border-color: var(--primary-hover);
   box-shadow: 0 10px 22px rgba(37, 99, 235, 0.28);
+}
+.primary:active:not(:disabled) {
+  transform: translateY(1px);
+  box-shadow: 0 4px 10px rgba(37, 99, 235, 0.18);
 }
 .icon-button { width: var(--ctrl-md); min-width: 0; padding: 0; }
 .spin { animation: spin 0.9s linear infinite; }
@@ -457,9 +470,16 @@ select:focus-visible,
   text-align: left;
   transition: background var(--t-fast), border-color var(--t-fast);
 }
-.skill-row:hover, .skill-row.selected {
-  border-color: var(--border-hover);
+.skill-row:hover {
   background: var(--surface-2);
+}
+.skill-row.selected {
+  border-color: var(--primary);
+  background: var(--primary-soft);
+}
+.skill-row.selected:hover {
+  border-color: var(--primary);
+  background: var(--primary-soft);
 }
 .skill-main { min-width: 0; }
 .skill-main strong {
@@ -571,11 +591,12 @@ select:focus-visible,
   background: var(--surface);
   padding: var(--sp-3);
   text-align: left;
-  transition: background var(--t-fast), border-color var(--t-fast), box-shadow var(--t-base);
+  transition: background var(--t-fast), border-color var(--t-fast), box-shadow var(--t-base), transform var(--t-fast);
 }
 .target:hover { border-color: var(--border-hover); background: var(--surface-2); }
 .target.selected { border-color: var(--primary); background: var(--primary-soft); }
 .target.selected:hover { border-color: var(--primary); }
+.target:active { transform: translateY(1px); }
 .target span { min-width: 0; font-weight: var(--fw-bold); }
 .target small {
   display: block;
@@ -694,6 +715,10 @@ select:focus-visible,
   background: var(--surface-2);
   box-shadow: var(--shadow-pop);
   transform: translateY(-1px);
+}
+.action-card:active:not(:disabled) {
+  transform: translateY(0);
+  box-shadow: var(--shadow-md);
 }
 .action-card svg { color: var(--primary); }
 .action-card strong { font-size: var(--fs-lg); }
@@ -817,6 +842,19 @@ select:focus-visible,
   background: var(--surface);
   display: grid;
   place-items: center;
+  transition: background var(--t-fast), border-color var(--t-fast), color var(--t-fast);
+}
+.dialog-close:hover {
+  background: var(--surface-2);
+  border-color: var(--border-hover);
+  color: var(--text);
+}
+.dialog-close:active {
+  background: var(--surface-3);
+}
+.icon-button:hover:not(:disabled) {
+  background: var(--surface-2);
+  border-color: var(--border-hover);
 }
 .dialog-actions {
   display: flex;
@@ -1042,6 +1080,7 @@ select:focus-visible,
   border-radius: var(--r-md);
   padding: var(--sp-3);
   background: var(--surface);
+  transition: background var(--t-fast), border-color var(--t-fast);
 }
 .reviewer-option.active {
   border-color: var(--primary);
