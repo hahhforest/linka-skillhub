@@ -19,6 +19,7 @@ import {
   type AgentKind
 } from "@linka-skillhub/core";
 import { defaultRepoPath, startServer } from "./server.js";
+import { assertInteractiveOrYes, summarizeCopyForPrompt } from "./prompts.js";
 
 const program = new Command();
 const invocationCwd = process.env.INIT_CWD ?? process.cwd();
@@ -75,6 +76,17 @@ const compactPlan = (plan: Awaited<ReturnType<typeof createDistributionPlan>>) =
 
 const warnDeprecated = (from: string, to: string): void => {
   process.stderr.write(`[linka-skillhub] '${from}' is deprecated; use '${to}' instead.\n`);
+};
+
+const handleConfirmationFailure = async (promise: Promise<void>): Promise<boolean> => {
+  try {
+    await promise;
+    return true;
+  } catch (error) {
+    process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
+    process.exitCode = 2;
+    return false;
+  }
 };
 
 program
@@ -199,6 +211,72 @@ program
     }
     const run = await applyDistributionPlan(repoPath, plan);
     printJson({ plan: compactPlan(plan), run });
+  });
+
+const copy = program.command("copy").description("Copy skills from one agent's source to a single target agent.");
+copy
+  .command("preview")
+  .description("Plan A->B copy operations; do not write anything.")
+  .requiredOption("--from <agent>", "source agent: mavis | opencode | claude | codex | shared")
+  .requiredOption("--to <agent>", "target agent")
+  .option("--skill <ids>", "comma-separated skill ids")
+  .option("--repo <path>", "Registry path; defaults to profile registryRepo.")
+  .action(async (options: { from: AgentKind; to: AgentKind; skill?: string; repo?: string }) => {
+    const runtime = await loadRuntimeConfig();
+    const repoPath = resolveRepoOption(options.repo, runtime.profile.registryRepo);
+    const manifest = await readRegistryManifest(repoPath);
+    const filtered = manifest.skills.filter((skill) => skill.source.agent === options.from);
+    const plan = await createDistributionPlan({
+      registryPath: repoPath,
+      cwd: invocationCwd,
+      config: runtime.raw,
+      profileName: runtime.profileName,
+      backupDir: path.join(runtime.profile.stateDir, "backups"),
+      targetAgents: [options.to],
+      skillIds: options.skill ? options.skill.split(",").map((item) => item.trim()) : filtered.map((skill) => skill.id),
+      includeUnsafe: false,
+      includeAgentBound: false
+    });
+    printJson({ from: options.from, to: options.to, plan: compactPlan(plan) });
+  });
+
+copy
+  .command("apply")
+  .description("Apply a previously previewed plan. Requires --yes in non-interactive shells.")
+  .requiredOption("--from <agent>", "source agent")
+  .requiredOption("--to <agent>", "target agent")
+  .option("--skill <ids>", "comma-separated skill ids; default: all skills under --from")
+  .option("--plan <id>", "plan id from 'copy preview'; recomputes if omitted")
+  .option("--repo <path>", "Registry path; defaults to profile registryRepo.")
+  .option("--yes", "Skip confirmation prompt (REQUIRED in non-interactive shells).")
+  .action(async (options: { from: AgentKind; to: AgentKind; skill?: string; plan?: string; repo?: string; yes?: boolean }) => {
+    const runtime = await loadRuntimeConfig();
+    const repoPath = resolveRepoOption(options.repo, runtime.profile.registryRepo);
+    const manifest = await readRegistryManifest(repoPath);
+    const filtered = manifest.skills.filter((skill) => skill.source.agent === options.from);
+    const plan = await createDistributionPlan({
+      registryPath: repoPath,
+      cwd: invocationCwd,
+      config: runtime.raw,
+      profileName: runtime.profileName,
+      backupDir: path.join(runtime.profile.stateDir, "backups"),
+      targetAgents: [options.to],
+      skillIds: options.skill ? options.skill.split(",").map((item) => item.trim()) : filtered.map((skill) => skill.id),
+      includeUnsafe: false,
+      includeAgentBound: false
+    });
+    await handleConfirmationFailure(
+      assertInteractiveOrYes({
+        action: "copy apply",
+        summary: summarizeCopyForPrompt(options.from, options.to, plan.items),
+        totalItems: plan.items.length,
+        targets: [options.to],
+        yes: options.yes,
+        skipOnEmpty: true
+      })
+    );
+    const run = await applyDistributionPlan(repoPath, plan);
+    printJson({ from: options.from, to: options.to, plan: compactPlan(plan), run, planIdEcho: options.plan });
   });
 
 const repo = program.command("repo").description("Manage the registry Git repository.");
