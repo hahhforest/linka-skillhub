@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { Check, X } from "lucide-react";
 import type { DistributionPlan } from "@linka-skillhub/core";
 import { messages, type Language } from "../i18n.js";
@@ -18,9 +19,20 @@ export function ConfirmPlanModal({ plan, confirmToken, lang, busy, onConfirm, on
     overwrite: plan.items.filter((item) => item.action === "overwrite").length,
     skip: plan.items.filter((item) => item.action === "skip").length
   };
+  useEffect(() => {
+    const handleKey = (event: KeyboardEvent) => { if (event.key === "Escape") onCancel(); };
+    window.addEventListener("keydown", handleKey);
+    return () => window.removeEventListener("keydown", handleKey);
+  }, [onCancel]);
   return (
-    <div className="dialog-backdrop" role="dialog" aria-modal="true" aria-labelledby="confirm-plan-title">
-      <div className="dialog confirm-plan-dialog">
+    <div
+      className="dialog-backdrop"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="confirm-plan-title"
+      onClick={(event) => { if (event.target === event.currentTarget) onCancel(); }}
+    >
+      <div className="dialog confirm-plan-dialog" onClick={(event) => event.stopPropagation()}>
         <button className="dialog-close" onClick={onCancel} aria-label={t.confirmCancel}><X size={16} /></button>
         <h2 id="confirm-plan-title">{t.confirmTitle}</h2>
         <p className="muted-copy">{t.confirmBody}</p>

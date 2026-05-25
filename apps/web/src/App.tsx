@@ -252,7 +252,20 @@ function RepoView({ onImport, onReview, onAgentReview, onRefreshGit, onPull, onP
 }
 
 function DialogFrame({ title, children, onClose }: { readonly title: string; readonly children: React.ReactNode; readonly onClose: () => void }) {
-  return <div className="dialog-backdrop"><div className="dialog"><button className="dialog-close" onClick={onClose}><X size={16} /></button><h2>{title}</h2>{children}</div></div>;
+  useEffect(() => {
+    const handleKey = (event: KeyboardEvent) => { if (event.key === "Escape") onClose(); };
+    window.addEventListener("keydown", handleKey);
+    return () => window.removeEventListener("keydown", handleKey);
+  }, [onClose]);
+  return (
+    <div className="dialog-backdrop" onClick={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+      <div className="dialog" onClick={(event) => event.stopPropagation()}>
+        <button className="dialog-close" onClick={onClose}><X size={16} /></button>
+        <h2>{title}</h2>
+        {children}
+      </div>
+    </div>
+  );
 }
 
 export function App() {
