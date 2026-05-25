@@ -18,7 +18,8 @@ import {
   setRemote,
   writeRegistryManifest,
   writeReviewResult,
-  type AgentKind
+  type AgentKind,
+  type ReviewLanguage
 } from "@linka-skillhub/core";
 import { defaultRepoPath, startServer } from "./server.js";
 import { assertInteractiveOrYes, summarizeCopyForPrompt, summarizePlanForPrompt } from "./prompts.js";
@@ -49,6 +50,46 @@ const parseAgents = (input: string): AgentKind[] =>
     .split(",")
     .map((item) => item.trim())
     .filter(Boolean) as AgentKind[];
+
+const KNOWN_AGENTS: readonly AgentKind[] = ["mavis", "opencode", "claude", "codex", "shared"];
+const KNOWN_REVIEWERS = ["rules", "mavis", "opencode", "claude", "codex"] as const;
+const KNOWN_LANGUAGES: readonly ReviewLanguage[] = ["zh", "en"];
+
+type KnownReviewer = (typeof KNOWN_REVIEWERS)[number];
+
+const reportInvalidFlag = (fieldLabel: string, value: string, allowed: readonly string[]): void => {
+  process.stderr.write(`error: unknown ${fieldLabel} '${value}' (allowed: ${allowed.join(", ")})\n`);
+  process.exitCode = 2;
+};
+
+const assertKnownAgent = (value: string, fieldLabel: string): AgentKind | undefined => {
+  if (KNOWN_AGENTS.includes(value as AgentKind)) return value as AgentKind;
+  reportInvalidFlag(fieldLabel, value, KNOWN_AGENTS);
+  return undefined;
+};
+
+const assertKnownReviewer = (value: string): KnownReviewer | undefined => {
+  if ((KNOWN_REVIEWERS as readonly string[]).includes(value)) return value as KnownReviewer;
+  reportInvalidFlag("reviewer (--reviewer)", value, KNOWN_REVIEWERS);
+  return undefined;
+};
+
+const assertKnownLanguage = (value: string): ReviewLanguage | undefined => {
+  if ((KNOWN_LANGUAGES as readonly string[]).includes(value)) return value as ReviewLanguage;
+  reportInvalidFlag("language (--language)", value, KNOWN_LANGUAGES);
+  return undefined;
+};
+
+const parseAgentsStrict = (input: string, fieldLabel: string): AgentKind[] | undefined => {
+  const items = input.split(",").map((s) => s.trim()).filter(Boolean);
+  const result: AgentKind[] = [];
+  for (const item of items) {
+    const agent = assertKnownAgent(item, fieldLabel);
+    if (!agent) return undefined;
+    result.push(agent);
+  }
+  return result;
+};
 
 const summarize = (skills: Awaited<ReturnType<typeof scanSkills>>): Record<string, number> => ({
   total: skills.length,
@@ -179,7 +220,11 @@ program
   .option("--language <lang>", "zh | en", "zh")
   .option("--skill <ids>", "comma-separated skill ids")
   .option("--repo <path>", "registry path; defaults to profile registryRepo")
-  .action(async (options: { reviewer: AgentKind | "rules"; language: "zh" | "en"; skill?: string; repo?: string }) => {
+  .action(async (options: { reviewer: string; language: string; skill?: string; repo?: string }) => {
+    const reviewer = assertKnownReviewer(options.reviewer);
+    if (!reviewer) return;
+    const language = assertKnownLanguage(options.language);
+    if (!language) return;
     const runtime = await loadRuntimeConfig();
     const repoPath = resolveRepoOption(options.repo, runtime.profile.registryRepo);
     const manifest = await readRegistryManifest(repoPath);
@@ -187,7 +232,7 @@ program
     const reviews = [];
     for (const skill of manifest.skills) {
       if (selected && !selected.has(skill.id)) continue;
-      const review = options.reviewer === "rules" ? reviewSkillWithRules(skill, options.language) : await reviewSkillWithAgent(skill, options.reviewer, { language: options.language });
+      const review = reviewer === "rules" ? reviewSkillWithRules(skill, language) : await reviewSkillWithAgent(skill, reviewer, { language });
       await writeReviewResult(repoPath, review);
       reviews.push(review);
     }
@@ -204,6 +249,8 @@ distribute
   .option("--include-agent-bound", "allow agent-bound skills")
   .option("--repo <path>", "Registry path; defaults to profile registryRepo.")
   .action(async (options: { target: string; skill?: string; includeUnsafe?: boolean; includeAgentBound?: boolean; repo?: string }) => {
+    const targetAgents = parseAgentsStrict(options.target, "agent (--target)");
+    if (!targetAgents) return;
     const runtime = await loadRuntimeConfig();
     const repoPath = resolveRepoOption(options.repo, runtime.profile.registryRepo);
     const plan = await createDistributionPlan({
@@ -212,7 +259,7 @@ distribute
       config: runtime.raw,
       profileName: runtime.profileName,
       backupDir: path.join(runtime.profile.stateDir, "backups"),
-      targetAgents: parseAgents(options.target),
+      targetAgents,
       skillIds: options.skill ? options.skill.split(",").map((item) => item.trim()) : undefined,
       includeUnsafe: options.includeUnsafe ?? false,
       includeAgentBound: options.includeAgentBound ?? false
@@ -231,9 +278,10 @@ distribute
   .option("--repo <path>", "Registry path; defaults to profile registryRepo.")
   .option("--yes", "Skip confirmation prompt (REQUIRED in non-interactive shells).")
   .action(async (options: { target: string; skill?: string; plan?: string; includeUnsafe?: boolean; includeAgentBound?: boolean; repo?: string; yes?: boolean }) => {
+    const targetAgents = parseAgentsStrict(options.target, "agent (--target)");
+    if (!targetAgents) return;
     const runtime = await loadRuntimeConfig();
     const repoPath = resolveRepoOption(options.repo, runtime.profile.registryRepo);
-    const targetAgents = parseAgents(options.target);
     const plan = await createDistributionPlan({
       registryPath: repoPath,
       cwd: invocationCwd,
@@ -267,23 +315,27 @@ copy
   .requiredOption("--to <agent>", "target agent")
   .option("--skill <ids>", "comma-separated skill ids")
   .option("--repo <path>", "Registry path; defaults to profile registryRepo.")
-  .action(async (options: { from: AgentKind; to: AgentKind; skill?: string; repo?: string }) => {
+  .action(async (options: { from: string; to: string; skill?: string; repo?: string }) => {
+    const from = assertKnownAgent(options.from, "agent (--from)");
+    if (!from) return;
+    const to = assertKnownAgent(options.to, "agent (--to)");
+    if (!to) return;
     const runtime = await loadRuntimeConfig();
     const repoPath = resolveRepoOption(options.repo, runtime.profile.registryRepo);
     const manifest = await readRegistryManifest(repoPath);
-    const filtered = manifest.skills.filter((skill) => skill.source.agent === options.from);
+    const filtered = manifest.skills.filter((skill) => skill.source.agent === from);
     const plan = await createDistributionPlan({
       registryPath: repoPath,
       cwd: invocationCwd,
       config: runtime.raw,
       profileName: runtime.profileName,
       backupDir: path.join(runtime.profile.stateDir, "backups"),
-      targetAgents: [options.to],
+      targetAgents: [to],
       skillIds: options.skill ? options.skill.split(",").map((item) => item.trim()) : filtered.map((skill) => skill.id),
       includeUnsafe: false,
       includeAgentBound: false
     });
-    printJson({ from: options.from, to: options.to, plan: compactPlan(plan) });
+    printJson({ from, to, plan: compactPlan(plan) });
   });
 
 copy
@@ -295,18 +347,22 @@ copy
   .option("--plan <id>", "plan id from 'copy preview'; recomputes if omitted")
   .option("--repo <path>", "Registry path; defaults to profile registryRepo.")
   .option("--yes", "Skip confirmation prompt (REQUIRED in non-interactive shells).")
-  .action(async (options: { from: AgentKind; to: AgentKind; skill?: string; plan?: string; repo?: string; yes?: boolean }) => {
+  .action(async (options: { from: string; to: string; skill?: string; plan?: string; repo?: string; yes?: boolean }) => {
+    const from = assertKnownAgent(options.from, "agent (--from)");
+    if (!from) return;
+    const to = assertKnownAgent(options.to, "agent (--to)");
+    if (!to) return;
     const runtime = await loadRuntimeConfig();
     const repoPath = resolveRepoOption(options.repo, runtime.profile.registryRepo);
     const manifest = await readRegistryManifest(repoPath);
-    const filtered = manifest.skills.filter((skill) => skill.source.agent === options.from);
+    const filtered = manifest.skills.filter((skill) => skill.source.agent === from);
     const plan = await createDistributionPlan({
       registryPath: repoPath,
       cwd: invocationCwd,
       config: runtime.raw,
       profileName: runtime.profileName,
       backupDir: path.join(runtime.profile.stateDir, "backups"),
-      targetAgents: [options.to],
+      targetAgents: [to],
       skillIds: options.skill ? options.skill.split(",").map((item) => item.trim()) : filtered.map((skill) => skill.id),
       includeUnsafe: false,
       includeAgentBound: false
@@ -314,15 +370,15 @@ copy
     await handleConfirmationFailure(
       assertInteractiveOrYes({
         action: "copy apply",
-        summary: summarizeCopyForPrompt(options.from, options.to, plan.items),
+        summary: summarizeCopyForPrompt(from, to, plan.items),
         totalItems: plan.items.length,
-        targets: [options.to],
+        targets: [to],
         yes: options.yes,
         skipOnEmpty: true
       })
     );
     const run = await applyDistributionPlan(repoPath, plan);
-    printJson({ from: options.from, to: options.to, plan: compactPlan(plan), run, planIdEcho: options.plan });
+    printJson({ from, to, plan: compactPlan(plan), run, planIdEcho: options.plan });
   });
 
 const repo = program.command("repo").description("Manage the registry Git repository.");
