@@ -195,7 +195,7 @@ function Sidebar({ view, setView, agents, selectedAgent, setSelectedAgent, lang 
   );
 }
 
-function Overview({ skills, summary, selected, toggleSkill, lang, selectedAgent, totalSkillCount, fallbackSkills, fallbackSummary, allSkills, query, onClearFilters }: {
+function Overview({ skills, summary, selected, toggleSkill, lang, selectedAgent, totalSkillCount, fallbackSkills, fallbackSummary, allSkills, query, onClearFilters, agents }: {
   readonly skills: SkillPackage[];
   readonly summary: Summary;
   readonly selected: Set<string>;
@@ -208,6 +208,7 @@ function Overview({ skills, summary, selected, toggleSkill, lang, selectedAgent,
   readonly allSkills: SkillPackage[];
   readonly query: string;
   readonly onClearFilters: () => void;
+  readonly agents: AgentDefinition[];
 }) {
   const t = messages[lang];
   // When the query filters everything out, keep stat cards / charts based on
@@ -229,9 +230,11 @@ function Overview({ skills, summary, selected, toggleSkill, lang, selectedAgent,
   ) : null;
   const byAgent = useMemo(() => {
     const counts = new Map<string, number>();
+    // Seed every known agent at 0 so the source distribution matches the sidebar legend.
+    for (const agent of agents) counts.set(agent.kind, 0);
     for (const skill of cardsSkills) counts.set(skill.source.agent, (counts.get(skill.source.agent) ?? 0) + 1);
     return [...counts.entries()].sort((a, b) => b[1] - a[1]);
-  }, [cardsSkills]);
+  }, [cardsSkills, agents]);
   const duplicateNames = useMemo(() => {
     const counts = new Map<string, number>();
     for (const skill of skills) counts.set(skill.name, (counts.get(skill.name) ?? 0) + 1);
@@ -456,7 +459,7 @@ export function App() {
       <div className="workspace">
         <Sidebar view={view} setView={setView} agents={agents} selectedAgent={selectedAgent} setSelectedAgent={setSelectedAgent} lang={lang} />
         <div className="content">
-          {view === "overview" && <Overview skills={visibleSkills} summary={summary} selected={selected} toggleSkill={toggleSkill} lang={lang} selectedAgent={selectedAgent} totalSkillCount={skills.length} fallbackSkills={agentFilteredSkills} fallbackSummary={fallbackSummary} allSkills={skills} query={query} onClearFilters={clearFilters} />}
+          {view === "overview" && <Overview skills={visibleSkills} summary={summary} selected={selected} toggleSkill={toggleSkill} lang={lang} selectedAgent={selectedAgent} totalSkillCount={skills.length} fallbackSkills={agentFilteredSkills} fallbackSummary={fallbackSummary} allSkills={skills} query={query} onClearFilters={clearFilters} agents={agents} />}
           {view === "repo" && <RepoView onImport={importRepo} onReview={() => void openReviewDialog("rules")} onAgentReview={() => void openReviewDialog("codex")} onRefreshGit={refreshGit} onPull={pullRegistry} onPush={pushRegistry} gitStatus={gitStatusText} commitMessage={commitMessage} setCommitMessage={setCommitMessage} busy={busy} message={message} lang={lang} registryRepo={registryRepo} onRegistryLoaded={(result) => { setRegistryRepo(result.repoPath); if (result.skills) setSkills(result.skills); setMessage(`${messages[lang].loadRegistrySuccess}: ${result.repoPath} (${result.skillCount ?? result.skills?.length ?? 0})`); }} />}
           {view !== "overview" && view !== "repo" && <Placeholder view={view} lang={lang} skills={visibleSkills} targets={targets} selected={selected} toggleSkill={toggleSkill} plan={plan} onPlan={planDistribution} onApply={applyDistribution} />}
           <footer className="status-footer"><span>{agents.length} agents</span><span>{selected.size} {t.selectedCount}</span><span className="status-message" title={message}>{message}</span></footer>
