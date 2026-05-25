@@ -22,9 +22,12 @@ import {
   validateRegistryPath,
   writeReviewResult,
   type AgentKind,
+  type DistributionPlan,
   type SkillHubConfig,
   type SkillPackage
 } from "@linka-skillhub/core";
+
+const PLAN_TTL_MS = 10 * 60 * 1000;
 
 interface ServerOptions {
   readonly port: number;
@@ -133,6 +136,22 @@ export const startServer = (options: ServerOptions): http.Server => {
   let currentRepoIsExternal = false;
   const profileRepoRoot = path.resolve(options.repoPath);
   const profileRoot = options.stateDir ? path.dirname(path.resolve(options.stateDir)) : path.resolve(options.cwd);
+  const planCache = new Map<string, DistributionPlan>();
+  const planCreatedAt = new Map<string, number>();
+  const cachePlan = (plan: DistributionPlan): void => {
+    planCache.set(plan.id, plan);
+    planCreatedAt.set(plan.id, Date.now());
+  };
+  const lookupCachedPlan = (planId: string): DistributionPlan | undefined => {
+    const createdAt = planCreatedAt.get(planId);
+    if (!createdAt) return undefined;
+    if (Date.now() - createdAt > PLAN_TTL_MS) {
+      planCache.delete(planId);
+      planCreatedAt.delete(planId);
+      return undefined;
+    }
+    return planCache.get(planId);
+  };
   const resolveRepoPath = (repoPath?: string): string => {
     if (!repoPath) return currentRepoPath;
     const resolved = path.resolve(options.cwd, repoPath);
@@ -260,25 +279,71 @@ export const startServer = (options: ServerOptions): http.Server => {
           includeUnsafe: body.includeUnsafe,
           includeAgentBound: body.includeAgentBound
         });
-        sendJson(response, 200, { plan });
+        cachePlan(plan);
+        sendJson(response, 200, { plan, confirmToken: plan.id, ttlMs: PLAN_TTL_MS });
         return;
       }
 
       if (request.method === "POST" && url.pathname === "/api/distributions/apply") {
-        const body = await readJsonBody<{ registryPath?: string; targetAgents: AgentKind[]; skillIds?: string[]; includeUnsafe?: boolean; includeAgentBound?: boolean }>(request);
-        const plan = await createDistributionPlan({
-          registryPath: resolveRepoPath(body.registryPath),
-          cwd: options.cwd,
-          config: options.config,
-          profileName: options.profileName,
-          backupDir: options.stateDir ? path.join(options.stateDir, "backups") : undefined,
-          targetAgents: body.targetAgents,
-          skillIds: body.skillIds,
-          includeUnsafe: body.includeUnsafe,
-          includeAgentBound: body.includeAgentBound
-        });
+        const body = await readJsonBody<{
+          registryPath?: string;
+          targetAgents: AgentKind[];
+          skillIds?: string[];
+          includeUnsafe?: boolean;
+          includeAgentBound?: boolean;
+          confirmToken?: string;
+          plan?: DistributionPlan;
+        }>(request);
+        if (!body.confirmToken) {
+          sendJson(response, 400, {
+            error: "confirmToken is required; call /api/distributions/plan first and resend its plan.id.",
+            code: "confirmation_required"
+          });
+          return;
+        }
+        const cached = lookupCachedPlan(body.confirmToken);
+        let plan: DistributionPlan;
+        if (cached) {
+          plan = cached;
+        } else if (body.plan && body.plan.id === body.confirmToken) {
+          plan = body.plan;
+          cachePlan(plan);
+        } else {
+          const recomputed = await createDistributionPlan({
+            registryPath: resolveRepoPath(body.registryPath),
+            cwd: options.cwd,
+            config: options.config,
+            profileName: options.profileName,
+            backupDir: options.stateDir ? path.join(options.stateDir, "backups") : undefined,
+            targetAgents: body.targetAgents,
+            skillIds: body.skillIds,
+            includeUnsafe: body.includeUnsafe,
+            includeAgentBound: body.includeAgentBound
+          });
+          if (recomputed.id !== body.confirmToken) {
+            sendJson(response, 409, {
+              error: `confirmToken does not match the current plan (${recomputed.id}); regenerate the preview and retry.`,
+              code: "plan_id_mismatch",
+              expected: body.confirmToken,
+              actual: recomputed.id
+            });
+            return;
+          }
+          plan = recomputed;
+          cachePlan(plan);
+        }
+        const cachedAt = planCreatedAt.get(plan.id);
+        if (cachedAt && Date.now() - cachedAt > PLAN_TTL_MS) {
+          planCache.delete(plan.id);
+          planCreatedAt.delete(plan.id);
+          sendJson(response, 410, {
+            error: `Plan ${plan.id} expired after ${Math.round(PLAN_TTL_MS / 1000)}s; regenerate the preview and retry.`,
+            code: "plan_expired"
+          });
+          return;
+        }
         const run = await applyDistributionPlan(resolveRepoPath(body.registryPath), plan);
-        sendJson(response, 200, run);
+        sendJson(response, 200, { ...run, planId: plan.id });
         return;
       }
 
