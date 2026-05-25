@@ -21,6 +21,7 @@ import {
   writeReviewResult,
   type AgentKind,
   type ReviewLanguage,
+  type ReviewResult,
   type SkillPackage
 } from "@linka-skillhub/core";
 import { defaultRepoPath, startServer } from "./server.js";
@@ -176,6 +177,111 @@ const formatRegistryShowHuman = (skill: SkillPackage): string => {
   return `${lines.join("\n")}\n`;
 };
 
+const formatReviewSummaryHuman = (
+  reviews: readonly ReviewResult[],
+  reviewer: string,
+  language: ReviewLanguage,
+  reviewsDir: string,
+  skillNamesById: ReadonlyMap<string, string>
+): string => {
+  const lines: string[] = [];
+  const shareable = reviews.filter((r) => r.recommendation === "share").length;
+  const agentBound = reviews.filter((r) => r.recommendation === "keep-private").length;
+  const problematic = reviews.filter((r) => r.recommendation === "fix" || r.recommendation === "reject").length;
+  const unreviewed = reviews.filter((r) => r.statuses.length === 0 || r.statuses.includes("unreviewed")).length;
+  lines.push(`Reviewed ${reviews.length} skills with ${reviewer} (language: ${language})`);
+  lines.push(`- shareable: ${shareable}`);
+  lines.push(`- agent-bound: ${agentBound}`);
+  lines.push(`- problematic: ${problematic}`);
+  lines.push(`- unreviewed: ${unreviewed}`);
+  lines.push("");
+  lines.push(`Wrote ${reviews.length} review records to ${reviewsDir}`);
+  const issues = reviews.filter((r) => r.recommendation === "fix" || r.recommendation === "reject").slice(0, 5);
+  if (issues.length > 0) {
+    lines.push("");
+    lines.push("Top issues:");
+    for (const review of issues) {
+      const name = skillNamesById.get(review.skillId) ?? review.skillId;
+      const statusText = review.statuses.length > 0 ? review.statuses.join(",") : review.recommendation;
+      const evidenceText = review.evidence.length > 0 ? ` - ${review.evidence.slice(0, 5).join(", ")}` : "";
+      lines.push(`  ${name} (${review.skillId}): ${statusText}${evidenceText}`);
+    }
+  }
+  return `${lines.join("\n")}\n`;
+};
+
+const shortReason = (action: string, reason: string): string => {
+  if (action === "copy") return "new";
+  if (reason.startsWith("Target already has the same content")) return "target already has same content";
+  if (reason.startsWith("Skill is not valid")) return "not portable/shareable by default";
+  if (reason.startsWith("Target has different content")) return "different content (backup will be created)";
+  const cleaned = reason.replace(/\.$/, "");
+  return truncate(cleaned, 60);
+};
+
+const formatCopyPreviewHuman = (
+  from: AgentKind,
+  to: AgentKind,
+  plan: Awaited<ReturnType<typeof createDistributionPlan>>
+): string => {
+  const lines: string[] = [];
+  const total = plan.items.length;
+  lines.push(`Plan: copy ${from} -> ${to} (${total} items)`);
+  const W_ACTION = 11;
+  const W_NAME = 24;
+  for (const item of plan.items.slice(0, 30)) {
+    const action = item.action.padEnd(W_ACTION);
+    const name = truncate(item.skill.name, W_NAME - 2).padEnd(W_NAME);
+    const reason = shortReason(item.action, item.reason);
+    lines.push(`- ${action}${name}${reason}`);
+  }
+  if (total > 30) lines.push(`... ${total - 30} more items. Use --json for full plan.`);
+  lines.push("");
+  lines.push(`Plan id: ${plan.id}`);
+  if (plan.warnings.length > 0) {
+    lines.push("");
+    lines.push(`Warnings: ${plan.warnings.length}`);
+    for (const warning of plan.warnings.slice(0, 5)) lines.push(`- ${warning}`);
+  }
+  lines.push("");
+  lines.push(
+    `Use 'lsh copy apply --from ${from} --to ${to} --yes' to write, or pass --json for full plan.`
+  );
+  return `${lines.join("\n")}\n`;
+};
+
+const formatDistributePreviewHuman = (
+  targetAgents: readonly AgentKind[],
+  plan: Awaited<ReturnType<typeof createDistributionPlan>>
+): string => {
+  const lines: string[] = [];
+  const total = plan.items.length;
+  lines.push(`Plan: distribute to ${targetAgents.join(", ")} (${total} items)`);
+  const W_ACTION = 11;
+  const W_NAME = 24;
+  const W_TARGET = 10;
+  for (const item of plan.items.slice(0, 30)) {
+    const action = item.action.padEnd(W_ACTION);
+    const name = truncate(item.skill.name, W_NAME - 2).padEnd(W_NAME);
+    const target = truncate(item.target.agent, W_TARGET - 1).padEnd(W_TARGET);
+    const reason = shortReason(item.action, item.reason);
+    lines.push(`- ${action}${name}-> ${target}${reason}`);
+  }
+  if (total > 30) lines.push(`... ${total - 30} more items. Use --json for full plan.`);
+  lines.push("");
+  lines.push(`Plan id: ${plan.id}`);
+  if (plan.warnings.length > 0) {
+    lines.push("");
+    lines.push(`Warnings: ${plan.warnings.length}`);
+    for (const warning of plan.warnings.slice(0, 5)) lines.push(`- ${warning}`);
+  }
+  lines.push("");
+  lines.push(
+    `Use 'lsh distribute apply --target ${targetAgents.join(",")} --yes' to write, or pass --json for full plan.`
+  );
+  return `${lines.join("\n")}\n`;
+};
+
 const handleConfirmationFailure = async (promise: Promise<void>): Promise<boolean> => {
   try {
     await promise;
@@ -308,7 +414,8 @@ program
   .option("--language <lang>", "zh | en", "zh")
   .option("--skill <ids>", "comma-separated skill ids")
   .option("--repo <path>", "registry path; defaults to profile registryRepo")
-  .action(async (options: { reviewer: string; language: string; skill?: string; repo?: string }) => {
+  .option("--json", "Print full JSON output instead of the human summary.")
+  .action(async (options: { reviewer: string; language: string; skill?: string; repo?: string; json?: boolean }) => {
     const reviewer = assertKnownReviewer(options.reviewer);
     if (!reviewer) return;
     const language = assertKnownLanguage(options.language);
@@ -324,7 +431,13 @@ program
       await writeReviewResult(repoPath, review);
       reviews.push(review);
     }
-    printJson({ reviews });
+    if (options.json) {
+      printJson({ reviews });
+      return;
+    }
+    const reviewsDir = path.join(repoPath, "registry", "reviews");
+    const skillNamesById = new Map(manifest.skills.map((s) => [s.id, s.name] as const));
+    process.stdout.write(formatReviewSummaryHuman(reviews, reviewer, language, reviewsDir, skillNamesById));
   });
 
 const distribute = program.command("distribute").description("Distribute registry skills to one or more target agents.");
@@ -336,7 +449,8 @@ distribute
   .option("--include-unsafe", "allow unsafe skills")
   .option("--include-agent-bound", "allow agent-bound skills")
   .option("--repo <path>", "Registry path; defaults to profile registryRepo.")
-  .action(async (options: { target: string; skill?: string; includeUnsafe?: boolean; includeAgentBound?: boolean; repo?: string }) => {
+  .option("--json", "Print full JSON output instead of the human summary.")
+  .action(async (options: { target: string; skill?: string; includeUnsafe?: boolean; includeAgentBound?: boolean; repo?: string; json?: boolean }) => {
     const targetAgents = parseAgentsStrict(options.target, "agent (--target)");
     if (!targetAgents) return;
     const runtime = await loadRuntimeConfig();
@@ -352,7 +466,11 @@ distribute
       includeUnsafe: options.includeUnsafe ?? false,
       includeAgentBound: options.includeAgentBound ?? false
     });
-    printJson({ plan: compactPlan(plan) });
+    if (options.json) {
+      printJson({ plan: compactPlan(plan) });
+      return;
+    }
+    process.stdout.write(formatDistributePreviewHuman(targetAgents, plan));
   });
 
 distribute
@@ -403,7 +521,8 @@ copy
   .requiredOption("--to <agent>", "target agent")
   .option("--skill <ids>", "comma-separated skill ids")
   .option("--repo <path>", "Registry path; defaults to profile registryRepo.")
-  .action(async (options: { from: string; to: string; skill?: string; repo?: string }) => {
+  .option("--json", "Print full JSON output instead of the human summary.")
+  .action(async (options: { from: string; to: string; skill?: string; repo?: string; json?: boolean }) => {
     const from = assertKnownAgent(options.from, "agent (--from)");
     if (!from) return;
     const to = assertKnownAgent(options.to, "agent (--to)");
@@ -423,7 +542,11 @@ copy
       includeUnsafe: false,
       includeAgentBound: false
     });
-    printJson({ from, to, plan: compactPlan(plan) });
+    if (options.json) {
+      printJson({ from, to, plan: compactPlan(plan) });
+      return;
+    }
+    process.stdout.write(formatCopyPreviewHuman(from, to, plan));
   });
 
 copy

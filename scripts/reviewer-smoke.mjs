@@ -22,7 +22,7 @@ const runOne = (reviewer, skillId) => {
   const start = Date.now();
   const res = spawnSync(
     "node",
-    [cli, "review", "--reviewer", reviewer, "--skill", skillId],
+    [cli, "review", "--reviewer", reviewer, "--skill", skillId, "--json"],
     { cwd, encoding: "utf8", timeout: 60_000 }
   );
   const elapsedMs = Date.now() - start;
