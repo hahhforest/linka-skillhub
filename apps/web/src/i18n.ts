@@ -99,7 +99,16 @@ export const messages = {
     copied: "已复制",
     skipped: "已跳过",
     imported: "已导入",
-    reviewed: "已审查"
+    reviewed: "已审查",
+    confirmTitle: "确认写入",
+    confirmBody: "执行后会按下方计划写入目标 Agent 目录。继续?",
+    confirmCancel: "取消",
+    confirmApply: "确认写入",
+    confirmCopy: "新增",
+    confirmOverwrite: "覆盖",
+    confirmSkip: "跳过",
+    confirmTotal: "条目合计",
+    confirmTokenLabel: "Plan Token"
   },
   en: {
     appTitle: "Skill Manager",
@@ -199,6 +208,15 @@ export const messages = {
     copied: "copied",
     skipped: "skipped",
     imported: "imported",
-    reviewed: "reviewed"
+    reviewed: "reviewed",
+    confirmTitle: "Confirm Write",
+    confirmBody: "This will write to the target agent directories per the plan below. Continue?",
+    confirmCancel: "Cancel",
+    confirmApply: "Confirm Write",
+    confirmCopy: "Copy",
+    confirmOverwrite: "Overwrite",
+    confirmSkip: "Skip",
+    confirmTotal: "Total items",
+    confirmTokenLabel: "Plan Token"
   }
 } as const;

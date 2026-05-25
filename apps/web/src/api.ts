@@ -42,11 +42,19 @@ const request = async <T>(path: string, options: RequestInit = {}): Promise<T> =
       ...(options.headers ?? {})
     }
   });
+  const text = await response.text();
+  const parsed: unknown = text ? JSON.parse(text) : undefined;
   if (!response.ok) {
-    const body = await response.text();
-    throw new Error(body || `Request failed: ${response.status}`);
+    const message = parsed && typeof parsed === "object" && "error" in parsed && typeof (parsed as { error: unknown }).error === "string"
+      ? (parsed as { error: string }).error
+      : `Request failed: ${response.status}`;
+    const error = new Error(message);
+    if (parsed && typeof parsed === "object" && "code" in parsed) {
+      (error as Error & { code?: string }).code = String((parsed as { code: unknown }).code);
+    }
+    throw error;
   }
-  return (await response.json()) as T;
+  return (parsed ?? {}) as T;
 };
 
 export const api = {
@@ -57,9 +65,9 @@ export const api = {
   reviewers: () => request<{ reviewers: ReviewerInfo[] }>("/api/reviewers"),
   review: (skillIds: string[], reviewer: string, language: "zh" | "en") => request<{ reviews: ReviewResult[] }>("/api/reviews/run", { method: "POST", body: JSON.stringify({ skillIds, reviewer, language }) }),
   distributionPlan: (targetAgents: string[], skillIds: string[]) =>
-    request<{ plan: DistributionPlan }>("/api/distributions/plan", { method: "POST", body: JSON.stringify({ targetAgents, skillIds }) }),
-  distributionApply: (targetAgents: string[], skillIds: string[]) =>
-    request<DistributionRun>("/api/distributions/apply", { method: "POST", body: JSON.stringify({ targetAgents, skillIds }) }),
+    request<{ plan: DistributionPlan; confirmToken: string; ttlMs: number }>("/api/distributions/plan", { method: "POST", body: JSON.stringify({ targetAgents, skillIds }) }),
+  distributionApply: (targetAgents: string[], skillIds: string[], confirmToken: string, plan?: DistributionPlan) =>
+    request<DistributionRun & { planId: string }>("/api/distributions/apply", { method: "POST", body: JSON.stringify({ targetAgents, skillIds, confirmToken, plan }) }),
   repoStatus: () => request<{ status: string }>("/api/repo/status"),
   repoPush: (message: string) => request<{ commit: string; output: string }>("/api/repo/push", { method: "POST", body: JSON.stringify({ message }) }),
   repoPull: () => request<{ output: string }>("/api/repo/pull", { method: "POST", body: JSON.stringify({}) })

@@ -20,9 +20,10 @@ import {
 import type { AgentDefinition, DistributionPlan, DistributionTarget, SkillPackage, SkillStatus } from "@linka-skillhub/core";
 import { api, type ReviewerInfo, type Summary } from "./api.js";
 import { messages, type Language } from "./i18n.js";
+import { ConfirmPlanModal } from "./components/ConfirmPlanModal.js";
 
 type View = "overview" | "intersect" | "distribute" | "detail" | "repo";
-type Dialog = "scan" | "review" | null;
+type Dialog = "scan" | "review" | "confirmPlan" | null;
 
 const emptySummary: Summary = { total: 0, valid: 0, portable: 0, agentBound: 0, unsafe: 0, invalid: 0 };
 
@@ -269,6 +270,7 @@ export function App() {
   const [reviewers, setReviewers] = useState<ReviewerInfo[]>([]);
   const [gitStatusText, setGitStatusText] = useState("");
   const [commitMessage, setCommitMessage] = useState<string>(t.commitMessageDefault);
+  const [pendingPlan, setPendingPlan] = useState<{ plan: DistributionPlan; confirmToken: string; targetAgents: string[]; skillIds: string[] } | null>(null);
 
   const loadShell = async () => {
     const [agentData, registry] = await Promise.all([api.agents(), api.skills()]);
@@ -303,7 +305,36 @@ export function App() {
     }
   };
   const planDistribution = async (targetAgents: string[], skillIds?: string[]) => { setBusy(true); try { const result = await api.distributionPlan(targetAgents, skillIds ?? [...selected]); setPlan(result.plan); setMessage(`${t.planSummary}: ${result.plan.items.length}`); } catch (error) { setMessage(error instanceof Error ? error.message : String(error)); } finally { setBusy(false); } };
-  const applyDistribution = async (targetAgents: string[], skillIds?: string[]) => { setBusy(true); try { const run = await api.distributionApply(targetAgents, skillIds ?? [...selected]); setMessage(`${t.copied} ${run.copied}, ${t.skipped} ${run.skipped}`); await loadShell(); } catch (error) { setMessage(error instanceof Error ? error.message : String(error)); } finally { setBusy(false); } };
+  const applyDistribution = async (targetAgents: string[], skillIds?: string[]) => {
+    const ids = skillIds ?? [...selected];
+    setBusy(true);
+    try {
+      const result = await api.distributionPlan(targetAgents, ids);
+      setPlan(result.plan);
+      setPendingPlan({ plan: result.plan, confirmToken: result.confirmToken, targetAgents, skillIds: ids });
+      setDialog("confirmPlan");
+      setMessage(`${t.planSummary}: ${result.plan.items.length}`);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : String(error));
+    } finally {
+      setBusy(false);
+    }
+  };
+  const confirmApplyPending = async () => {
+    if (!pendingPlan) return;
+    setBusy(true);
+    try {
+      const run = await api.distributionApply(pendingPlan.targetAgents, pendingPlan.skillIds, pendingPlan.confirmToken, pendingPlan.plan);
+      setMessage(`${t.copied} ${run.copied}, ${t.skipped} ${run.skipped}`);
+      setPendingPlan(null);
+      setDialog(null);
+      await loadShell();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : String(error));
+    } finally {
+      setBusy(false);
+    }
+  };
   const refreshGit = async () => { setBusy(true); try { const result = await api.repoStatus(); setGitStatusText(result.status || "clean"); } catch (error) { setMessage(error instanceof Error ? error.message : String(error)); } finally { setBusy(false); } };
   const pullRegistry = async () => { setBusy(true); try { const result = await api.repoPull(); setMessage(result.output || "pull ok"); await refreshGit(); } catch (error) { setMessage(error instanceof Error ? error.message : String(error)); } finally { setBusy(false); } };
   const pushRegistry = async () => { setBusy(true); try { const result = await api.repoPush(commitMessage || t.commitMessageDefault); setMessage(`${result.commit}\n${result.output}`); await refreshGit(); } catch (error) { setMessage(error instanceof Error ? error.message : String(error)); } finally { setBusy(false); } };
@@ -325,6 +356,16 @@ export function App() {
       </div>
       {dialog === "scan" && <DialogFrame title={t.scanDialogTitle} onClose={() => setDialog(null)}><p>{t.scanDialogBody}</p><label className="checkbox-line"><input type="checkbox" checked={includeBuiltin} onChange={(event) => setIncludeBuiltin(event.target.checked)} /> {t.includeBuiltin}</label><div className="dialog-actions"><button className="ghost" onClick={() => setDialog(null)}>{t.cancel}</button><button className="primary" onClick={runScan} disabled={busy}>{t.confirmScan}</button></div></DialogFrame>}
       {dialog === "review" && <DialogFrame title={t.reviewDialogTitle} onClose={() => setDialog(null)}><p>{t.reviewDialogBody}</p><div className="review-meta"><span>{t.reviewScope}: {selected.size ? `${selected.size} ${t.selectedCount}` : `${visibleSkills.length} visible`}</span><span>{t.reviewOutputLanguage}: {lang === "zh" ? "中文" : "English"}</span><span>{t.reviewWriteTarget}: registry/reviews/*.json</span></div><div className="reviewer-list">{reviewers.map((item) => <label key={item.kind} className={`reviewer-option ${reviewer === item.kind ? "active" : ""} ${!item.available ? "disabled" : ""}`}><input type="radio" name="reviewer" value={item.kind} checked={reviewer === item.kind} disabled={!item.available} onChange={() => setReviewer(item.kind)} /><strong>{item.kind === "rules" ? t.reviewerRules : item.label}</strong><span>{item.available ? t.reviewerAvailable : t.reviewerUnavailable}</span><small>{item.reason}</small></label>)}</div><p className="muted-copy">{t.agentUnavailable}</p><div className="dialog-actions"><button className="ghost" onClick={() => setDialog(null)}>{t.cancel}</button><button className="primary" onClick={runReview} disabled={busy || !reviewers.find((item) => item.kind === reviewer)?.available}>{t.startReview}</button></div></DialogFrame>}
+      {dialog === "confirmPlan" && pendingPlan && (
+        <ConfirmPlanModal
+          plan={pendingPlan.plan}
+          confirmToken={pendingPlan.confirmToken}
+          lang={lang}
+          busy={busy}
+          onConfirm={() => void confirmApplyPending()}
+          onCancel={() => { setDialog(null); setPendingPlan(null); }}
+        />
+      )}
     </main>
   );
 }

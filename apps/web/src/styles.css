@@ -396,6 +396,20 @@ button:disabled { cursor: not-allowed; opacity: 0.62; }
 .full-select { width: 100%; height: 38px; border: 1px solid var(--border); border-radius: 8px; padding: 0 10px; background: #fff; }
 .muted-copy { font-size: 12px; }
 
+.confirm-plan-dialog { max-width: 640px; }
+.confirm-plan-meta { display: flex; flex-wrap: wrap; gap: 18px; margin: 12px 0; font-size: 13px; color: var(--ink, #1f2421); }
+.confirm-plan-meta strong { color: var(--green, #0b6b57); margin-right: 4px; }
+.confirm-plan-items { display: grid; gap: 8px; max-height: 280px; overflow: auto; padding: 4px 2px; }
+.confirm-plan-item { padding: 10px 12px; border-radius: 8px; border: 1px solid var(--line, #e2dccc); background: rgba(255, 252, 245, 0.9); display: grid; gap: 4px; font-size: 13px; }
+.confirm-plan-item strong { font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; }
+.confirm-plan-item.action-copy { border-left: 4px solid #0b6b57; }
+.confirm-plan-item.action-overwrite { border-left: 4px solid #a56100; }
+.confirm-plan-item.action-skip { border-left: 4px solid #a8a294; opacity: 0.78; }
+.confirm-plan-item code { font-size: 11px; word-break: break-all; }
+.confirm-plan-item code.backup-hint { color: #a56100; }
+.confirm-token-line { font-size: 12px; color: var(--muted); margin-top: 12px; }
+.confirm-token-line code { font-family: monospace; font-size: 11px; }
+
 .path-note {
   display: grid;
   gap: 6px;
