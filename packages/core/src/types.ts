@@ -87,6 +87,7 @@ export interface SkillPackage {
   readonly issues: readonly ParseIssue[];
   readonly evidence: readonly string[];
   readonly updatedAt: string;
+  readonly auto_fixed?: boolean;
 }
 
 export interface RegistryManifest {

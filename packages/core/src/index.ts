@@ -2,6 +2,7 @@ export * from "./agents.js";
 export * from "./config.js";
 export * from "./distribution.js";
 export * from "./frontmatter.js";
+export * from "./frontmatter-fix.js";
 export * from "./hash.js";
 export * from "./path-safety.js";
 export * from "./registry.js";
