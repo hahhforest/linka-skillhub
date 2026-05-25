@@ -175,7 +175,9 @@ function Sidebar({ view, setView, agents, selectedAgent, setSelectedAgent, lang 
         <div className="brand-cube">◆</div>
         <div><strong>SkillHub</strong><span>linka-skillhub</span></div>
       </div>
+      <div className="sidebar-group-label">{t.navGroupLabel}</div>
       <nav>{items.map(([key, icon, label]) => <button key={key} className={view === key ? "active" : ""} onClick={() => setView(key)}>{icon}{label}</button>)}</nav>
+      <div className="sidebar-group-label">{t.filterGroupLabel}</div>
       <div className="agent-legend selectable">
         <button className={selectedAgent === null ? "agent-filter active" : "agent-filter"} onClick={() => setSelectedAgent(null)}>{t.allSources}</button>
         {agents.map((agent) => (
@@ -371,7 +373,7 @@ export function App() {
   return (
     <main className="app-shell">
       <header className="topbar">
-        <div className="product-title"><div className="brand-cube large">◆</div><div><h1>{t.appTitle}</h1><p>{profileLabel(profile, lang)} · {t.registry}: {registryRepo || "-"}</p></div></div>
+        <div className="product-title"><div className="brand-cube large">◆</div><div><h1>{t.appTitle}</h1><p title={`${profileLabel(profile, lang)} · ${t.registry}: ${registryRepo || "-"}`}>{profileLabel(profile, lang)} · {t.registry}: {registryRepo || "-"}</p></div></div>
         <div className="top-actions"><div className="search-box"><Search size={16} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t.search} /></div><button className="ghost" onClick={() => setDialog("scan")}>{busy ? <Loader2 className="spin" size={16} /> : <RefreshCw size={16} />} {busy ? t.scanning : t.scan}</button><button className="ghost" onClick={() => setLang(lang === "zh" ? "en" : "zh")}>{t.language}</button></div>
       </header>
       <div className="workspace">

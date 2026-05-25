@@ -121,7 +121,9 @@ export const messages = {
     loadRegistryPlaceholder: "./.sandbox/my-skills-registry",
     loadRegistryButton: "加载",
     loadRegistrySuccess: "已切换到 Registry",
-    loadRegistryError: "加载失败"
+    loadRegistryError: "加载失败",
+    navGroupLabel: "导航",
+    filterGroupLabel: "按来源筛选"
   },
   en: {
     appTitle: "Skill Manager",
@@ -243,6 +245,8 @@ export const messages = {
     loadRegistryPlaceholder: "./.sandbox/my-skills-registry",
     loadRegistryButton: "Load",
     loadRegistrySuccess: "Registry switched",
-    loadRegistryError: "Load failed"
+    loadRegistryError: "Load failed",
+    navGroupLabel: "Navigation",
+    filterGroupLabel: "Filter by source"
   }
 } as const;

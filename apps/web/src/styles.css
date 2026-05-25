@@ -128,12 +128,19 @@ select:focus-visible,
   display: flex;
   align-items: center;
 }
-.product-title { gap: var(--sp-3); }
+.product-title { gap: var(--sp-3); min-width: 0; }
+.product-title > div:last-child { min-width: 0; }
 .product-title h1 { margin: 0; font-size: 22px; line-height: 1.1; }
 .product-title p, .brand-lockup span, .section-head p {
   margin: var(--sp-1) 0 0;
   color: var(--muted);
   font-size: var(--fs-sm);
+}
+.product-title p {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .brand-cube {
@@ -226,6 +233,15 @@ select:focus-visible,
   padding: 2px var(--sp-2) var(--sp-4);
 }
 .brand-lockup strong { display: block; font-size: var(--fs-md); }
+.sidebar-group-label {
+  margin: var(--sp-3) var(--sp-2) var(--sp-2);
+  font-size: 11px;
+  font-weight: var(--fw-medium);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.brand-lockup + .sidebar-group-label { margin-top: 0; }
 .sidebar nav { display: grid; gap: var(--sp-1); }
 .sidebar nav button {
   height: 36px;
@@ -248,9 +264,6 @@ select:focus-visible,
   font-weight: var(--fw-bold);
 }
 .agent-legend {
-  margin-top: var(--sp-6);
-  padding-top: var(--sp-3);
-  border-top: 1px solid var(--border);
   display: grid;
   gap: var(--sp-2);
   color: var(--muted);
@@ -277,6 +290,7 @@ select:focus-visible,
 }
 .overview-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 .distribute-grid, .repo-grid { grid-template-columns: 1.2fr 1fr; }
+.repo-grid { align-items: start; }
 .span-all { grid-column: 1 / -1; }
 
 .section-head {
@@ -584,6 +598,18 @@ select:focus-visible,
   gap: var(--sp-3);
   align-content: start;
 }
+.detail-layout .section-head {
+  height: auto;
+  min-height: 58px;
+  padding: var(--sp-2) var(--sp-1);
+  align-items: flex-start;
+}
+.detail-layout .section-head > div { min-width: 0; flex: 1; }
+.detail-layout .section-head p {
+  max-width: 60ch;
+  margin-top: var(--sp-2);
+  line-height: 1.5;
+}
 .meta-list {
   display: grid;
   grid-template-columns: 90px minmax(0, 1fr);
@@ -607,7 +633,21 @@ select:focus-visible,
   color: var(--text-2);
   overflow-wrap: anywhere;
 }
-.evidence-list .danger-line { background: #fef2f2; color: #b91c1c; }
+.evidence-list .danger-line {
+  background: #fef2f2;
+  color: #b91c1c;
+  border-left: 3px solid var(--danger);
+  font-weight: var(--fw-medium);
+}
+.path-card { padding: var(--sp-3) var(--sp-4); }
+.path-card h3 {
+  font-size: var(--fs-sm);
+  color: var(--muted);
+  font-weight: var(--fw-medium);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: var(--sp-2);
+}
 .path-card code {
   display: block;
   padding: var(--sp-3);
@@ -615,6 +655,7 @@ select:focus-visible,
   background: #0f172a;
   color: #dbeafe;
   overflow-x: auto;
+  font-size: var(--fs-xs);
 }
 
 .action-card {
