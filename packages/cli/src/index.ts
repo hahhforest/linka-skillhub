@@ -125,9 +125,19 @@ registry
   .description("Copy selected local skills into a registry repository.")
   .option("--repo <path>", "Registry path; defaults to profile registryRepo.")
   .option("--all", "Include builtin/system sources.")
-  .action(async (options: { repo?: string; all?: boolean }) => {
+  .option("--yes", "Skip confirmation prompt (REQUIRED in non-interactive shells).")
+  .action(async (options: { repo?: string; all?: boolean; yes?: boolean }) => {
     const runtime = await loadRuntimeConfig();
     const repoPath = resolveRepoOption(options.repo, runtime.profile.registryRepo);
+    const skills = await scanSkills({ cwd: invocationCwd, config: runtime.raw, profileName: runtime.profileName, includeDefaultExcluded: options.all ?? false });
+    await handleConfirmationFailure(
+      assertInteractiveOrYes({
+        action: "registry import",
+        summary: [`Repo: ${repoPath}`, `Will scan: ${skills.length} skills from profile '${runtime.profileName}'`],
+        totalItems: skills.length,
+        yes: options.yes
+      })
+    );
     const result = await importSkillsToRepository({ repoPath, cwd: invocationCwd, config: runtime.raw, profileName: runtime.profileName, includeDefaultExcluded: options.all ?? false });
     printJson({ repoPath: result.repoPath, manifestPath: result.manifestPath, imported: result.imported, skipped: result.skipped, total: result.manifest.skills.length });
   });
@@ -342,9 +352,19 @@ repo
   .command("push")
   .option("--repo <path>", "Registry path; defaults to profile registryRepo.")
   .option("--message <message>", "commit message", "Update skill registry")
-  .action(async (options: { repo?: string; message: string }) => {
+  .option("--yes", "Skip confirmation prompt (REQUIRED in non-interactive shells).")
+  .action(async (options: { repo?: string; message: string; yes?: boolean }) => {
     const runtime = await loadRuntimeConfig();
     const repoPath = resolveRepoOption(options.repo, runtime.profile.registryRepo);
+    const status = await gitStatus(repoPath);
+    await handleConfirmationFailure(
+      assertInteractiveOrYes({
+        action: "repo push",
+        summary: [`Repo: ${repoPath}`, `Message: ${options.message}`, status ? `Git status:\n${status}` : "Working tree clean"],
+        totalItems: 1,
+        yes: options.yes
+      })
+    );
     const commit = await gitCommitAll(repoPath, options.message);
     const output = await gitPush(repoPath);
     printJson({ commit, output });
