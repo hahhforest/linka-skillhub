@@ -117,7 +117,7 @@ function SkillRow({ skill, selected, onToggle, lang }: { readonly skill: SkillPa
       <AgentLogo agent={skill.source.agent} />
       <span className="skill-main">
         <strong>{skill.name}</strong>
-        <small>{skill.description || "No description"}</small>
+        <small>{skill.description || messages[lang].noDescription}</small>
       </span>
       <span className={`status-pill ${statusClass(skill)}`}>{displayStatus}</span>
     </button>
