@@ -27,8 +27,12 @@ const messageOf = (error: unknown): string | undefined => {
  *   / "NetworkError" / "Load failed" so direct fetch errors are handled too).
  * - Maps known server-side codes (confirmation_required, plan_expired,
  *   plan_id_mismatch) to localized strings.
+ * - Maps registry validation codes from POST /api/registry/load
+ *   (missing_manifest, outside_profile_root, not_a_directory,
+ *   invalid_manifest, missing_repo_path) so LoadRegistryPanel does not
+ *   leak snake_case codes like "Cannot load registry: outside_profile_root".
  * - Falls back to the original error.message for any other error so callers
- *   keep the existing detail (e.g. "Cannot load registry: outside_profile_root").
+ *   keep the existing detail.
  */
 export function humanizeError(error: unknown, lang: Language): string {
   const t = messages[lang];
@@ -41,6 +45,11 @@ export function humanizeError(error: unknown, lang: Language): string {
   if (code === "confirmation_required") return t.errorConfirmationRequired;
   if (code === "plan_expired") return t.errorPlanExpired;
   if (code === "plan_id_mismatch") return t.errorPlanMismatch;
+  if (code === "missing_manifest") return t.errorRegistryMissingManifest;
+  if (code === "outside_profile_root") return t.errorRegistryOutsideProfile;
+  if (code === "not_a_directory") return t.errorRegistryNotADirectory;
+  if (code === "invalid_manifest") return t.errorRegistryInvalidManifest;
+  if (code === "missing_repo_path") return t.errorRegistryMissingRepoPath;
 
   if (text && NETWORK_HINTS.some((hint) => text.includes(hint))) {
     return t.errorNetworkUnreachable;

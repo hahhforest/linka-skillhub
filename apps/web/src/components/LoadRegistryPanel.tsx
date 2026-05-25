@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { HardDriveDownload, Loader2 } from "lucide-react";
 import { api, type RegistryLoadResponse } from "../api.js";
+import { humanizeError } from "../humanize-error.js";
 import { messages, type Language } from "../i18n.js";
 
 export interface LoadRegistryPanelProps {
@@ -26,8 +27,7 @@ export function LoadRegistryPanel({ lang, currentRepoPath, onLoaded }: LoadRegis
       setSuccess(`${t.loadRegistrySuccess}: ${result.repoPath} (${result.skillCount ?? result.skills?.length ?? 0})`);
       onLoaded(result);
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      setError(`${t.loadRegistryError}: ${message}`);
+      setError(`${t.loadRegistryError}: ${humanizeError(err, lang)}`);
     } finally {
       setBusy(false);
     }

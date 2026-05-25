@@ -126,6 +126,11 @@ export const messages = {
     errorConfirmationRequired: "需要先在预览界面确认才能执行",
     errorPlanExpired: "分发计划已过期（10 分钟 TTL），请重新预览",
     errorPlanMismatch: "计划版本不匹配，请重新预览",
+    errorRegistryMissingManifest: "目录中没有 registry/skills.json",
+    errorRegistryOutsideProfile: "路径不在当前 profile 范围内",
+    errorRegistryNotADirectory: "路径不是目录",
+    errorRegistryInvalidManifest: "manifest 格式无效",
+    errorRegistryMissingRepoPath: "请输入 registry 路径",
     errorUnknown: "未知错误",
     navGroupLabel: "导航",
     filterGroupLabel: "按来源筛选"
@@ -255,6 +260,11 @@ export const messages = {
     errorConfirmationRequired: "Confirm in the preview dialog before applying.",
     errorPlanExpired: "Plan expired after 10 minutes. Re-open the preview.",
     errorPlanMismatch: "Plan token does not match. Re-open the preview.",
+    errorRegistryMissingManifest: "No registry/skills.json found in this directory",
+    errorRegistryOutsideProfile: "Path is outside the active profile",
+    errorRegistryNotADirectory: "Path is not a directory",
+    errorRegistryInvalidManifest: "Registry manifest is invalid",
+    errorRegistryMissingRepoPath: "Registry path is required",
     errorUnknown: "Unknown error",
     navGroupLabel: "Navigation",
     filterGroupLabel: "Filter by source"
