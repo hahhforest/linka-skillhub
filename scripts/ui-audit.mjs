@@ -66,7 +66,7 @@ const overviewText = await visibleText();
 if (overviewText.includes("Profile: mirror") || overviewText.includes("profile mirror")) issues.push({ severity: "medium", area: "overview", text: "profile 以英文技术名展示，用户不懂 mirror 是什么" });
 if (!overviewText.includes("selected") && !overviewText.includes("已选择")) issues.push({ severity: "low", area: "overview", text: "未显示选择状态" });
 
-const navButtons = ["交汇中心", "分发管理", "技能详情", "仓库管理"];
+const navButtons = ["交汇中心", "分发管理", "仓库管理"];
 for (const label of navButtons) {
   await page.getByRole("button", { name: new RegExp(label) }).click();
   await page.waitForTimeout(350);

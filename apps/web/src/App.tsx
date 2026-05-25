@@ -25,7 +25,7 @@ import { LoadRegistryPanel } from "./components/LoadRegistryPanel.js";
 import { useModalFocusTrap } from "./components/useModalFocusTrap.js";
 import { humanizeError } from "./humanize-error.js";
 
-type View = "overview" | "intersect" | "distribute" | "detail" | "repo";
+type View = "overview" | "intersect" | "distribute" | "repo";
 type Dialog = "scan" | "review" | "confirmPlan" | null;
 
 const emptySummary: Summary = { total: 0, valid: 0, portable: 0, agentBound: 0, unsafe: 0, invalid: 0 };
@@ -172,7 +172,6 @@ function Sidebar({ view, setView, agents, selectedAgent, setSelectedAgent, lang 
     ["overview", <Database size={16} />, t.navOverview],
     ["intersect", <GitCompareArrows size={16} />, t.navIntersect],
     ["distribute", <HardDriveDownload size={16} />, t.navDistribute],
-    ["detail", <PackageCheck size={16} />, t.navDetail],
     ["repo", <GitBranch size={16} />, t.navRepo]
   ];
   return (
@@ -196,7 +195,7 @@ function Sidebar({ view, setView, agents, selectedAgent, setSelectedAgent, lang 
   );
 }
 
-function Overview({ skills, summary, selected, toggleSkill, lang, selectedAgent, totalSkillCount, fallbackSkills, fallbackSummary }: {
+function Overview({ skills, summary, selected, toggleSkill, lang, selectedAgent, totalSkillCount, fallbackSkills, fallbackSummary, allSkills }: {
   readonly skills: SkillPackage[];
   readonly summary: Summary;
   readonly selected: Set<string>;
@@ -206,6 +205,7 @@ function Overview({ skills, summary, selected, toggleSkill, lang, selectedAgent,
   readonly totalSkillCount: number;
   readonly fallbackSkills: SkillPackage[];
   readonly fallbackSummary: Summary;
+  readonly allSkills: SkillPackage[];
 }) {
   const t = messages[lang];
   // When the query filters everything out, keep stat cards / charts based on
@@ -227,6 +227,8 @@ function Overview({ skills, summary, selected, toggleSkill, lang, selectedAgent,
     return dups;
   }, [skills]);
   const donutStyle = { "--ok": cardsSummary.portable, "--warn": cardsSummary.agentBound, "--bad": cardsSummary.invalid, "--all": Math.max(cardsSummary.total, 1) } as React.CSSProperties;
+  const selectedSkillsAll = useMemo(() => allSkills.filter((skill) => selected.has(skill.id)), [allSkills, selected]);
+  const inlineSelected = selectedSkillsAll.length === 1 ? selectedSkillsAll[0] : undefined;
 
   if (totalSkillCount === 0) {
     return <section className="work-card empty-state span-all"><Info size={24} /><h2>{t.noScanTitle}</h2><p>{t.noScanBody}</p></section>;
@@ -255,13 +257,33 @@ function Overview({ skills, summary, selected, toggleSkill, lang, selectedAgent,
         <h3>{t.statusDistribution}</h3><div className="donut" style={donutStyle} />
         <div className="status-list"><span><i className="dot ok" />{t.shareable} {cardsSummary.portable}</span><span><i className="dot warn" />{t.agentBound} {cardsSummary.agentBound}</span><span><i className="dot bad" />{t.problematic} {cardsSummary.invalid}</span></div>
       </div>
-      <div className="work-card table-card span-all">
-        <div className="card-head"><div><h3>{t.scanResults}</h3><p>{t.selectionHint}</p></div><span>{selected.size} {t.selectedCount}</span></div>
-        {tableEmpty ? (
-          <div className="empty-state table-empty"><Info size={20} /><h2>{t.noMatchTitle}</h2><p>{t.noMatchBody}</p></div>
-        ) : (
-          <div className="skill-table scrollable-list">{skills.map((skill) => <SkillRow key={skill.id} skill={skill} selected={selected.has(skill.id)} onToggle={toggleSkill} lang={lang} showAgent={duplicateNames.has(skill.name)} />)}</div>
-        )}
+      <div className="overview-results-row span-all">
+        <div className="work-card table-card">
+          <div className="card-head"><div><h3>{t.scanResults}</h3><p>{t.selectionHint}</p></div><span>{selected.size} {t.selectedCount}</span></div>
+          {tableEmpty ? (
+            <div className="empty-state table-empty"><Info size={20} /><h2>{t.noMatchTitle}</h2><p>{t.noMatchBody}</p></div>
+          ) : (
+            <div className="skill-table scrollable-list">{skills.map((skill) => <SkillRow key={skill.id} skill={skill} selected={selected.has(skill.id)} onToggle={toggleSkill} lang={lang} showAgent={duplicateNames.has(skill.name)} />)}</div>
+          )}
+        </div>
+        <div className="overview-detail-panel">
+          {selectedSkillsAll.length === 0 && (
+            <section className="work-card detail-empty"><PackageCheck size={24} /><h2>{t.selectSkillToInspect}</h2></section>
+          )}
+          {selectedSkillsAll.length === 1 && inlineSelected && (
+            <Detail skill={inlineSelected} lang={lang} />
+          )}
+          {selectedSkillsAll.length > 1 && (
+            <section className="work-card detail-multi">
+              <PackageCheck size={20} />
+              <h3>{t.multipleSelectedSummary.replace("{n}", String(selectedSkillsAll.length))}</h3>
+              <div className="selected-chip-list">
+                {selectedSkillsAll.slice(0, 8).map((skill) => <span key={skill.id}>{skill.name}</span>)}
+                {selectedSkillsAll.length > 8 && <span className="muted-copy">+{selectedSkillsAll.length - 8}</span>}
+              </div>
+            </section>
+          )}
+        </div>
       </div>
     </section>
   );
@@ -353,7 +375,6 @@ export function App() {
   }, [query, agentFilteredSkills]);
   const summary = useMemo(() => summarizeSkills(visibleSkills), [visibleSkills]);
   const fallbackSummary = useMemo(() => summarizeSkills(agentFilteredSkills), [agentFilteredSkills]);
-  const selectedSkill = visibleSkills.find((skill) => selected.has(skill.id)) ?? visibleSkills[0];
 
   const toggleSkill = (id: string) => { const next = new Set(selected); next.has(id) ? next.delete(id) : next.add(id); setSelected(next); };
 
@@ -414,9 +435,9 @@ export function App() {
       <div className="workspace">
         <Sidebar view={view} setView={setView} agents={agents} selectedAgent={selectedAgent} setSelectedAgent={setSelectedAgent} lang={lang} />
         <div className="content">
-          {view === "overview" && <Overview skills={visibleSkills} summary={summary} selected={selected} toggleSkill={toggleSkill} lang={lang} selectedAgent={selectedAgent} totalSkillCount={skills.length} fallbackSkills={agentFilteredSkills} fallbackSummary={fallbackSummary} />}
+          {view === "overview" && <Overview skills={visibleSkills} summary={summary} selected={selected} toggleSkill={toggleSkill} lang={lang} selectedAgent={selectedAgent} totalSkillCount={skills.length} fallbackSkills={agentFilteredSkills} fallbackSummary={fallbackSummary} allSkills={skills} />}
           {view === "repo" && <RepoView onImport={importRepo} onReview={() => void openReviewDialog("rules")} onAgentReview={() => void openReviewDialog("codex")} onRefreshGit={refreshGit} onPull={pullRegistry} onPush={pushRegistry} gitStatus={gitStatusText} commitMessage={commitMessage} setCommitMessage={setCommitMessage} busy={busy} message={message} lang={lang} registryRepo={registryRepo} onRegistryLoaded={(result) => { setRegistryRepo(result.repoPath); if (result.skills) setSkills(result.skills); setMessage(`${messages[lang].loadRegistrySuccess}: ${result.repoPath} (${result.skillCount ?? result.skills?.length ?? 0})`); }} />}
-          {view !== "overview" && view !== "repo" && <Placeholder view={view} lang={lang} skills={visibleSkills} targets={targets} selected={selected} toggleSkill={toggleSkill} plan={plan} onPlan={planDistribution} onApply={applyDistribution} selectedSkill={selectedSkill} />}
+          {view !== "overview" && view !== "repo" && <Placeholder view={view} lang={lang} skills={visibleSkills} targets={targets} selected={selected} toggleSkill={toggleSkill} plan={plan} onPlan={planDistribution} onApply={applyDistribution} />}
           <footer className="status-footer"><span>{agents.length} agents</span><span>{selected.size} {t.selectedCount}</span><span className="status-message" title={message}>{message}</span></footer>
         </div>
       </div>
@@ -436,10 +457,8 @@ export function App() {
   );
 }
 
-function Placeholder(props: { readonly view: View; readonly lang: Language; readonly skills: SkillPackage[]; readonly targets: DistributionTarget[]; readonly selected: Set<string>; readonly toggleSkill: (id: string) => void; readonly plan?: DistributionPlan; readonly onPlan: (agents: string[], skillIds?: string[]) => void; readonly onApply: (agents: string[], skillIds?: string[]) => void; readonly selectedSkill?: SkillPackage }) {
-  const t = messages[props.lang];
+function Placeholder(props: { readonly view: View; readonly lang: Language; readonly skills: SkillPackage[]; readonly targets: DistributionTarget[]; readonly selected: Set<string>; readonly toggleSkill: (id: string) => void; readonly plan?: DistributionPlan; readonly onPlan: (agents: string[], skillIds?: string[]) => void; readonly onApply: (agents: string[], skillIds?: string[]) => void }) {
   if (props.view === "distribute") return <Distribute targets={props.targets} selected={props.selected} onPlan={props.onPlan} onApply={props.onApply} plan={props.plan} busy={false} lang={props.lang} />;
-  if (props.view === "detail") return <Detail skill={props.selectedSkill} lang={props.lang} />;
   return <Intersect skills={props.skills} targets={props.targets} selected={props.selected} toggleSkill={props.toggleSkill} lang={props.lang} plan={props.plan} onPlan={props.onPlan} onApply={props.onApply} />;
 }
 
@@ -497,5 +516,5 @@ function Distribute({ targets, selected, onPlan, onApply, plan, busy, lang }: { 
 function Detail({ skill, lang }: { readonly skill?: SkillPackage; readonly lang: Language }) {
   const t = messages[lang];
   if (!skill) return <section className="work-card detail-empty"><PackageCheck size={24} /><h2>{t.detailEmpty}</h2></section>;
-  return <section className="detail-layout"><div className="section-head span-all"><div><h2>{skill.name}</h2><p>{skill.description}</p></div><span className={`status-pill ${statusClass(skill)}`}>{bucketLabel(skill, lang)}</span></div><div className="work-card"><h3>{t.metadata}</h3><dl className="meta-list"><dt>{t.source}</dt><dd><AgentLogo agent={skill.source.agent} /> {agentTone[skill.source.agent]?.label}</dd><dt>{t.scope}</dt><dd>{skill.source.scope}</dd><dt>{t.hash}</dt><dd><code>{skill.hash.slice(0, 16)}</code></dd><dt>{t.variant}</dt><dd><code>{skill.variantId}</code></dd></dl></div><div className="work-card"><h3>{t.evidence}</h3><div className="evidence-list">{skill.issues.map((issue) => <span key={issue.code} className="danger-line">{issue.code}: {issue.message}</span>)}{skill.evidence.map((item) => <span key={item}>{item}</span>)}{skill.issues.length === 0 && skill.evidence.length === 0 && <span>{lang === "zh" ? "无阻断证据" : "No blocking evidence"}</span>}</div></div><div className="work-card span-all path-card"><h3>{t.path}</h3><code>{skill.skillDir}</code></div></section>;
+  return <section className="detail-inline"><div className="detail-head"><div><h2>{skill.name}</h2><p>{skill.description}</p></div><span className={`status-pill ${statusClass(skill)}`}>{bucketLabel(skill, lang)}</span></div><div className="work-card"><h3>{t.metadata}</h3><dl className="meta-list"><dt>{t.source}</dt><dd><AgentLogo agent={skill.source.agent} /> {agentTone[skill.source.agent]?.label}</dd><dt>{t.scope}</dt><dd>{skill.source.scope}</dd><dt>{t.hash}</dt><dd><code>{skill.hash.slice(0, 16)}</code></dd><dt>{t.variant}</dt><dd><code>{skill.variantId}</code></dd></dl></div><div className="work-card"><h3>{t.evidence}</h3><div className="evidence-list">{skill.issues.map((issue) => <span key={issue.code} className="danger-line">{issue.code}: {issue.message}</span>)}{skill.evidence.map((item) => <span key={item}>{item}</span>)}{skill.issues.length === 0 && skill.evidence.length === 0 && <span>{lang === "zh" ? "无阻断证据" : "No blocking evidence"}</span>}</div></div><div className="work-card path-card"><h3>{t.path}</h3><code>{skill.skillDir}</code></div></section>;
 }

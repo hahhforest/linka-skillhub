@@ -663,6 +663,47 @@ textarea:focus-visible {
   margin-top: var(--sp-2);
   line-height: var(--lh-base);
 }
+.detail-inline {
+  display: grid;
+  gap: var(--sp-3);
+  align-content: start;
+}
+.detail-inline .detail-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: var(--sp-2);
+  padding: var(--sp-2) var(--sp-1);
+}
+.detail-inline .detail-head > div { min-width: 0; flex: 1; }
+.detail-inline .detail-head h2 {
+  margin: 0;
+  font-size: var(--fs-lg);
+  line-height: var(--lh-tight);
+  word-break: break-word;
+}
+.detail-inline .detail-head p {
+  margin: var(--sp-1) 0 0;
+  color: var(--muted);
+  font-size: var(--fs-sm);
+  line-height: var(--lh-base);
+  word-break: break-word;
+}
+.detail-inline .work-card { padding: var(--sp-3); }
+.detail-inline .work-card h3 { font-size: var(--fs-md); margin-bottom: var(--sp-2); }
+.detail-inline .meta-list {
+  grid-template-columns: 64px minmax(0, 1fr);
+  gap: var(--sp-2);
+}
+.detail-inline .meta-list code,
+.detail-inline .evidence-list span {
+  word-break: break-all;
+}
+.detail-inline .path-card code {
+  white-space: pre-wrap;
+  word-break: break-all;
+  overflow-x: hidden;
+}
 .meta-list {
   display: grid;
   grid-template-columns: 90px minmax(0, 1fr);
@@ -823,6 +864,45 @@ textarea:focus-visible {
   max-height: 430px;
   overflow: auto;
   padding-right: var(--sp-1);
+}
+.overview-results-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(280px, 1fr);
+  gap: var(--sp-3);
+  align-items: start;
+}
+.overview-detail-panel {
+  position: sticky;
+  top: var(--sp-3);
+  display: grid;
+  gap: var(--sp-3);
+  min-width: 0;
+}
+.overview-detail-panel .detail-empty {
+  min-height: 220px;
+  padding: var(--sp-4);
+  text-align: center;
+}
+.overview-detail-panel .detail-empty h2 {
+  margin: 0;
+  font-size: var(--fs-md);
+  color: var(--muted);
+  font-weight: var(--fw-medium);
+}
+.detail-multi {
+  display: grid;
+  gap: var(--sp-3);
+  align-content: start;
+}
+.detail-multi > svg { color: var(--primary); }
+.detail-multi h3 {
+  margin: 0;
+  font-size: var(--fs-md);
+  line-height: var(--lh-base);
+}
+@media (max-width: 1100px) {
+  .overview-results-row { grid-template-columns: 1fr; }
+  .overview-detail-panel { position: static; }
 }
 .dialog-backdrop {
   position: fixed;
