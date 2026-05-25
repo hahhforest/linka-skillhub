@@ -77,6 +77,41 @@ await expectText("预览复制结果", "distribution preview button");
 await expectText("确认复制到选中的目标 Agent", "distribution apply button text");
 await screenshot("08-distribution-copy");
 
+// New: confirm-plan modal flow + load registry
+await page.getByRole("button", { name: /^全部来源$/ }).click();
+await page.getByRole("button", { name: /总览/ }).click();
+await page.waitForTimeout(200);
+const overviewRows = await page.locator(".skill-row").count();
+if (overviewRows === 0) failures.push("Overview shows no skill rows after clearing filter");
+// Ensure we end up with at least one selection by toggling row 0 + row 1 if needed.
+const ensureSelected = async () => {
+  const counter = await page.locator(".status-footer").innerText();
+  const match = counter.match(/(\d+)\s*已选择/);
+  if (match && Number(match[1]) > 0) return;
+  await page.locator(".skill-row").nth(1).click();
+};
+await ensureSelected();
+await page.getByRole("button", { name: /分发管理/ }).click();
+await page.waitForTimeout(200);
+await page.getByRole("button", { name: /预览复制结果/ }).click();
+await page.waitForFunction(() => document.body.innerText.includes("复制预览"), undefined, { timeout: 10000 });
+await page.getByRole("button", { name: /^确认复制到选中的目标 Agent$/ }).click();
+await page.waitForFunction(() => document.body.innerText.includes("Plan Token"), undefined, { timeout: 10000 });
+await expectText("Plan Token", "confirm modal plan token");
+await expectText("条目合计", "confirm modal total label");
+await screenshot("09-confirm-plan-modal");
+await page.locator(".confirm-plan-dialog .dialog-actions button.ghost").click();
+let modalText = await page.locator("body").innerText();
+if (modalText.includes("Plan Token")) failures.push("Confirm modal did not close on cancel");
+
+await page.getByRole("button", { name: /仓库管理/ }).click();
+await expectText("加载已有 Registry", "load registry panel");
+await page.locator(".load-registry-row input").fill("./.sandbox/my-skills-registry");
+await page.getByRole("button", { name: /^加载$/ }).click();
+await page.waitForFunction(() => document.body.innerText.includes("已切换到 Registry"), undefined, { timeout: 10000 });
+await expectText("已切换到 Registry", "load registry success message");
+await screenshot("10-load-registry");
+
 await browser.close();
 await fs.writeFile(path.join(outDir, "result.json"), JSON.stringify({ failures }, null, 2), "utf8");
 if (failures.length > 0) {
