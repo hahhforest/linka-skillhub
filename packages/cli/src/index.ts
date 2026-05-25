@@ -73,19 +73,26 @@ const compactPlan = (plan: Awaited<ReturnType<typeof createDistributionPlan>>) =
   }))
 });
 
-program
-  .name("linka-skillhub")
-  .description("Manage, version, review, and distribute agent skills across Mavis, OpenCode, Claude Code, and Codex.")
-  .version("0.1.0")
-  .option("--config <path>", "config file path; defaults to nearest linka-skillhub.config.json")
-  .option("--profile <name>", "config profile name");
+const warnDeprecated = (from: string, to: string): void => {
+  process.stderr.write(`[linka-skillhub] '${from}' is deprecated; use '${to}' instead.\n`);
+};
 
 program
-  .command("scan")
-  .description("Scan local agent skill directories.")
-  .option("--all", "include builtin/system sources that are excluded by default")
-  .option("--json", "print full JSON")
+  .name("lsh")
+  .alias("linka-skillhub")
+  .description("Local-first registry for code-agent skills across Mavis, OpenCode, Claude Code, Codex, and .agents/skills.")
+  .version("0.1.0")
+  .option("--config <path>", "Config file path; defaults to nearest linka-skillhub.config.json.")
+  .option("--profile <name>", "Active profile name.");
+
+program
+  .command("list")
+  .alias("scan")
+  .description("List scanned skills from the active profile sources.")
+  .option("--all", "Include builtin/system sources that are excluded by default.")
+  .option("--json", "Print full JSON output.")
   .action(async (options: { all?: boolean; json?: boolean }) => {
+    if (process.argv.includes("scan") && !process.argv.includes("list")) warnDeprecated("scan", "list");
     const runtime = await loadRuntimeConfig();
     const skills = await scanSkills({ cwd: invocationCwd, config: runtime.raw, profileName: runtime.profileName, includeDefaultExcluded: options.all ?? false });
     if (options.json) printJson({ summary: summarize(skills), skills });
@@ -99,24 +106,56 @@ program
     }
   });
 
-program
+const registry = program.command("registry").description("Read and import registry contents.");
+
+registry
   .command("import")
   .description("Copy selected local skills into a registry repository.")
-  .option("--repo <path>", "registry repository path; defaults to config profile registryRepo")
-  .option("--all", "include builtin/system sources")
+  .option("--repo <path>", "Registry path; defaults to profile registryRepo.")
+  .option("--all", "Include builtin/system sources.")
   .action(async (options: { repo?: string; all?: boolean }) => {
     const runtime = await loadRuntimeConfig();
-    const result = await importSkillsToRepository({ repoPath: resolveRepoOption(options.repo, runtime.profile.registryRepo), cwd: invocationCwd, config: runtime.raw, profileName: runtime.profileName, includeDefaultExcluded: options.all ?? false });
+    const repoPath = resolveRepoOption(options.repo, runtime.profile.registryRepo);
+    const result = await importSkillsToRepository({ repoPath, cwd: invocationCwd, config: runtime.raw, profileName: runtime.profileName, includeDefaultExcluded: options.all ?? false });
     printJson({ repoPath: result.repoPath, manifestPath: result.manifestPath, imported: result.imported, skipped: result.skipped, total: result.manifest.skills.length });
+  });
+
+registry
+  .command("list")
+  .description("List skills already imported into the active registry.")
+  .option("--repo <path>", "Registry path; defaults to profile registryRepo.")
+  .action(async (options: { repo?: string }) => {
+    const runtime = await loadRuntimeConfig();
+    const repoPath = resolveRepoOption(options.repo, runtime.profile.registryRepo);
+    const manifest = await readRegistryManifest(repoPath);
+    printJson({ repoPath, count: manifest.skills.length, skills: manifest.skills });
+  });
+
+registry
+  .command("show <id>")
+  .description("Show a single skill by id from the active registry.")
+  .option("--repo <path>", "Registry path; defaults to profile registryRepo.")
+  .action(async (id: string, options: { repo?: string }) => {
+    const runtime = await loadRuntimeConfig();
+    const repoPath = resolveRepoOption(options.repo, runtime.profile.registryRepo);
+    const manifest = await readRegistryManifest(repoPath);
+    const skill = manifest.skills.find((entry) => entry.id === id);
+    if (!skill) {
+      process.stderr.write(`Skill not found in registry: ${id}\n`);
+      process.exitCode = 2;
+      return;
+    }
+    printJson(skill);
   });
 
 program
   .command("review")
   .description("Run deterministic or local-agent review for registry skills.")
-  .option("--repo <path>", "registry repository path; defaults to config profile registryRepo")
-  .option("--agent <agent>", "rules|codex|opencode|claude|mavis", "rules")
+  .requiredOption("--reviewer <kind>", "rules | codex | opencode | claude | mavis")
+  .option("--language <lang>", "zh | en", "zh")
   .option("--skill <ids>", "comma-separated skill ids")
-  .action(async (options: { repo?: string; agent: AgentKind | "rules"; skill?: string }) => {
+  .option("--repo <path>", "registry path; defaults to profile registryRepo")
+  .action(async (options: { reviewer: AgentKind | "rules"; language: "zh" | "en"; skill?: string; repo?: string }) => {
     const runtime = await loadRuntimeConfig();
     const repoPath = resolveRepoOption(options.repo, runtime.profile.registryRepo);
     const manifest = await readRegistryManifest(repoPath);
@@ -124,7 +163,7 @@ program
     const reviews = [];
     for (const skill of manifest.skills) {
       if (selected && !selected.has(skill.id)) continue;
-      const review = options.agent === "rules" ? reviewSkillWithRules(skill) : await reviewSkillWithAgent(skill, options.agent);
+      const review = options.reviewer === "rules" ? reviewSkillWithRules(skill, options.language) : await reviewSkillWithAgent(skill, options.reviewer, { language: options.language });
       await writeReviewResult(repoPath, review);
       reviews.push(review);
     }
@@ -134,7 +173,7 @@ program
 program
   .command("distribute")
   .description("Plan or apply skill distribution from a registry to target agents.")
-  .option("--repo <path>", "registry repository path; defaults to config profile registryRepo")
+  .option("--repo <path>", "registry path; defaults to profile registryRepo")
   .requiredOption("--target <agents>", "comma-separated target agents: codex,claude,opencode,mavis")
   .option("--skill <ids>", "comma-separated skill ids")
   .option("--include-unsafe", "allow unsafe skills")
@@ -163,18 +202,16 @@ program
   });
 
 const repo = program.command("repo").description("Manage the registry Git repository.");
-
 repo
   .command("status")
-  .option("--repo <path>", "registry repository path; defaults to config profile registryRepo")
+  .option("--repo <path>", "Registry path; defaults to profile registryRepo.")
   .action(async (options: { repo?: string }) => {
     const runtime = await loadRuntimeConfig();
     process.stdout.write(`${await gitStatus(resolveRepoOption(options.repo, runtime.profile.registryRepo))}\n`);
   });
-
 repo
   .command("connect")
-  .option("--repo <path>", "registry repository path; defaults to config profile registryRepo")
+  .option("--repo <path>", "Registry path; defaults to profile registryRepo.")
   .requiredOption("--remote <url>", "GitHub repository URL")
   .action(async (options: { repo?: string; remote: string }) => {
     const runtime = await loadRuntimeConfig();
@@ -182,18 +219,16 @@ repo
     await setRemote(repoPath, options.remote);
     process.stdout.write(`${await gitStatus(repoPath)}\n`);
   });
-
 repo
   .command("pull")
-  .option("--repo <path>", "registry repository path; defaults to config profile registryRepo")
+  .option("--repo <path>", "Registry path; defaults to profile registryRepo.")
   .action(async (options: { repo?: string }) => {
     const runtime = await loadRuntimeConfig();
     process.stdout.write(`${await gitPull(resolveRepoOption(options.repo, runtime.profile.registryRepo))}\n`);
   });
-
 repo
   .command("push")
-  .option("--repo <path>", "registry repository path; defaults to config profile registryRepo")
+  .option("--repo <path>", "Registry path; defaults to profile registryRepo.")
   .option("--message <message>", "commit message", "Update skill registry")
   .action(async (options: { repo?: string; message: string }) => {
     const runtime = await loadRuntimeConfig();
@@ -203,12 +238,39 @@ repo
     printJson({ commit, output });
   });
 
+const configCmd = program.command("config").description("Read resolved linka-skillhub configuration.");
+configCmd
+  .command("list")
+  .description("Print active profile and resolved paths.")
+  .action(async () => {
+    const runtime = await loadRuntimeConfig();
+    printJson({
+      activeProfile: runtime.profileName,
+      stateDir: runtime.profile.stateDir,
+      registryRepo: runtime.profile.registryRepo,
+      agents: Object.entries(runtime.profile.agents ?? {}).map(([kind, agent]) => ({
+        kind,
+        targetDir: agent?.targetDir,
+        sourceDirs: agent?.sourceDirs?.map((source) => ({ path: source.path, scope: source.scope, defaultSelected: source.defaultSelected })) ?? []
+      }))
+    });
+  });
+
+const profileCmd = program.command("profile").description("Print the active profile summary.");
+profileCmd
+  .command("show")
+  .description("Print the active profile name and resolved paths.")
+  .action(async () => {
+    const runtime = await loadRuntimeConfig();
+    printJson({ activeProfile: runtime.profileName, stateDir: runtime.profile.stateDir, registryRepo: runtime.profile.registryRepo });
+  });
+
 program
   .command("serve")
   .description("Start the local Web console and API server.")
   .option("--host <host>", "host", "127.0.0.1")
   .option("--port <port>", "port", "4873")
-  .option("--repo <path>", "registry repository path; defaults to config profile registryRepo")
+  .option("--repo <path>", "registry path; defaults to profile registryRepo")
   .action(async (options: { host: string; port: string; repo?: string }) => {
     const runtime = await loadRuntimeConfig();
     const port = Number.parseInt(options.port, 10);
