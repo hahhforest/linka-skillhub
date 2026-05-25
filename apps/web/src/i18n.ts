@@ -108,7 +108,13 @@ export const messages = {
     confirmOverwrite: "覆盖",
     confirmSkip: "跳过",
     confirmTotal: "条目合计",
-    confirmTokenLabel: "Plan Token"
+    confirmTokenLabel: "Plan Token",
+    loadRegistryTitle: "加载已有 Registry",
+    loadRegistryHelp: "输入 registry 仓库的相对或绝对路径（必须位于当前 profile 内）。",
+    loadRegistryPlaceholder: "./.sandbox/my-skills-registry",
+    loadRegistryButton: "加载",
+    loadRegistrySuccess: "已切换到 Registry",
+    loadRegistryError: "加载失败"
   },
   en: {
     appTitle: "Skill Manager",
@@ -217,6 +223,12 @@ export const messages = {
     confirmOverwrite: "Overwrite",
     confirmSkip: "Skip",
     confirmTotal: "Total items",
-    confirmTokenLabel: "Plan Token"
+    confirmTokenLabel: "Plan Token",
+    loadRegistryTitle: "Load Existing Registry",
+    loadRegistryHelp: "Enter the relative or absolute path of a registry repo (must live inside the active profile).",
+    loadRegistryPlaceholder: "./.sandbox/my-skills-registry",
+    loadRegistryButton: "Load",
+    loadRegistrySuccess: "Registry switched",
+    loadRegistryError: "Load failed"
   }
 } as const;

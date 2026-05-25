@@ -22,7 +22,24 @@ export interface AgentsResponse {
   readonly sources: SkillSource[];
   readonly profile?: string;
   readonly registryRepo?: string;
+  readonly registryRepoIsExternal?: boolean;
   readonly stateDir?: string;
+}
+
+export interface RegistryValidation {
+  readonly ok: boolean;
+  readonly repoPath: string;
+  readonly manifestVersion?: number;
+  readonly skillCount?: number;
+  readonly reason?: string;
+}
+
+export interface RegistryLoadResponse extends RegistryValidation {
+  readonly skills?: SkillPackage[];
+  readonly summary?: Summary;
+  readonly profile?: string;
+  readonly registryRepo?: string;
+  readonly isExternal?: boolean;
 }
 
 export interface ReviewerInfo {
@@ -68,6 +85,10 @@ export const api = {
     request<{ plan: DistributionPlan; confirmToken: string; ttlMs: number }>("/api/distributions/plan", { method: "POST", body: JSON.stringify({ targetAgents, skillIds }) }),
   distributionApply: (targetAgents: string[], skillIds: string[], confirmToken: string, plan?: DistributionPlan) =>
     request<DistributionRun & { planId: string }>("/api/distributions/apply", { method: "POST", body: JSON.stringify({ targetAgents, skillIds, confirmToken, plan }) }),
+  validateRegistry: (repoPath: string) =>
+    request<RegistryValidation>("/api/registry/validate", { method: "POST", body: JSON.stringify({ repoPath }) }),
+  loadRegistry: (repoPath: string) =>
+    request<RegistryLoadResponse>("/api/registry/load", { method: "POST", body: JSON.stringify({ repoPath }) }),
   repoStatus: () => request<{ status: string }>("/api/repo/status"),
   repoPush: (message: string) => request<{ commit: string; output: string }>("/api/repo/push", { method: "POST", body: JSON.stringify({ message }) }),
   repoPull: () => request<{ output: string }>("/api/repo/pull", { method: "POST", body: JSON.stringify({}) })
