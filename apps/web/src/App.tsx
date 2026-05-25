@@ -178,13 +178,14 @@ function Sidebar({ view, setView, agents, selectedAgent, setSelectedAgent, lang 
   );
 }
 
-function Overview({ skills, summary, selected, toggleSkill, lang, selectedAgent }: {
+function Overview({ skills, summary, selected, toggleSkill, lang, selectedAgent, totalSkillCount }: {
   readonly skills: SkillPackage[];
   readonly summary: Summary;
   readonly selected: Set<string>;
   readonly toggleSkill: (id: string) => void;
   readonly lang: Language;
   readonly selectedAgent: string | null;
+  readonly totalSkillCount: number;
 }) {
   const t = messages[lang];
   const byAgent = useMemo(() => {
@@ -194,8 +195,11 @@ function Overview({ skills, summary, selected, toggleSkill, lang, selectedAgent 
   }, [skills]);
   const donutStyle = { "--ok": summary.portable, "--warn": summary.agentBound, "--bad": summary.invalid, "--all": Math.max(summary.total, 1) } as React.CSSProperties;
 
-  if (summary.total === 0) {
+  if (totalSkillCount === 0) {
     return <section className="work-card empty-state span-all"><Info size={24} /><h2>{t.noScanTitle}</h2><p>{t.noScanBody}</p></section>;
+  }
+  if (summary.total === 0) {
+    return <section className="work-card empty-state span-all"><Info size={24} /><h2>{t.noMatchTitle}</h2><p>{t.noMatchBody}</p></section>;
   }
 
   return (
@@ -350,7 +354,7 @@ export function App() {
       <div className="workspace">
         <Sidebar view={view} setView={setView} agents={agents} selectedAgent={selectedAgent} setSelectedAgent={setSelectedAgent} lang={lang} />
         <div className="content">
-          {view === "overview" && <Overview skills={visibleSkills} summary={summary} selected={selected} toggleSkill={toggleSkill} lang={lang} selectedAgent={selectedAgent} />}
+          {view === "overview" && <Overview skills={visibleSkills} summary={summary} selected={selected} toggleSkill={toggleSkill} lang={lang} selectedAgent={selectedAgent} totalSkillCount={skills.length} />}
           {view === "repo" && <RepoView onImport={importRepo} onReview={() => void openReviewDialog("rules")} onAgentReview={() => void openReviewDialog("codex")} onRefreshGit={refreshGit} onPull={pullRegistry} onPush={pushRegistry} gitStatus={gitStatusText} commitMessage={commitMessage} setCommitMessage={setCommitMessage} busy={busy} message={message} lang={lang} registryRepo={registryRepo} onRegistryLoaded={(result) => { setRegistryRepo(result.repoPath); if (result.skills) setSkills(result.skills); setMessage(`${messages[lang].loadRegistrySuccess}: ${result.repoPath} (${result.skillCount ?? result.skills?.length ?? 0})`); }} />}
           {view !== "overview" && view !== "repo" && <Placeholder view={view} lang={lang} skills={visibleSkills} targets={targets} selected={selected} toggleSkill={toggleSkill} plan={plan} onPlan={planDistribution} onApply={applyDistribution} selectedSkill={selectedSkill} />}
           <footer className="status-footer"><span>{agents.length} agents</span><span>{selected.size} {t.selectedCount}</span><span>{message}</span></footer>
