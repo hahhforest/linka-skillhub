@@ -19,7 +19,7 @@ import {
   type AgentKind
 } from "@linka-skillhub/core";
 import { defaultRepoPath, startServer } from "./server.js";
-import { assertInteractiveOrYes, summarizeCopyForPrompt } from "./prompts.js";
+import { assertInteractiveOrYes, summarizeCopyForPrompt, summarizePlanForPrompt } from "./prompts.js";
 
 const program = new Command();
 const invocationCwd = process.env.INIT_CWD ?? process.cwd();
@@ -182,16 +182,16 @@ program
     printJson({ reviews });
   });
 
-program
-  .command("distribute")
-  .description("Plan or apply skill distribution from a registry to target agents.")
-  .option("--repo <path>", "registry path; defaults to profile registryRepo")
-  .requiredOption("--target <agents>", "comma-separated target agents: codex,claude,opencode,mavis")
+const distribute = program.command("distribute").description("Distribute registry skills to one or more target agents.");
+distribute
+  .command("preview")
+  .description("Plan distribution to multiple target agents; do not write anything.")
+  .requiredOption("--target <agents>", "comma-separated agents: mavis,opencode,claude,codex,shared")
   .option("--skill <ids>", "comma-separated skill ids")
   .option("--include-unsafe", "allow unsafe skills")
   .option("--include-agent-bound", "allow agent-bound skills")
-  .option("--apply", "apply the generated plan")
-  .action(async (options: { repo?: string; target: string; skill?: string; includeUnsafe?: boolean; includeAgentBound?: boolean; apply?: boolean }) => {
+  .option("--repo <path>", "Registry path; defaults to profile registryRepo.")
+  .action(async (options: { target: string; skill?: string; includeUnsafe?: boolean; includeAgentBound?: boolean; repo?: string }) => {
     const runtime = await loadRuntimeConfig();
     const repoPath = resolveRepoOption(options.repo, runtime.profile.registryRepo);
     const plan = await createDistributionPlan({
@@ -205,12 +205,46 @@ program
       includeUnsafe: options.includeUnsafe ?? false,
       includeAgentBound: options.includeAgentBound ?? false
     });
-    if (!options.apply) {
-      printJson({ plan: compactPlan(plan) });
-      return;
-    }
+    printJson({ plan: compactPlan(plan) });
+  });
+
+distribute
+  .command("apply")
+  .description("Apply a previously planned distribution. Requires --yes in non-interactive shells.")
+  .requiredOption("--target <agents>", "comma-separated target agents")
+  .option("--skill <ids>", "comma-separated skill ids")
+  .option("--plan <id>", "plan id from 'distribute preview'; recomputes if omitted")
+  .option("--include-unsafe", "allow unsafe skills")
+  .option("--include-agent-bound", "allow agent-bound skills")
+  .option("--repo <path>", "Registry path; defaults to profile registryRepo.")
+  .option("--yes", "Skip confirmation prompt (REQUIRED in non-interactive shells).")
+  .action(async (options: { target: string; skill?: string; plan?: string; includeUnsafe?: boolean; includeAgentBound?: boolean; repo?: string; yes?: boolean }) => {
+    const runtime = await loadRuntimeConfig();
+    const repoPath = resolveRepoOption(options.repo, runtime.profile.registryRepo);
+    const targetAgents = parseAgents(options.target);
+    const plan = await createDistributionPlan({
+      registryPath: repoPath,
+      cwd: invocationCwd,
+      config: runtime.raw,
+      profileName: runtime.profileName,
+      backupDir: path.join(runtime.profile.stateDir, "backups"),
+      targetAgents,
+      skillIds: options.skill ? options.skill.split(",").map((item) => item.trim()) : undefined,
+      includeUnsafe: options.includeUnsafe ?? false,
+      includeAgentBound: options.includeAgentBound ?? false
+    });
+    await handleConfirmationFailure(
+      assertInteractiveOrYes({
+        action: "distribute apply",
+        summary: summarizePlanForPrompt(plan),
+        totalItems: plan.items.length,
+        targets: targetAgents,
+        yes: options.yes,
+        skipOnEmpty: true
+      })
+    );
     const run = await applyDistributionPlan(repoPath, plan);
-    printJson({ plan: compactPlan(plan), run });
+    printJson({ plan: compactPlan(plan), run, planIdEcho: options.plan });
   });
 
 const copy = program.command("copy").description("Copy skills from one agent's source to a single target agent.");
