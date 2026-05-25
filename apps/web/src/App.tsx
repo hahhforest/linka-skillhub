@@ -90,10 +90,10 @@ function profileLabel(profile: string, lang: Language): string {
   return profile;
 }
 
-function StatCard({ title, value, sub, icon }: { readonly title: string; readonly value: number; readonly sub: string; readonly icon: React.ReactNode }) {
+function StatCard({ title, value, sub, icon, tone = "neutral" }: { readonly title: string; readonly value: number; readonly sub: string; readonly icon: React.ReactNode; readonly tone?: "neutral" | "success" | "warning" | "danger" }) {
   return (
     <div className="stat-card">
-      <div className="stat-icon">{icon}</div>
+      <div className={`stat-icon tone-${tone}`}>{icon}</div>
       <div>
         <p>{title}</p>
         <strong>{value}</strong>
@@ -215,10 +215,10 @@ function Overview({ skills, summary, selected, toggleSkill, lang, selectedAgent,
   return (
     <section className="panel-grid overview-grid">
       <div className="section-head span-all"><div><h2>{t.overview}</h2><p>{t.currentScope}: {selectedAgent ? agentTone[selectedAgent]?.label : t.allSources}</p></div></div>
-      <StatCard title={t.totalSkills} value={summary.total} sub={`${summary.valid} ${t.valid}`} icon={<PackageCheck size={18} />} />
-      <StatCard title={t.shareable} value={summary.portable} sub={t.defaultDistributionScope} icon={<Check size={18} />} />
-      <StatCard title={t.agentBound} value={summary.agentBound} sub={t.needsConfirmation} icon={<AlertTriangle size={18} />} />
-      <StatCard title={t.problematic} value={summary.invalid} sub={t.blockedByDefault} icon={<ShieldAlert size={18} />} />
+      <StatCard tone="neutral" title={t.totalSkills} value={summary.total} sub={`${summary.valid} ${t.valid}`} icon={<PackageCheck size={18} />} />
+      <StatCard tone="success" title={t.shareable} value={summary.portable} sub={t.defaultDistributionScope} icon={<Check size={18} />} />
+      <StatCard tone="warning" title={t.agentBound} value={summary.agentBound} sub={t.needsConfirmation} icon={<AlertTriangle size={18} />} />
+      <StatCard tone="danger" title={t.problematic} value={summary.invalid} sub={t.blockedByDefault} icon={<ShieldAlert size={18} />} />
 
       <div className="work-card source-card">
         <h3>{t.sourceDistribution}</h3>
@@ -429,7 +429,7 @@ function Intersect({ skills, targets, selected, toggleSkill, lang, plan, onPlan,
       </div>
       <div className="work-card lane-card">
         <h3><AgentLogo agent={from} /> {t.sourceSkills}</h3>
-        <div className="path-note"><strong>{t.sourcePath}</strong><code>{sourcePath}</code></div>
+        <div className="path-note"><strong>{t.sourcePath}</strong><code title={sourcePath}>{sourcePath}</code></div>
         <div className="skill-list compact scrollable-list">{left.map((skill) => <SkillRow key={skill.id} skill={skill} selected={selected.has(skill.id)} onToggle={toggleSkill} lang={lang} />)}</div>
       </div>
       <div className="work-card intersection-actions">
@@ -443,7 +443,7 @@ function Intersect({ skills, targets, selected, toggleSkill, lang, plan, onPlan,
       </div>
       <div className="work-card lane-card">
         <h3><AgentLogo agent={to} /> {t.targetExisting}</h3>
-        <div className="path-note"><strong>{t.targetPath}</strong><code>{targetPath}</code></div>
+        <div className="path-note"><strong>{t.targetPath}</strong><code title={targetPath}>{targetPath}</code></div>
         <div className="skill-list compact scrollable-list">{right.map((skill) => <SkillRow key={skill.id} skill={skill} selected={selected.has(skill.id)} onToggle={toggleSkill} lang={lang} />)}</div>
       </div>
     </section>
