@@ -1,8 +1,16 @@
 import fs from "node:fs/promises";
 import path from "node:path";
-import type { ImportOptions, ImportResult, RegistryManifest, SkillPackage } from "./types.js";
 import { scanSkills } from "./scanner.js";
 import { assertNoPathSeparators, assertPathInside, sanitizePathSegment } from "./path-safety.js";
+import type { ImportOptions, ImportResult, RegistryManifest, SkillPackage } from "./types.js";
+
+export interface ValidateRegistryResult {
+  readonly ok: boolean;
+  readonly repoPath: string;
+  readonly manifestVersion?: number;
+  readonly skillCount?: number;
+  readonly reason?: "missing_manifest" | "outside_profile_root" | "not_a_directory" | "invalid_manifest";
+}
 
 const ensureDir = async (dir: string): Promise<void> => {
   await fs.mkdir(dir, { recursive: true });
@@ -70,3 +78,46 @@ export const importSkillsToRepository = async (options: ImportOptions): Promise<
 
 export const registrySkillPath = (repoPath: string, skill: SkillPackage): string =>
   path.join(repoPath, "skills", sanitizePathSegment(skill.name), sanitizePathSegment(skill.variantId));
+
+export const validateRegistryPath = async (
+  repoPath: string,
+  options: { readonly cwd: string; readonly profileRoot: string }
+): Promise<ValidateRegistryResult> => {
+  const requested = path.resolve(options.cwd, repoPath);
+  let realProfileRoot = options.profileRoot;
+  try {
+    realProfileRoot = await fs.realpath(options.profileRoot);
+  } catch {
+    // profileRoot may not exist on disk yet; fall back to the resolved value
+  }
+  let real = requested;
+  try {
+    real = await fs.realpath(requested);
+  } catch {
+    return { ok: false, repoPath: requested, reason: "missing_manifest" };
+  }
+  try {
+    assertPathInside(realProfileRoot, real, "external registry path");
+  } catch {
+    return { ok: false, repoPath: real, reason: "outside_profile_root" };
+  }
+  const stat = await fs.lstat(real);
+  if (!stat.isDirectory()) return { ok: false, repoPath: real, reason: "not_a_directory" };
+  const manifestPath = path.join(real, "registry", "skills.json");
+  let raw: string;
+  try {
+    raw = await fs.readFile(manifestPath, "utf8");
+  } catch {
+    return { ok: false, repoPath: real, reason: "missing_manifest" };
+  }
+  let manifest: RegistryManifest;
+  try {
+    manifest = JSON.parse(raw) as RegistryManifest;
+  } catch {
+    return { ok: false, repoPath: real, reason: "invalid_manifest" };
+  }
+  if (manifest.version !== 1 || !Array.isArray(manifest.skills)) {
+    return { ok: false, repoPath: real, reason: "invalid_manifest" };
+  }
+  return { ok: true, repoPath: real, manifestVersion: manifest.version, skillCount: manifest.skills.length };
+};
