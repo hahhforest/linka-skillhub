@@ -30,6 +30,24 @@ button, input, select { font: inherit; }
 button { cursor: pointer; }
 button:disabled { cursor: not-allowed; opacity: 0.62; }
 
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+[role="button"]:focus-visible {
+  outline: 2px solid var(--blue);
+  outline-offset: 2px;
+}
+.action-card:focus-visible,
+.skill-row:focus-visible,
+.target:focus-visible,
+.agent-filter:focus-visible,
+.sidebar nav button:focus-visible,
+.search-box input:focus-visible,
+.field-label input:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--blue);
+}
+
 .app-shell {
   width: min(1600px, 100%);
   margin: 0 auto;
