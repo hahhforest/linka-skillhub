@@ -1,7 +1,8 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { Check, X } from "lucide-react";
 import type { DistributionPlan } from "@linka-skillhub/core";
 import { messages, type Language } from "../i18n.js";
+import { useModalFocusTrap } from "./useModalFocusTrap.js";
 
 export interface ConfirmPlanModalProps {
   readonly plan: DistributionPlan;
@@ -24,6 +25,8 @@ export function ConfirmPlanModal({ plan, confirmToken, lang, busy, onConfirm, on
     window.addEventListener("keydown", handleKey);
     return () => window.removeEventListener("keydown", handleKey);
   }, [onCancel]);
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useModalFocusTrap(dialogRef);
   return (
     <div
       className="dialog-backdrop"
@@ -32,7 +35,7 @@ export function ConfirmPlanModal({ plan, confirmToken, lang, busy, onConfirm, on
       aria-labelledby="confirm-plan-title"
       onClick={(event) => { if (event.target === event.currentTarget) onCancel(); }}
     >
-      <div className="dialog confirm-plan-dialog" onClick={(event) => event.stopPropagation()}>
+      <div ref={dialogRef} tabIndex={-1} className="dialog confirm-plan-dialog" onClick={(event) => event.stopPropagation()}>
         <button className="dialog-close" onClick={onCancel} aria-label={t.confirmCancel}><X size={16} /></button>
         <h2 id="confirm-plan-title">{t.confirmTitle}</h2>
         <p className="muted-copy">{t.confirmBody}</p>

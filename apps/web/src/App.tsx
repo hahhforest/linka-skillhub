@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertTriangle,
   ArrowRight,
@@ -22,6 +22,7 @@ import { api, type ReviewerInfo, type Summary } from "./api.js";
 import { messages, type Language } from "./i18n.js";
 import { ConfirmPlanModal } from "./components/ConfirmPlanModal.js";
 import { LoadRegistryPanel } from "./components/LoadRegistryPanel.js";
+import { useModalFocusTrap } from "./components/useModalFocusTrap.js";
 
 type View = "overview" | "intersect" | "distribute" | "detail" | "repo";
 type Dialog = "scan" | "review" | "confirmPlan" | null;
@@ -283,9 +284,11 @@ function DialogFrame({ title, children, onClose }: { readonly title: string; rea
     window.addEventListener("keydown", handleKey);
     return () => window.removeEventListener("keydown", handleKey);
   }, [onClose]);
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useModalFocusTrap(dialogRef);
   return (
     <div className="dialog-backdrop" onClick={(event) => { if (event.target === event.currentTarget) onClose(); }}>
-      <div className="dialog" onClick={(event) => event.stopPropagation()}>
+      <div ref={dialogRef} tabIndex={-1} className="dialog" onClick={(event) => event.stopPropagation()}>
         <button className="dialog-close" onClick={onClose}><X size={16} /></button>
         <h2>{title}</h2>
         {children}
