@@ -489,6 +489,20 @@ textarea:focus-visible {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.skill-title-line {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-2);
+  min-width: 0;
+  flex-wrap: wrap;
+}
+.skill-title-line strong { min-width: 0; }
+.agent-tag {
+  font-size: var(--fs-xs);
+  color: var(--muted);
+  font-weight: var(--fw-medium);
+  white-space: nowrap;
+}
 .skill-main small {
   display: block;
   margin-top: var(--sp-1);

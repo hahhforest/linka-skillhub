@@ -105,7 +105,7 @@ function StatCard({ title, value, sub, icon, tone = "neutral" }: { readonly titl
   );
 }
 
-function SkillRow({ skill, selected, onToggle, lang }: { readonly skill: SkillPackage; readonly selected: boolean; readonly onToggle: (id: string) => void; readonly lang: Language }) {
+function SkillRow({ skill, selected, onToggle, lang, showAgent = false }: { readonly skill: SkillPackage; readonly selected: boolean; readonly onToggle: (id: string) => void; readonly lang: Language; readonly showAgent?: boolean }) {
   const labels = statusLabel(lang);
   const displayStatus = skill.status.includes("unsafe") || skill.status.includes("invalid")
     ? labels.invalid
@@ -114,11 +114,15 @@ function SkillRow({ skill, selected, onToggle, lang }: { readonly skill: SkillPa
       : skill.status.includes("portable") && skill.status.includes("valid")
         ? labels.portable
         : labels.unreviewed;
+  const agentName = agentTone[skill.source.agent]?.label ?? skill.source.agent;
   return (
     <button className={`skill-row ${selected ? "selected" : ""}`} onClick={() => onToggle(skill.id)} title={messages[lang].selectionHint}>
       <AgentLogo agent={skill.source.agent} />
       <span className="skill-main">
-        <strong>{skill.name}</strong>
+        <span className="skill-title-line">
+          <strong>{skill.name}</strong>
+          {showAgent && <span className="agent-tag" title={agentName}>{agentName}</span>}
+        </span>
         <small title={skill.description || messages[lang].noDescription}>{skill.description || messages[lang].noDescription}</small>
       </span>
       <span className={`status-pill ${statusClass(skill)}`}>{displayStatus}</span>
@@ -215,6 +219,13 @@ function Overview({ skills, summary, selected, toggleSkill, lang, selectedAgent,
     for (const skill of cardsSkills) counts.set(skill.source.agent, (counts.get(skill.source.agent) ?? 0) + 1);
     return [...counts.entries()].sort((a, b) => b[1] - a[1]);
   }, [cardsSkills]);
+  const duplicateNames = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const skill of skills) counts.set(skill.name, (counts.get(skill.name) ?? 0) + 1);
+    const dups = new Set<string>();
+    for (const [name, count] of counts) if (count >= 2) dups.add(name);
+    return dups;
+  }, [skills]);
   const donutStyle = { "--ok": cardsSummary.portable, "--warn": cardsSummary.agentBound, "--bad": cardsSummary.invalid, "--all": Math.max(cardsSummary.total, 1) } as React.CSSProperties;
 
   if (totalSkillCount === 0) {
@@ -249,7 +260,7 @@ function Overview({ skills, summary, selected, toggleSkill, lang, selectedAgent,
         {tableEmpty ? (
           <div className="empty-state table-empty"><Info size={20} /><h2>{t.noMatchTitle}</h2><p>{t.noMatchBody}</p></div>
         ) : (
-          <div className="skill-table scrollable-list">{skills.map((skill) => <SkillRow key={skill.id} skill={skill} selected={selected.has(skill.id)} onToggle={toggleSkill} lang={lang} />)}</div>
+          <div className="skill-table scrollable-list">{skills.map((skill) => <SkillRow key={skill.id} skill={skill} selected={selected.has(skill.id)} onToggle={toggleSkill} lang={lang} showAgent={duplicateNames.has(skill.name)} />)}</div>
         )}
       </div>
     </section>
