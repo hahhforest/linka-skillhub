@@ -195,7 +195,7 @@ function Sidebar({ view, setView, agents, selectedAgent, setSelectedAgent, lang 
   );
 }
 
-function Overview({ skills, summary, selected, toggleSkill, lang, selectedAgent, totalSkillCount, fallbackSkills, fallbackSummary, allSkills }: {
+function Overview({ skills, summary, selected, toggleSkill, lang, selectedAgent, totalSkillCount, fallbackSkills, fallbackSummary, allSkills, query, onClearFilters }: {
   readonly skills: SkillPackage[];
   readonly summary: Summary;
   readonly selected: Set<string>;
@@ -206,6 +206,8 @@ function Overview({ skills, summary, selected, toggleSkill, lang, selectedAgent,
   readonly fallbackSkills: SkillPackage[];
   readonly fallbackSummary: Summary;
   readonly allSkills: SkillPackage[];
+  readonly query: string;
+  readonly onClearFilters: () => void;
 }) {
   const t = messages[lang];
   // When the query filters everything out, keep stat cards / charts based on
@@ -214,6 +216,17 @@ function Overview({ skills, summary, selected, toggleSkill, lang, selectedAgent,
   const tableEmpty = summary.total === 0;
   const cardsSkills = tableEmpty ? fallbackSkills : skills;
   const cardsSummary = tableEmpty ? fallbackSummary : summary;
+  const isFiltered = query.trim().length > 0 || selectedAgent !== null;
+  const filteredBanner = isFiltered && totalSkillCount > 0 ? (
+    <div className="filtered-banner span-all">
+      <span>
+        {t.filteredHint
+          .replace("{visible}", String(skills.length))
+          .replace("{total}", String(totalSkillCount))}
+      </span>
+      <button className="ghost" type="button" onClick={onClearFilters}>{t.clearFilters}</button>
+    </div>
+  ) : null;
   const byAgent = useMemo(() => {
     const counts = new Map<string, number>();
     for (const skill of cardsSkills) counts.set(skill.source.agent, (counts.get(skill.source.agent) ?? 0) + 1);
@@ -234,12 +247,19 @@ function Overview({ skills, summary, selected, toggleSkill, lang, selectedAgent,
     return <section className="work-card empty-state span-all"><Info size={24} /><h2>{t.noScanTitle}</h2><p>{t.noScanBody}</p></section>;
   }
   if (cardsSummary.total === 0) {
-    return <section className="work-card empty-state span-all"><Info size={24} /><h2>{t.noMatchTitle}</h2><p>{t.noMatchBody}</p></section>;
+    return (
+      <section className="panel-grid overview-grid">
+        <div className="section-head span-all"><div><h2>{t.overview}</h2><p>{t.currentScope}: {selectedAgent ? agentTone[selectedAgent]?.label : t.allSources}</p></div></div>
+        {filteredBanner}
+        <section className="work-card empty-state span-all"><Info size={24} /><h2>{t.noMatchTitle}</h2><p>{t.noMatchBody}</p></section>
+      </section>
+    );
   }
 
   return (
     <section className="panel-grid overview-grid">
       <div className="section-head span-all"><div><h2>{t.overview}</h2><p>{t.currentScope}: {selectedAgent ? agentTone[selectedAgent]?.label : t.allSources}</p></div></div>
+      {filteredBanner}
       <StatCard tone="neutral" title={t.totalSkills} value={cardsSummary.total} sub={`${cardsSummary.valid} ${t.valid}`} icon={<PackageCheck size={18} />} />
       <StatCard tone="success" title={t.shareable} value={cardsSummary.portable} sub={t.defaultDistributionScope} icon={<Check size={18} />} />
       <StatCard tone="warning" title={t.agentBound} value={cardsSummary.agentBound} sub={t.needsConfirmation} icon={<AlertTriangle size={18} />} />
@@ -377,6 +397,7 @@ export function App() {
   const fallbackSummary = useMemo(() => summarizeSkills(agentFilteredSkills), [agentFilteredSkills]);
 
   const toggleSkill = (id: string) => { const next = new Set(selected); next.has(id) ? next.delete(id) : next.add(id); setSelected(next); };
+  const clearFilters = () => { setQuery(""); setSelectedAgent(null); };
 
   const runScan = async () => { setBusy(true); try { const scan = await api.scan(includeBuiltin); setSkills(scan.skills); setMessage(`${t.scan}: ${scan.summary.total}`); setDialog(null); } catch (error) { setMessage(humanizeError(error, lang)); } finally { setBusy(false); } };
   const importRepo = async () => { setBusy(true); try { const result = await api.import(); setMessage(`${t.imported} ${result.imported} skills → ${result.repoPath}`); await loadShell(); } catch (error) { setMessage(humanizeError(error, lang)); } finally { setBusy(false); } };
@@ -435,7 +456,7 @@ export function App() {
       <div className="workspace">
         <Sidebar view={view} setView={setView} agents={agents} selectedAgent={selectedAgent} setSelectedAgent={setSelectedAgent} lang={lang} />
         <div className="content">
-          {view === "overview" && <Overview skills={visibleSkills} summary={summary} selected={selected} toggleSkill={toggleSkill} lang={lang} selectedAgent={selectedAgent} totalSkillCount={skills.length} fallbackSkills={agentFilteredSkills} fallbackSummary={fallbackSummary} allSkills={skills} />}
+          {view === "overview" && <Overview skills={visibleSkills} summary={summary} selected={selected} toggleSkill={toggleSkill} lang={lang} selectedAgent={selectedAgent} totalSkillCount={skills.length} fallbackSkills={agentFilteredSkills} fallbackSummary={fallbackSummary} allSkills={skills} query={query} onClearFilters={clearFilters} />}
           {view === "repo" && <RepoView onImport={importRepo} onReview={() => void openReviewDialog("rules")} onAgentReview={() => void openReviewDialog("codex")} onRefreshGit={refreshGit} onPull={pullRegistry} onPush={pushRegistry} gitStatus={gitStatusText} commitMessage={commitMessage} setCommitMessage={setCommitMessage} busy={busy} message={message} lang={lang} registryRepo={registryRepo} onRegistryLoaded={(result) => { setRegistryRepo(result.repoPath); if (result.skills) setSkills(result.skills); setMessage(`${messages[lang].loadRegistrySuccess}: ${result.repoPath} (${result.skillCount ?? result.skills?.length ?? 0})`); }} />}
           {view !== "overview" && view !== "repo" && <Placeholder view={view} lang={lang} skills={visibleSkills} targets={targets} selected={selected} toggleSkill={toggleSkill} plan={plan} onPlan={planDistribution} onApply={applyDistribution} />}
           <footer className="status-footer"><span>{agents.length} agents</span><span>{selected.size} {t.selectedCount}</span><span className="status-message" title={message}>{message}</span></footer>

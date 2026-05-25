@@ -327,6 +327,28 @@ textarea:focus-visible {
 }
 .section-head h2 { margin: 0; font-size: var(--fs-xl); }
 
+.filtered-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  padding: var(--sp-2) var(--sp-3);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--primary-soft);
+  color: var(--text-2);
+  font-size: var(--fs-sm);
+  font-variant-numeric: tabular-nums;
+}
+.filtered-banner span { color: var(--text-2); }
+.filtered-banner button.ghost {
+  min-width: 0;
+  height: var(--ctrl-sm);
+  padding: 0 var(--sp-3);
+  font-size: var(--fs-xs);
+  background: var(--surface);
+}
+
 .stat-card, .work-card, .action-card {
   border: 1px solid var(--border);
   border-radius: var(--r-md);
