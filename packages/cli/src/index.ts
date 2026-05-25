@@ -20,7 +20,8 @@ import {
   writeRegistryManifest,
   writeReviewResult,
   type AgentKind,
-  type ReviewLanguage
+  type ReviewLanguage,
+  type SkillPackage
 } from "@linka-skillhub/core";
 import { defaultRepoPath, startServer } from "./server.js";
 import { assertInteractiveOrYes, summarizeCopyForPrompt, summarizePlanForPrompt } from "./prompts.js";
@@ -122,6 +123,59 @@ const warnDeprecated = (from: string, to: string): void => {
   process.stderr.write(`[linka-skillhub] '${from}' is deprecated; use '${to}' instead.\n`);
 };
 
+const truncate = (value: string, max: number): string =>
+  value.length <= max ? value : `${value.slice(0, Math.max(0, max - 1))}…`;
+
+const formatRegistryListHuman = (repoPath: string, skills: readonly SkillPackage[]): string => {
+  const total = skills.length;
+  const autoFixed = skills.filter((skill) => skill.auto_fixed === true).length;
+  const byAgent = new Map<AgentKind, number>(KNOWN_AGENTS.map((agent) => [agent, 0] as const));
+  for (const skill of skills) {
+    byAgent.set(skill.source.agent, (byAgent.get(skill.source.agent) ?? 0) + 1);
+  }
+  const lines: string[] = [];
+  lines.push(`Registry ${repoPath}: ${total} skills (auto_fixed: ${autoFixed})`);
+  lines.push(`By agent: ${KNOWN_AGENTS.map((agent) => `${agent} ${byAgent.get(agent) ?? 0}`).join("  ")}`);
+  lines.push("");
+  if (total === 0) {
+    lines.push("(no skills imported; run 'lsh registry import' to populate this registry)");
+    return `${lines.join("\n")}\n`;
+  }
+  const W_ID = 18;
+  const W_NAME = 24;
+  const W_AGENT = 20;
+  lines.push(`${"ID".padEnd(W_ID)}${"NAME".padEnd(W_NAME)}${"AGENT/SCOPE".padEnd(W_AGENT)}STATUS`);
+  for (const skill of skills.slice(0, 30)) {
+    const id = truncate(skill.id, W_ID - 1).padEnd(W_ID);
+    const name = truncate(skill.name, W_NAME - 2).padEnd(W_NAME);
+    const agentScope = truncate(`${skill.source.agent}/${skill.source.scope}`, W_AGENT - 2).padEnd(W_AGENT);
+    const status = skill.status.join(",");
+    lines.push(`${id}${name}${agentScope}${status}`);
+  }
+  if (total > 30) lines.push(`... ${total - 30} more. Use --json for full output.`);
+  return `${lines.join("\n")}\n`;
+};
+
+const formatRegistryShowHuman = (skill: SkillPackage): string => {
+  const lines: string[] = [];
+  lines.push(skill.name);
+  if (skill.description) lines.push(skill.description);
+  lines.push("");
+  lines.push(`Status:  ${skill.status.join(", ")}`);
+  lines.push(`Source:  ${skill.source.agent}/${skill.source.scope}`);
+  lines.push(`Path:    ${skill.skillDir}`);
+  lines.push(`Hash:    ${skill.hash.slice(0, 16)}`);
+  lines.push(`Variant: ${skill.variantId}`);
+  lines.push(`Updated: ${skill.updatedAt}`);
+  if (skill.auto_fixed === true) lines.push(`Auto-fixed: yes`);
+  const issuesText =
+    skill.issues.length === 0
+      ? "(none)"
+      : skill.issues.map((issue) => `${issue.code}: ${issue.message}`).join("; ");
+  lines.push(`Issues:  ${issuesText}`);
+  return `${lines.join("\n")}\n`;
+};
+
 const handleConfirmationFailure = async (promise: Promise<void>): Promise<boolean> => {
   try {
     await promise;
@@ -213,18 +267,24 @@ registry
   .command("list")
   .description("List skills already imported into the active registry.")
   .option("--repo <path>", "Registry path; defaults to profile registryRepo.")
-  .action(async (options: { repo?: string }) => {
+  .option("--json", "Print full JSON output instead of the human summary.")
+  .action(async (options: { repo?: string; json?: boolean }) => {
     const runtime = await loadRuntimeConfig();
     const repoPath = resolveRepoOption(options.repo, runtime.profile.registryRepo);
     const manifest = await readRegistryManifest(repoPath);
-    printJson({ repoPath, count: manifest.skills.length, skills: manifest.skills });
+    if (options.json) {
+      printJson({ repoPath, count: manifest.skills.length, skills: manifest.skills });
+      return;
+    }
+    process.stdout.write(formatRegistryListHuman(repoPath, manifest.skills));
   });
 
 registry
   .command("show <id>")
   .description("Show a single skill by id from the active registry.")
   .option("--repo <path>", "Registry path; defaults to profile registryRepo.")
-  .action(async (id: string, options: { repo?: string }) => {
+  .option("--json", "Print full JSON output instead of the human summary.")
+  .action(async (id: string, options: { repo?: string; json?: boolean }) => {
     const runtime = await loadRuntimeConfig();
     const repoPath = resolveRepoOption(options.repo, runtime.profile.registryRepo);
     const manifest = await readRegistryManifest(repoPath);
@@ -234,7 +294,11 @@ registry
       process.exitCode = 2;
       return;
     }
-    printJson(skill);
+    if (options.json) {
+      printJson(skill);
+      return;
+    }
+    process.stdout.write(formatRegistryShowHuman(skill));
   });
 
 program
