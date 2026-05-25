@@ -32,7 +32,7 @@ await expectText("Skill 管理工具", "Chinese app title after switch back");
 await page.getByRole("button", { name: /扫描 skills/ }).click();
 await expectText("确认扫描来源", "scan confirmation dialog");
 await screenshot("03-scan-dialog");
-await page.getByRole("button", { name: /取消/ }).click();
+await page.locator(".dialog .ghost", { hasText: "取消" }).click();
 let body = await page.locator("body").innerText();
 if (body.includes("确认扫描来源")) failures.push("Scan dialog did not close after cancel");
 
@@ -60,7 +60,7 @@ await expectText("输出语言", "review output language");
 await expectText("写入位置", "review write target");
 await expectText("Codex", "codex reviewer option");
 await screenshot("06-review-dialog");
-await page.getByRole("button", { name: /取消/ }).click();
+await page.locator(".dialog .ghost", { hasText: "取消" }).click();
 
 await page.getByRole("button", { name: /交汇中心/ }).click();
 await expectText("来源路径", "intersection source path");
