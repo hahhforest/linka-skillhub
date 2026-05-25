@@ -3,6 +3,7 @@ import path from "node:path";
 import { Command } from "commander";
 import {
   applyDistributionPlan,
+  applyFrontmatterFix,
   createDistributionPlan,
   gitCommitAll,
   gitPull,
@@ -15,6 +16,7 @@ import {
   reviewSkillWithRules,
   scanSkills,
   setRemote,
+  writeRegistryManifest,
   writeReviewResult,
   type AgentKind
 } from "@linka-skillhub/core";
@@ -395,6 +397,73 @@ profileCmd
   .action(async () => {
     const runtime = await loadRuntimeConfig();
     printJson({ activeProfile: runtime.profileName, stateDir: runtime.profile.stateDir, registryRepo: runtime.profile.registryRepo });
+  });
+
+const fix = program.command("fix").description("Repair or annotate registry content in place.");
+fix
+  .command("frontmatter <id>")
+  .description("Auto-fill SKILL.md frontmatter for an invalid skill. By default, only writes under the active profile's sandbox sources.")
+  .option("--repo <path>", "Registry path; defaults to profile registryRepo.")
+  .option("--allow-unsafe-source", "Allow writing to skill sources outside the active profile's sandbox.")
+  .option("--dry-run", "Print what would be written without modifying any files.")
+  .option("--yes", "Skip confirmation prompt (REQUIRED in non-interactive shells).")
+  .action(async (id: string, options: { repo?: string; allowUnsafeSource?: boolean; dryRun?: boolean; yes?: boolean }) => {
+    const runtime = await loadRuntimeConfig();
+    const repoPath = resolveRepoOption(options.repo, runtime.profile.registryRepo);
+    const manifest = await readRegistryManifest(repoPath);
+    const skill = manifest.skills.find((entry) => entry.id === id);
+    if (!skill) {
+      process.stderr.write(`Skill not found in registry: ${id}\n`);
+      process.exitCode = 2;
+      return;
+    }
+    const profileRoot = options.dryRun
+      ? undefined
+      : runtime.profileName === "mirror"
+        ? path.resolve(invocationCwd, ".sandbox")
+        : options.allowUnsafeSource
+          ? invocationCwd
+          : runtime.profile.stateDir;
+    const fixResult = await applyFrontmatterFix(skill, {
+      cwd: invocationCwd,
+      profileRoot,
+      allowUnsafeSource: options.allowUnsafeSource === true || options.dryRun === true || runtime.profileName === "mirror",
+      dryRun: options.dryRun
+    });
+    if (fixResult.applied) {
+      const updatedSkills = manifest.skills.map((entry) => {
+        if (entry.id !== id) return entry;
+        return {
+          ...entry,
+          frontmatter: { ...(fixResult.newFrontmatter ?? {}) },
+          issues: [],
+          status: entry.status.filter((s) => s !== "invalid"),
+          auto_fixed: true
+        };
+      });
+      await handleConfirmationFailure(
+        assertInteractiveOrYes({
+          action: "fix frontmatter",
+          summary: [
+            `Skill: ${skill.name} (${id})`,
+            `Source dir: ${skill.skillDir}`,
+            `New frontmatter: ${JSON.stringify(fixResult.newFrontmatter)}`,
+            `Will rewrite manifest: ${repoPath}/registry/skills.json`
+          ],
+          totalItems: 1,
+          yes: options.yes
+        })
+      );
+      const nextManifest = { ...manifest, skills: updatedSkills, generatedAt: new Date().toISOString() };
+      await writeRegistryManifest(repoPath, nextManifest);
+      process.stdout.write(`Frontmatter applied to ${skill.skillFile}\n`);
+    } else {
+      process.stdout.write(`No change: ${fixResult.reason ?? "unknown"}\n`);
+      if (fixResult.reason === "dry_run" && fixResult.newFrontmatter) {
+        process.stdout.write(`Would write frontmatter: ${JSON.stringify(fixResult.newFrontmatter)}\n`);
+      }
+    }
+    printJson({ id, ...fixResult });
   });
 
 program
