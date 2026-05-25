@@ -19,6 +19,7 @@ import {
   reviewSkillWithRules,
   scanSkills,
   setRemote,
+  validateRegistryPath,
   writeReviewResult,
   type AgentKind,
   type SkillHubConfig,
@@ -128,13 +129,17 @@ const listReviewers = async (cwd: string, config?: SkillHubConfig, profileName?:
 };
 
 export const startServer = (options: ServerOptions): http.Server => {
-  const allowedRepoRoot = path.resolve(options.repoPath);
+  let currentRepoPath = path.resolve(options.repoPath);
+  let currentRepoIsExternal = false;
+  const profileRepoRoot = path.resolve(options.repoPath);
+  const profileRoot = options.stateDir ? path.dirname(path.resolve(options.stateDir)) : path.resolve(options.cwd);
   const resolveRepoPath = (repoPath?: string): string => {
-    const resolved = repoPath ? path.resolve(options.cwd, repoPath) : options.repoPath;
-    if (path.resolve(resolved) !== allowedRepoRoot) {
-      throw new Error(`Registry path is locked to the active profile repo: ${allowedRepoRoot}`);
+    if (!repoPath) return currentRepoPath;
+    const resolved = path.resolve(options.cwd, repoPath);
+    if (path.resolve(resolved) === currentRepoPath || path.resolve(resolved) === profileRepoRoot) {
+      return resolved;
     }
-    return resolved;
+    throw new Error(`Registry path is locked to the active session repo: ${currentRepoPath}`);
   };
   const server = http.createServer(async (request, response) => {
     try {
@@ -151,8 +156,47 @@ export const startServer = (options: ServerOptions): http.Server => {
           targets: getDistributionTargets(options.cwd, options.config, options.profileName),
           sources,
           profile: options.profileName,
-          registryRepo: options.repoPath,
+          registryRepo: currentRepoPath,
+          registryRepoIsExternal: currentRepoIsExternal,
           stateDir: options.stateDir
+        });
+        return;
+      }
+
+      if (request.method === "POST" && url.pathname === "/api/registry/validate") {
+        const body = await readJsonBody<{ repoPath: string }>(request);
+        if (!body.repoPath || typeof body.repoPath !== "string") {
+          sendJson(response, 400, { error: "repoPath is required", code: "missing_repo_path" });
+          return;
+        }
+        const result = await validateRegistryPath(body.repoPath, { cwd: options.cwd, profileRoot });
+        sendJson(response, result.ok ? 200 : 400, result);
+        return;
+      }
+
+      if (request.method === "POST" && url.pathname === "/api/registry/load") {
+        const body = await readJsonBody<{ repoPath: string }>(request);
+        if (!body.repoPath || typeof body.repoPath !== "string") {
+          sendJson(response, 400, { error: "repoPath is required", code: "missing_repo_path" });
+          return;
+        }
+        const validation = await validateRegistryPath(body.repoPath, { cwd: options.cwd, profileRoot });
+        if (!validation.ok) {
+          sendJson(response, 400, { error: `Cannot load registry: ${validation.reason ?? "unknown"}`, code: validation.reason, repoPath: validation.repoPath });
+          return;
+        }
+        currentRepoPath = validation.repoPath;
+        currentRepoIsExternal = path.resolve(currentRepoPath) !== profileRepoRoot;
+        const manifest = await readRegistryManifest(currentRepoPath);
+        sendJson(response, 200, {
+          ok: true,
+          repoPath: currentRepoPath,
+          isExternal: currentRepoIsExternal,
+          profile: options.profileName,
+          registryRepo: currentRepoPath,
+          manifestVersion: manifest.version,
+          skills: manifest.skills,
+          summary: summarize(manifest.skills)
         });
         return;
       }
@@ -239,25 +283,25 @@ export const startServer = (options: ServerOptions): http.Server => {
       }
 
       if (request.method === "GET" && url.pathname === "/api/repo/status") {
-        sendJson(response, 200, { status: await gitStatus(options.repoPath) });
+        sendJson(response, 200, { status: await gitStatus(currentRepoPath) });
         return;
       }
 
       if (request.method === "POST" && url.pathname === "/api/repo/connect") {
         const body = await readJsonBody<{ remoteUrl: string }>(request);
-        await setRemote(options.repoPath, body.remoteUrl);
-        sendJson(response, 200, { ok: true, status: await gitStatus(options.repoPath) });
+        await setRemote(currentRepoPath, body.remoteUrl);
+        sendJson(response, 200, { ok: true, status: await gitStatus(currentRepoPath) });
         return;
       }
 
       if (request.method === "POST" && url.pathname === "/api/repo/pull") {
-        sendJson(response, 200, { output: await gitPull(options.repoPath) });
+        sendJson(response, 200, { output: await gitPull(currentRepoPath) });
         return;
       }
 
       if (request.method === "POST" && url.pathname === "/api/repo/push") {
         const body = await readJsonBody<{ message?: string }>(request);
-        sendJson(response, 200, { commit: await gitCommitAll(options.repoPath, body.message ?? "更新技能仓库"), output: await gitPush(options.repoPath) });
+        sendJson(response, 200, { commit: await gitCommitAll(currentRepoPath, body.message ?? "更新技能仓库"), output: await gitPush(currentRepoPath) });
         return;
       }
 
