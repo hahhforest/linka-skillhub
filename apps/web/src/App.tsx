@@ -451,7 +451,7 @@ export function App() {
     <main className="app-shell">
       <header className="topbar">
         <div className="product-title"><div className="brand-cube large">◆</div><div><h1>{t.appTitle}</h1><p title={`${profileLabel(profile, lang)} · ${t.registry}: ${registryRepo || "-"}`}>{profileLabel(profile, lang)} · {t.registry}: {registryRepo || "-"}</p></div></div>
-        <div className="top-actions"><div className="search-box"><Search size={16} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t.search} /></div><button className="ghost" onClick={() => setDialog("scan")}>{busy ? <Loader2 className="spin" size={16} /> : <RefreshCw size={16} />} {busy ? t.scanning : t.scan}</button><button className="ghost" onClick={() => setLang(lang === "zh" ? "en" : "zh")}>{t.language}</button></div>
+        <div className="top-actions"><div className="search-box"><Search size={16} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t.search} />{query && (<button className="search-clear" onClick={() => setQuery("")} aria-label={t.clearSearch} type="button"><X size={14} /></button>)}</div><button className="ghost" onClick={() => setDialog("scan")}>{busy ? <Loader2 className="spin" size={16} /> : <RefreshCw size={16} />} {busy ? t.scanning : t.scan}</button><button className="ghost" onClick={() => setLang(lang === "zh" ? "en" : "zh")}>{t.language}</button></div>
       </header>
       <div className="workspace">
         <Sidebar view={view} setView={setView} agents={agents} selectedAgent={selectedAgent} setSelectedAgent={setSelectedAgent} lang={lang} />

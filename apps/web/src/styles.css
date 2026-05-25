@@ -195,6 +195,19 @@ textarea:focus-visible {
   background: transparent;
   color: var(--text);
 }
+.search-clear {
+  border: 0;
+  background: transparent;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--sp-1);
+  border-radius: var(--r-sm);
+  color: var(--muted);
+  cursor: pointer;
+}
+.search-clear:hover { color: var(--text); background: var(--surface-2); }
+.search-clear:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
 
 .ghost, .primary, .icon-button, .status-footer button {
   border: 1px solid var(--border);

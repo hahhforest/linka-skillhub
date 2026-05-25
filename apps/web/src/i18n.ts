@@ -4,6 +4,7 @@ export const messages = {
   zh: {
     appTitle: "Skill 管理工具",
     search: "搜索 skills...",
+    clearSearch: "清除搜索",
     scan: "扫描 skills",
     scanning: "扫描中",
     language: "English",
@@ -143,6 +144,7 @@ export const messages = {
   en: {
     appTitle: "Skill Manager",
     search: "Search skills...",
+    clearSearch: "Clear search",
     scan: "Scan skills",
     scanning: "Scanning",
     language: "中文",
