@@ -1113,6 +1113,16 @@ textarea:focus-visible {
   gap: var(--sp-3);
 }
 .intersection-actions > svg { color: var(--primary); }
+.intersection-actions .warning-line {
+  background: #fef3c7;
+  color: #a16207;
+  border-left: 3px solid var(--warning);
+  border-radius: var(--r-sm);
+  padding: var(--sp-2) var(--sp-3);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-medium);
+  margin: 0;
+}
 .selected-chip-list {
   display: grid;
   gap: var(--sp-2);

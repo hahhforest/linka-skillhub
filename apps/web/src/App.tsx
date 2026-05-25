@@ -487,21 +487,29 @@ function Intersect({ skills, targets, selected, toggleSkill, lang, plan, onPlan,
   const t = messages[lang];
   const [from, setFrom] = useState("mavis");
   const [to, setTo] = useState("claude");
+  const agents = Object.keys(agentTone);
+  const handleFromChange = (newFrom: string) => {
+    setFrom(newFrom);
+    if (newFrom === to) {
+      const next = agents.find((agent) => agent !== newFrom);
+      if (next) setTo(next);
+    }
+  };
+  const sameSourceTarget = from === to;
   const left = skills.filter((skill) => skill.source.agent === from).slice(0, 40);
   const right = skills.filter((skill) => skill.source.agent === to).slice(0, 40);
   const selectedSkills = skills.filter((skill) => selected.has(skill.id) && skill.source.agent === from);
   const selectedIds = selectedSkills.map((skill) => skill.id);
   const sourcePath = left[0]?.source.rootPath ?? "-";
   const targetPath = targets.find((target) => target.agent === to)?.targetDir ?? "-";
-  const agents = Object.keys(agentTone);
   return (
     <section className="intersect-layout">
       <div className="section-head span-all">
         <div><h2>{t.navIntersect}</h2><p>{t.intersectDesc}</p></div>
         <div className="agent-selects">
-          <select value={from} onChange={(event) => setFrom(event.target.value)}>{agents.map((agent) => <option key={agent} value={agent}>{agentTone[agent]?.label}</option>)}</select>
+          <select value={from} onChange={(event) => handleFromChange(event.target.value)}>{agents.map((agent) => <option key={agent} value={agent}>{agentTone[agent]?.label}</option>)}</select>
           <ArrowRight size={18} />
-          <select value={to} onChange={(event) => setTo(event.target.value)}>{agents.map((agent) => <option key={agent} value={agent}>{agentTone[agent]?.label}</option>)}</select>
+          <select value={to} onChange={(event) => setTo(event.target.value)}>{agents.map((agent) => <option key={agent} value={agent} disabled={agent === from}>{agentTone[agent]?.label}</option>)}</select>
         </div>
       </div>
       <div className="work-card lane-card">
@@ -510,12 +518,13 @@ function Intersect({ skills, targets, selected, toggleSkill, lang, plan, onPlan,
         <div className="skill-list compact scrollable-list">{left.map((skill) => <SkillRow key={skill.id} skill={skill} selected={selected.has(skill.id)} onToggle={toggleSkill} lang={lang} />)}</div>
       </div>
       <div className="work-card intersection-actions">
+        {sameSourceTarget && <p className="warning-line" role="alert">{t.sameSourceTargetWarning}</p>}
         <GitCompareArrows size={26} />
         <strong>{selectedSkills.length} {t.selectedSkills}</strong>
         <div className="selected-chip-list">{selectedSkills.slice(0, 8).map((skill) => <span key={skill.id}>{skill.name}</span>)}</div>
         {selectedSkills.length === 0 && <p className="muted-copy">{t.noSourceSelection}</p>}
-        <button className="primary" disabled={selectedSkills.length === 0} onClick={() => onPlan([to], selectedIds)}><UploadCloud size={16} /> {t.previewIntersection}</button>
-        {plan && selectedSkills.length > 0 && <button className="primary" onClick={() => onApply([to], selectedIds)}><Check size={16} /> {t.applyIntersection}</button>}
+        <button className="primary" disabled={selectedSkills.length === 0 || sameSourceTarget} onClick={() => onPlan([to], selectedIds)}><UploadCloud size={16} /> {t.previewIntersection}</button>
+        {plan && selectedSkills.length > 0 && !sameSourceTarget && <button className="primary" onClick={() => onApply([to], selectedIds)}><Check size={16} /> {t.applyIntersection}</button>}
         {plan && <><h3>{t.planSummary}</h3><PlanItems plan={plan} lang={lang} /></>}
       </div>
       <div className="work-card lane-card">
