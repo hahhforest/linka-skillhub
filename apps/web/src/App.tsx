@@ -190,7 +190,7 @@ function Sidebar({ view, setView, agents, selectedAgent, setSelectedAgent, lang 
   );
 }
 
-function Overview({ skills, summary, selected, toggleSkill, lang, selectedAgent, totalSkillCount }: {
+function Overview({ skills, summary, selected, toggleSkill, lang, selectedAgent, totalSkillCount, fallbackSkills, fallbackSummary }: {
   readonly skills: SkillPackage[];
   readonly summary: Summary;
   readonly selected: Set<string>;
@@ -198,45 +198,57 @@ function Overview({ skills, summary, selected, toggleSkill, lang, selectedAgent,
   readonly lang: Language;
   readonly selectedAgent: string | null;
   readonly totalSkillCount: number;
+  readonly fallbackSkills: SkillPackage[];
+  readonly fallbackSummary: Summary;
 }) {
   const t = messages[lang];
+  // When the query filters everything out, keep stat cards / charts based on
+  // the agent-filtered scope so the page does not collapse to a single empty
+  // state. Only the scan-results table shows the no-match message.
+  const tableEmpty = summary.total === 0;
+  const cardsSkills = tableEmpty ? fallbackSkills : skills;
+  const cardsSummary = tableEmpty ? fallbackSummary : summary;
   const byAgent = useMemo(() => {
     const counts = new Map<string, number>();
-    for (const skill of skills) counts.set(skill.source.agent, (counts.get(skill.source.agent) ?? 0) + 1);
+    for (const skill of cardsSkills) counts.set(skill.source.agent, (counts.get(skill.source.agent) ?? 0) + 1);
     return [...counts.entries()].sort((a, b) => b[1] - a[1]);
-  }, [skills]);
-  const donutStyle = { "--ok": summary.portable, "--warn": summary.agentBound, "--bad": summary.invalid, "--all": Math.max(summary.total, 1) } as React.CSSProperties;
+  }, [cardsSkills]);
+  const donutStyle = { "--ok": cardsSummary.portable, "--warn": cardsSummary.agentBound, "--bad": cardsSummary.invalid, "--all": Math.max(cardsSummary.total, 1) } as React.CSSProperties;
 
   if (totalSkillCount === 0) {
     return <section className="work-card empty-state span-all"><Info size={24} /><h2>{t.noScanTitle}</h2><p>{t.noScanBody}</p></section>;
   }
-  if (summary.total === 0) {
+  if (cardsSummary.total === 0) {
     return <section className="work-card empty-state span-all"><Info size={24} /><h2>{t.noMatchTitle}</h2><p>{t.noMatchBody}</p></section>;
   }
 
   return (
     <section className="panel-grid overview-grid">
       <div className="section-head span-all"><div><h2>{t.overview}</h2><p>{t.currentScope}: {selectedAgent ? agentTone[selectedAgent]?.label : t.allSources}</p></div></div>
-      <StatCard tone="neutral" title={t.totalSkills} value={summary.total} sub={`${summary.valid} ${t.valid}`} icon={<PackageCheck size={18} />} />
-      <StatCard tone="success" title={t.shareable} value={summary.portable} sub={t.defaultDistributionScope} icon={<Check size={18} />} />
-      <StatCard tone="warning" title={t.agentBound} value={summary.agentBound} sub={t.needsConfirmation} icon={<AlertTriangle size={18} />} />
-      <StatCard tone="danger" title={t.problematic} value={summary.invalid} sub={t.blockedByDefault} icon={<ShieldAlert size={18} />} />
+      <StatCard tone="neutral" title={t.totalSkills} value={cardsSummary.total} sub={`${cardsSummary.valid} ${t.valid}`} icon={<PackageCheck size={18} />} />
+      <StatCard tone="success" title={t.shareable} value={cardsSummary.portable} sub={t.defaultDistributionScope} icon={<Check size={18} />} />
+      <StatCard tone="warning" title={t.agentBound} value={cardsSummary.agentBound} sub={t.needsConfirmation} icon={<AlertTriangle size={18} />} />
+      <StatCard tone="danger" title={t.problematic} value={cardsSummary.invalid} sub={t.blockedByDefault} icon={<ShieldAlert size={18} />} />
 
       <div className="work-card source-card">
         <h3>{t.sourceDistribution}</h3>
         <div className="source-bars">
           {byAgent.map(([agent, count]) => (
-            <div key={agent}><span><AgentLogo agent={agent} /> {agentTone[agent]?.label ?? agent}</span><strong>{count}</strong><div className="bar-track"><i style={{ width: `${summary.total ? (count / summary.total) * 100 : 0}%` }} /></div></div>
+            <div key={agent}><span><AgentLogo agent={agent} /> {agentTone[agent]?.label ?? agent}</span><strong>{count}</strong><div className="bar-track"><i style={{ width: `${cardsSummary.total ? (count / cardsSummary.total) * 100 : 0}%` }} /></div></div>
           ))}
         </div>
       </div>
       <div className="work-card donut-card">
         <h3>{t.statusDistribution}</h3><div className="donut" style={donutStyle} />
-        <div className="status-list"><span><i className="dot ok" />{t.shareable} {summary.portable}</span><span><i className="dot warn" />{t.agentBound} {summary.agentBound}</span><span><i className="dot bad" />{t.problematic} {summary.invalid}</span></div>
+        <div className="status-list"><span><i className="dot ok" />{t.shareable} {cardsSummary.portable}</span><span><i className="dot warn" />{t.agentBound} {cardsSummary.agentBound}</span><span><i className="dot bad" />{t.problematic} {cardsSummary.invalid}</span></div>
       </div>
       <div className="work-card table-card span-all">
         <div className="card-head"><div><h3>{t.scanResults}</h3><p>{t.selectionHint}</p></div><span>{selected.size} {t.selectedCount}</span></div>
-        <div className="skill-table scrollable-list">{skills.map((skill) => <SkillRow key={skill.id} skill={skill} selected={selected.has(skill.id)} onToggle={toggleSkill} lang={lang} />)}</div>
+        {tableEmpty ? (
+          <div className="empty-state table-empty"><Info size={20} /><h2>{t.noMatchTitle}</h2><p>{t.noMatchBody}</p></div>
+        ) : (
+          <div className="skill-table scrollable-list">{skills.map((skill) => <SkillRow key={skill.id} skill={skill} selected={selected.has(skill.id)} onToggle={toggleSkill} lang={lang} />)}</div>
+        )}
       </div>
     </section>
   );
@@ -254,7 +266,9 @@ function RepoView({ onImport, onReview, onAgentReview, onRefreshGit, onPull, onP
       <div className="work-card git-card">
         <h3>{t.gitStatus}</h3>
         <p className="muted-copy">{t.remoteSyncDesc}</p>
-        <pre>{gitStatus || t.waitingOperation}</pre>
+        {gitStatus
+          ? <pre>{gitStatus}</pre>
+          : <p className="git-empty-line"><Info size={14} /> {t.waitingOperation}</p>}
         <label className="field-label">{t.commitMessage}<input value={commitMessage} onChange={(event) => setCommitMessage(event.target.value)} /></label>
         <div className="button-row"><button className="ghost" onClick={onRefreshGit} disabled={busy}>{t.refreshGitStatus}</button><button className="ghost" onClick={onPull} disabled={busy}>{t.pullRegistry}</button><button className="primary" onClick={onPush} disabled={busy}>{t.pushRegistry}</button></div>
       </div>
@@ -313,11 +327,17 @@ export function App() {
 
   useEffect(() => { void loadShell().catch((error) => setMessage(error instanceof Error ? error.message : String(error))); }, []);
 
+  const agentFilteredSkills = useMemo(
+    () => skills.filter((skill) => !selectedAgent || skill.source.agent === selectedAgent),
+    [selectedAgent, skills]
+  );
   const visibleSkills = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return skills.filter((skill) => (!selectedAgent || skill.source.agent === selectedAgent) && (!q || `${skill.name} ${skill.description} ${skill.source.agent}`.toLowerCase().includes(q)));
-  }, [query, selectedAgent, skills]);
+    if (!q) return agentFilteredSkills;
+    return agentFilteredSkills.filter((skill) => `${skill.name} ${skill.description} ${skill.source.agent}`.toLowerCase().includes(q));
+  }, [query, agentFilteredSkills]);
   const summary = useMemo(() => summarizeSkills(visibleSkills), [visibleSkills]);
+  const fallbackSummary = useMemo(() => summarizeSkills(agentFilteredSkills), [agentFilteredSkills]);
   const selectedSkill = visibleSkills.find((skill) => selected.has(skill.id)) ?? visibleSkills[0];
 
   const toggleSkill = (id: string) => { const next = new Set(selected); next.has(id) ? next.delete(id) : next.add(id); setSelected(next); };
@@ -379,10 +399,10 @@ export function App() {
       <div className="workspace">
         <Sidebar view={view} setView={setView} agents={agents} selectedAgent={selectedAgent} setSelectedAgent={setSelectedAgent} lang={lang} />
         <div className="content">
-          {view === "overview" && <Overview skills={visibleSkills} summary={summary} selected={selected} toggleSkill={toggleSkill} lang={lang} selectedAgent={selectedAgent} totalSkillCount={skills.length} />}
+          {view === "overview" && <Overview skills={visibleSkills} summary={summary} selected={selected} toggleSkill={toggleSkill} lang={lang} selectedAgent={selectedAgent} totalSkillCount={skills.length} fallbackSkills={agentFilteredSkills} fallbackSummary={fallbackSummary} />}
           {view === "repo" && <RepoView onImport={importRepo} onReview={() => void openReviewDialog("rules")} onAgentReview={() => void openReviewDialog("codex")} onRefreshGit={refreshGit} onPull={pullRegistry} onPush={pushRegistry} gitStatus={gitStatusText} commitMessage={commitMessage} setCommitMessage={setCommitMessage} busy={busy} message={message} lang={lang} registryRepo={registryRepo} onRegistryLoaded={(result) => { setRegistryRepo(result.repoPath); if (result.skills) setSkills(result.skills); setMessage(`${messages[lang].loadRegistrySuccess}: ${result.repoPath} (${result.skillCount ?? result.skills?.length ?? 0})`); }} />}
           {view !== "overview" && view !== "repo" && <Placeholder view={view} lang={lang} skills={visibleSkills} targets={targets} selected={selected} toggleSkill={toggleSkill} plan={plan} onPlan={planDistribution} onApply={applyDistribution} selectedSkill={selectedSkill} />}
-          <footer className="status-footer"><span>{agents.length} agents</span><span>{selected.size} {t.selectedCount}</span><span>{message}</span></footer>
+          <footer className="status-footer"><span>{agents.length} agents</span><span>{selected.size} {t.selectedCount}</span><span className="status-message" title={message}>{message}</span></footer>
         </div>
       </div>
       {dialog === "scan" && <DialogFrame title={t.scanDialogTitle} onClose={() => setDialog(null)}><p>{t.scanDialogBody}</p><label className="checkbox-line"><input type="checkbox" checked={includeBuiltin} onChange={(event) => setIncludeBuiltin(event.target.checked)} /> {t.includeBuiltin}</label><div className="dialog-actions"><button className="ghost" onClick={() => setDialog(null)}>{t.cancel}</button><button className="primary" onClick={runScan} disabled={busy}>{t.confirmScan}</button></div></DialogFrame>}
@@ -456,7 +476,7 @@ function Distribute({ targets, selected, onPlan, onApply, plan, busy, lang }: { 
   const t = messages[lang];
   const [chosen, setChosen] = useState<Set<string>>(new Set(["codex", "claude"]));
   const toggle = (agent: string) => { const next = new Set(chosen); next.has(agent) ? next.delete(agent) : next.add(agent); setChosen(next); };
-  return <section className="panel-grid distribute-grid"><div className="section-head span-all"><div><h2>{t.navDistribute}</h2><p>{t.distributeDesc}</p></div><button className="primary" disabled={busy || selected.size === 0 || chosen.size === 0} onClick={() => onPlan([...chosen])}><UploadCloud size={16} /> {t.generatePlan}</button></div><div className="work-card target-card"><h3>{t.targets}</h3><div className="target-grid">{targets.map((target) => <button key={target.agent} className={chosen.has(target.agent) ? "target selected" : "target"} onClick={() => toggle(target.agent)}><AgentLogo agent={target.agent} /><span>{target.label}<small title={target.targetDir}>{target.targetDir}</small></span>{chosen.has(target.agent) && <Check size={16} />}</button>)}</div></div><div className="work-card plan-card"><h3>{t.planSummary}</h3>{plan ? <div className="plan-list"><strong>{plan.items.filter((item) => item.action !== "skip").length} {t.toCopyOrOverwrite}</strong><PlanItems plan={plan} lang={lang} /><button className="primary" disabled={busy || chosen.size === 0 || selected.size === 0} onClick={() => onApply([...chosen])}><Check size={16} /> {t.applyDistribution}</button></div> : <div className="empty-state"><Info size={18} />{t.waitingPlan}<button className="primary" disabled><Check size={16} /> {t.applyDistribution}</button></div>}</div></section>;
+  return <section className="panel-grid distribute-grid"><div className="section-head span-all"><div><h2>{t.navDistribute}</h2><p>{t.distributeDesc}</p></div><button className="primary" disabled={busy || selected.size === 0 || chosen.size === 0} onClick={() => onPlan([...chosen])}><UploadCloud size={16} /> {t.generatePlan}</button></div><div className="work-card target-card"><h3>{t.targets}</h3><div className="target-grid">{targets.map((target) => <button key={target.agent} className={chosen.has(target.agent) ? "target selected" : "target"} onClick={() => toggle(target.agent)}><AgentLogo agent={target.agent} /><span>{target.label}<small title={target.targetDir}>{target.targetDir}</small></span>{chosen.has(target.agent) && <Check size={16} />}</button>)}</div></div><div className="work-card plan-card"><h3>{t.planSummary}</h3>{plan ? <div className="plan-list"><strong>{plan.items.filter((item) => item.action !== "skip").length} {t.toCopyOrOverwrite}</strong><PlanItems plan={plan} lang={lang} /><button className="primary plan-apply-btn" disabled={busy || chosen.size === 0 || selected.size === 0} onClick={() => onApply([...chosen])}><Check size={16} /> {t.applyDistribution}</button></div> : <div className="empty-state"><Info size={18} />{t.waitingPlan}<button className="primary" disabled><Check size={16} /> {t.applyDistribution}</button></div>}</div></section>;
 }
 
 function Detail({ skill, lang }: { readonly skill?: SkillPackage; readonly lang: Language }) {

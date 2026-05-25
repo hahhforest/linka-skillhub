@@ -546,7 +546,7 @@ textarea:focus-visible {
   padding: 0 var(--sp-3);
   background: var(--surface);
 }
-.lane-card { min-height: 560px; }
+.lane-card { min-height: 320px; }
 .skill-list.compact .skill-row { grid-template-columns: 28px minmax(0, 1fr); }
 .skill-list.compact .status-pill { grid-column: 2; justify-self: start; }
 .drop-zone {
@@ -616,6 +616,11 @@ textarea:focus-visible {
 .plan-list span {
   border-bottom: 1px solid var(--surface-3);
   padding-bottom: var(--sp-2);
+}
+.plan-apply-btn {
+  max-width: 280px;
+  justify-self: end;
+  margin-top: var(--sp-1);
 }
 .empty-state, .detail-empty {
   min-height: 180px;
@@ -732,6 +737,13 @@ textarea:focus-visible {
   padding: 0 var(--sp-3);
   color: var(--muted);
   font-size: var(--fs-xs);
+}
+.status-footer .status-message {
+  max-width: 50%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: right;
 }
 .status-footer button {
   height: var(--ctrl-sm);
@@ -978,7 +990,7 @@ textarea:focus-visible {
   padding: var(--sp-2);
 }
 .intersection-actions {
-  min-height: 420px;
+  min-height: 200px;
   align-self: start;
   display: grid;
   align-content: start;
@@ -1112,6 +1124,18 @@ textarea:focus-visible {
   padding: var(--sp-3);
   font-family: var(--font-mono);
   font-size: var(--fs-xs);
+}
+.git-card .git-empty-line {
+  margin: 0;
+  padding: var(--sp-3);
+  border: 1px dashed var(--border);
+  border-radius: var(--r-md);
+  background: var(--surface-2);
+  color: var(--muted);
+  font-size: var(--fs-xs);
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
 }
 .field-label {
   display: grid;
