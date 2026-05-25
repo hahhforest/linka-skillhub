@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import fs from "node:fs/promises";
 import path from "node:path";
 import { Command } from "commander";
 import {
@@ -168,10 +169,33 @@ registry
   .description("Copy selected local skills into a registry repository.")
   .option("--repo <path>", "Registry path; defaults to profile registryRepo.")
   .option("--all", "Include builtin/system sources.")
+  .option("--create", "Allow creating a new registry directory if --repo path does not exist.")
   .option("--yes", "Skip confirmation prompt (REQUIRED in non-interactive shells).")
-  .action(async (options: { repo?: string; all?: boolean; yes?: boolean }) => {
+  .action(async (options: { repo?: string; all?: boolean; create?: boolean; yes?: boolean }) => {
     const runtime = await loadRuntimeConfig();
     const repoPath = resolveRepoOption(options.repo, runtime.profile.registryRepo);
+    const repoStat = await fs.stat(repoPath).then(
+      (s) => ({ exists: true, isDir: s.isDirectory() }),
+      (err: NodeJS.ErrnoException) => {
+        if (err.code === "ENOENT") return { exists: false, isDir: false };
+        throw err;
+      }
+    );
+    if (repoStat.exists && !repoStat.isDir) {
+      process.stderr.write(`error: --repo path exists but is not a directory: ${repoPath}\n`);
+      process.exitCode = 2;
+      return;
+    }
+    if (!repoStat.exists && !options.create) {
+      process.stderr.write(
+        `error: --repo path does not exist: ${repoPath}\n       Pass --create to initialize a new registry directory there.\n`
+      );
+      process.exitCode = 2;
+      return;
+    }
+    if (!repoStat.exists && options.create) {
+      process.stderr.write(`Created new registry directory at ${repoPath}\n`);
+    }
     const skills = await scanSkills({ cwd: invocationCwd, config: runtime.raw, profileName: runtime.profileName, includeDefaultExcluded: options.all ?? false });
     await handleConfirmationFailure(
       assertInteractiveOrYes({
