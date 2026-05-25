@@ -23,6 +23,7 @@ import { messages, type Language } from "./i18n.js";
 import { ConfirmPlanModal } from "./components/ConfirmPlanModal.js";
 import { LoadRegistryPanel } from "./components/LoadRegistryPanel.js";
 import { useModalFocusTrap } from "./components/useModalFocusTrap.js";
+import { humanizeError } from "./humanize-error.js";
 
 type View = "overview" | "intersect" | "distribute" | "detail" | "repo";
 type Dialog = "scan" | "review" | "confirmPlan" | null;
@@ -328,7 +329,7 @@ export function App() {
 
   useEffect(() => { setCommitMessage(messages[lang].commitMessageDefault); }, [lang]);
 
-  useEffect(() => { void loadShell().catch((error) => setMessage(error instanceof Error ? error.message : String(error))); }, []);
+  useEffect(() => { void loadShell().catch((error) => setMessage(humanizeError(error, lang))); }, []);
 
   const agentFilteredSkills = useMemo(
     () => skills.filter((skill) => !selectedAgent || skill.source.agent === selectedAgent),
@@ -345,9 +346,9 @@ export function App() {
 
   const toggleSkill = (id: string) => { const next = new Set(selected); next.has(id) ? next.delete(id) : next.add(id); setSelected(next); };
 
-  const runScan = async () => { setBusy(true); try { const scan = await api.scan(includeBuiltin); setSkills(scan.skills); setMessage(`${t.scan}: ${scan.summary.total}`); setDialog(null); } catch (error) { setMessage(error instanceof Error ? error.message : String(error)); } finally { setBusy(false); } };
-  const importRepo = async () => { setBusy(true); try { const result = await api.import(); setMessage(`${t.imported} ${result.imported} skills → ${result.repoPath}`); await loadShell(); } catch (error) { setMessage(error instanceof Error ? error.message : String(error)); } finally { setBusy(false); } };
-  const runReview = async () => { setBusy(true); try { const ids = selected.size ? [...selected] : visibleSkills.map((skill) => skill.id); const result = await api.review(ids, reviewer, lang); setMessage(`${t.reviewed} ${result.reviews.length} skills`); setDialog(null); } catch (error) { setMessage(error instanceof Error ? error.message : String(error)); } finally { setBusy(false); } };
+  const runScan = async () => { setBusy(true); try { const scan = await api.scan(includeBuiltin); setSkills(scan.skills); setMessage(`${t.scan}: ${scan.summary.total}`); setDialog(null); } catch (error) { setMessage(humanizeError(error, lang)); } finally { setBusy(false); } };
+  const importRepo = async () => { setBusy(true); try { const result = await api.import(); setMessage(`${t.imported} ${result.imported} skills → ${result.repoPath}`); await loadShell(); } catch (error) { setMessage(humanizeError(error, lang)); } finally { setBusy(false); } };
+  const runReview = async () => { setBusy(true); try { const ids = selected.size ? [...selected] : visibleSkills.map((skill) => skill.id); const result = await api.review(ids, reviewer, lang); setMessage(`${t.reviewed} ${result.reviews.length} skills`); setDialog(null); } catch (error) { setMessage(humanizeError(error, lang)); } finally { setBusy(false); } };
   const openReviewDialog = async (preferred = "rules") => {
     setReviewer(preferred);
     setDialog("review");
@@ -355,10 +356,10 @@ export function App() {
       const result = await api.reviewers();
       setReviewers(result.reviewers);
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : String(error));
+      setMessage(humanizeError(error, lang));
     }
   };
-  const planDistribution = async (targetAgents: string[], skillIds?: string[]) => { setBusy(true); try { const result = await api.distributionPlan(targetAgents, skillIds ?? [...selected]); setPlan(result.plan); setMessage(`${t.planSummary}: ${result.plan.items.length}`); } catch (error) { setMessage(error instanceof Error ? error.message : String(error)); } finally { setBusy(false); } };
+  const planDistribution = async (targetAgents: string[], skillIds?: string[]) => { setBusy(true); try { const result = await api.distributionPlan(targetAgents, skillIds ?? [...selected]); setPlan(result.plan); setMessage(`${t.planSummary}: ${result.plan.items.length}`); } catch (error) { setMessage(humanizeError(error, lang)); } finally { setBusy(false); } };
   const applyDistribution = async (targetAgents: string[], skillIds?: string[]) => {
     const ids = skillIds ?? [...selected];
     setBusy(true);
@@ -369,7 +370,7 @@ export function App() {
       setDialog("confirmPlan");
       setMessage(`${t.planSummary}: ${result.plan.items.length}`);
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : String(error));
+      setMessage(humanizeError(error, lang));
     } finally {
       setBusy(false);
     }
@@ -384,14 +385,14 @@ export function App() {
       setDialog(null);
       await loadShell();
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : String(error));
+      setMessage(humanizeError(error, lang));
     } finally {
       setBusy(false);
     }
   };
-  const refreshGit = async () => { setBusy(true); try { const result = await api.repoStatus(); setGitStatusText(result.status || "clean"); } catch (error) { setMessage(error instanceof Error ? error.message : String(error)); } finally { setBusy(false); } };
-  const pullRegistry = async () => { setBusy(true); try { const result = await api.repoPull(); setMessage(result.output || "pull ok"); await refreshGit(); } catch (error) { setMessage(error instanceof Error ? error.message : String(error)); } finally { setBusy(false); } };
-  const pushRegistry = async () => { setBusy(true); try { const result = await api.repoPush(commitMessage || t.commitMessageDefault); setMessage(`${result.commit}\n${result.output}`); await refreshGit(); } catch (error) { setMessage(error instanceof Error ? error.message : String(error)); } finally { setBusy(false); } };
+  const refreshGit = async () => { setBusy(true); try { const result = await api.repoStatus(); setGitStatusText(result.status || "clean"); } catch (error) { setMessage(humanizeError(error, lang)); } finally { setBusy(false); } };
+  const pullRegistry = async () => { setBusy(true); try { const result = await api.repoPull(); setMessage(result.output || "pull ok"); await refreshGit(); } catch (error) { setMessage(humanizeError(error, lang)); } finally { setBusy(false); } };
+  const pushRegistry = async () => { setBusy(true); try { const result = await api.repoPush(commitMessage || t.commitMessageDefault); setMessage(`${result.commit}\n${result.output}`); await refreshGit(); } catch (error) { setMessage(humanizeError(error, lang)); } finally { setBusy(false); } };
 
   return (
     <main className="app-shell">

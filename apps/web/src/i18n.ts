@@ -122,6 +122,11 @@ export const messages = {
     loadRegistryButton: "加载",
     loadRegistrySuccess: "已切换到 Registry",
     loadRegistryError: "加载失败",
+    errorNetworkUnreachable: "后端无法连接，请检查 `pnpm serve` 是否在运行",
+    errorConfirmationRequired: "需要先在预览界面确认才能执行",
+    errorPlanExpired: "分发计划已过期（10 分钟 TTL），请重新预览",
+    errorPlanMismatch: "计划版本不匹配，请重新预览",
+    errorUnknown: "未知错误",
     navGroupLabel: "导航",
     filterGroupLabel: "按来源筛选"
   },
@@ -246,6 +251,11 @@ export const messages = {
     loadRegistryButton: "Load",
     loadRegistrySuccess: "Registry switched",
     loadRegistryError: "Load failed",
+    errorNetworkUnreachable: "Backend unreachable. Make sure `pnpm serve` is running.",
+    errorConfirmationRequired: "Confirm in the preview dialog before applying.",
+    errorPlanExpired: "Plan expired after 10 minutes. Re-open the preview.",
+    errorPlanMismatch: "Plan token does not match. Re-open the preview.",
+    errorUnknown: "Unknown error",
     navGroupLabel: "Navigation",
     filterGroupLabel: "Filter by source"
   }

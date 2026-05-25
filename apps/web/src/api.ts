@@ -52,13 +52,23 @@ export interface ReviewerInfo {
 }
 
 const request = async <T>(path: string, options: RequestInit = {}): Promise<T> => {
-  const response = await fetch(path, {
-    ...options,
-    headers: {
-      "content-type": "application/json",
-      ...(options.headers ?? {})
-    }
-  });
+  let response: Response;
+  try {
+    response = await fetch(path, {
+      ...options,
+      headers: {
+        "content-type": "application/json",
+        ...(options.headers ?? {})
+      }
+    });
+  } catch (err) {
+    // Fetch itself failed (e.g. backend down, DNS, offline). Wrap into a
+    // typed error so the UI layer can show a localized friendly message
+    // via humanizeError() instead of the native "TypeError: Failed to fetch".
+    const wrapped = new Error(err instanceof Error ? err.message : String(err)) as Error & { code?: string };
+    wrapped.code = "network_unreachable";
+    throw wrapped;
+  }
   const text = await response.text();
   const parsed: unknown = text ? JSON.parse(text) : undefined;
   if (!response.ok) {
