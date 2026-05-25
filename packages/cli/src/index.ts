@@ -561,4 +561,27 @@ program
   });
 
 const argv = process.argv[2] === "--" ? [process.argv[0]!, process.argv[1]!, ...process.argv.slice(3)] : process.argv;
-await program.parseAsync(argv);
+
+const friendlyMessage = (error: unknown): string => {
+  const raw = error instanceof Error ? error.message : String(error);
+  const profileMatch = raw.match(/Profile not found in linka-skillhub config:\s*(\S+)/);
+  if (profileMatch) return `error: profile '${profileMatch[1]}' not found in linka-skillhub.config.json`;
+  if (raw.includes("ENOENT") && /spawn (?:git|.* git)\b/.test(raw)) {
+    return "error: git command failed; directory may not exist or is not a git repo";
+  }
+  const enoentPath = raw.match(/ENOENT[^']*'([^']+)'/) ?? raw.match(/ENOENT[^"]*"([^"]+)"/);
+  if (enoentPath) return `error: path not found: ${enoentPath[1]}`;
+  if (raw.includes("ENOENT")) return "error: path not found";
+  const firstLine = raw.split("\n", 1)[0]?.trim() ?? raw;
+  return `error: ${firstLine}`;
+};
+
+try {
+  await program.parseAsync(argv);
+} catch (error) {
+  process.stderr.write(`${friendlyMessage(error)}\n`);
+  if (process.env.LINKA_SKILLHUB_DEBUG === "1" && error instanceof Error && error.stack) {
+    process.stderr.write(`${error.stack}\n`);
+  }
+  process.exit(2);
+}
