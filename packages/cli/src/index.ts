@@ -331,7 +331,7 @@ program
   .name("lsh")
   .alias("linka-skillhub")
   .description("Local-first registry for code-agent skills across Mavis, OpenCode, Claude Code, Codex, and .agents/skills.")
-  .version("0.1.0")
+  .version("0.1.0+build.2026-05-26")
   .option("--config <path>", "Config file path; defaults to nearest linka-skillhub.config.json.")
   .option("--profile <name>", "Active profile name.");
 
@@ -345,7 +345,7 @@ program.exitOverride();
 program
   .command("list")
   .alias("scan")
-  .description("List scanned skills from the active profile sources.")
+  .description("List scanned skills from the active profile sources. (alias 'scan' is deprecated)")
   .option("--all", "Include builtin/system sources that are excluded by default.")
   .option("--json", "Print full JSON output.")
   .action(async (options: { all?: boolean; json?: boolean }) => {
@@ -371,7 +371,7 @@ registry
   .option("--repo <path>", "Registry path; defaults to profile registryRepo.")
   .option("--all", "Include builtin/system sources.")
   .option("--create", "Allow creating a new registry directory if --repo path does not exist.")
-  .option("--yes", "Skip confirmation prompt (REQUIRED in non-interactive shells).")
+  .option("--yes", "Skip confirmation prompt. Required in non-interactive shells; LINKA_SKILLHUB_FORCE_YES=1 has the same effect.")
   .action(async (options: { repo?: string; all?: boolean; create?: boolean; yes?: boolean }) => {
     const runtime = await loadRuntimeConfig();
     const repoPath = resolveRepoOption(options.repo, runtime.profile.registryRepo);
@@ -454,7 +454,7 @@ program
   .requiredOption("--reviewer <kind>", "rules | codex | opencode | claude | mavis")
   .option("--language <lang>", "zh | en", "zh")
   .option("--skill <ids>", "comma-separated skill ids")
-  .option("--repo <path>", "registry path; defaults to profile registryRepo")
+  .option("--repo <path>", "Registry path; defaults to profile registryRepo.")
   .option("--json", "Print full JSON output instead of the human summary.")
   .action(async (options: { reviewer: string; language: string; skill?: string; repo?: string; json?: boolean }) => {
     const reviewer = assertKnownReviewer(options.reviewer);
@@ -488,7 +488,7 @@ const distribute = program.command("distribute").description("Distribute registr
 distribute
   .command("preview")
   .description("Plan distribution to multiple target agents; do not write anything.")
-  .requiredOption("--target <agents>", "comma-separated agents: mavis,opencode,claude,codex,shared")
+  .requiredOption("--target <agents>", "comma-separated agents: mavis | opencode | claude | codex | shared")
   .option("--skill <ids>", "comma-separated skill ids")
   .option("--include-unsafe", "allow unsafe skills")
   .option("--include-agent-bound", "allow agent-bound skills")
@@ -528,13 +528,13 @@ distribute
 distribute
   .command("apply")
   .description("Apply a previously planned distribution. Requires --yes in non-interactive shells.")
-  .requiredOption("--target <agents>", "comma-separated target agents")
+  .requiredOption("--target <agents>", "comma-separated agents: mavis | opencode | claude | codex | shared")
   .option("--skill <ids>", "comma-separated skill ids")
   .option("--plan <id>", "plan id from 'distribute preview'; recomputes if omitted")
   .option("--include-unsafe", "allow unsafe skills")
   .option("--include-agent-bound", "allow agent-bound skills")
   .option("--repo <path>", "Registry path; defaults to profile registryRepo.")
-  .option("--yes", "Skip confirmation prompt (REQUIRED in non-interactive shells).")
+  .option("--yes", "Skip confirmation prompt. Required in non-interactive shells; LINKA_SKILLHUB_FORCE_YES=1 has the same effect.")
   .action(async (options: { target: string; skill?: string; plan?: string; includeUnsafe?: boolean; includeAgentBound?: boolean; repo?: string; yes?: boolean }) => {
     const targetAgents = parseAgentsStrict(options.target, "agent (--target)");
     if (!targetAgents) return;
@@ -589,7 +589,7 @@ copy
   .command("preview")
   .description("Plan A->B copy operations; do not write anything.")
   .requiredOption("--from <agent>", "source agent: mavis | opencode | claude | codex | shared")
-  .requiredOption("--to <agent>", "target agent")
+  .requiredOption("--to <agent>", "target agent: mavis | opencode | claude | codex | shared")
   .option("--skill <ids>", "comma-separated skill ids")
   .option("--repo <path>", "Registry path; defaults to profile registryRepo.")
   .option("--json", "Print full JSON output instead of the human summary.")
@@ -626,12 +626,12 @@ copy
 copy
   .command("apply")
   .description("Apply a previously previewed plan. Requires --yes in non-interactive shells.")
-  .requiredOption("--from <agent>", "source agent")
-  .requiredOption("--to <agent>", "target agent")
+  .requiredOption("--from <agent>", "source agent: mavis | opencode | claude | codex | shared")
+  .requiredOption("--to <agent>", "target agent: mavis | opencode | claude | codex | shared")
   .option("--skill <ids>", "comma-separated skill ids; default: all skills under --from")
   .option("--plan <id>", "plan id from 'copy preview'; recomputes if omitted")
   .option("--repo <path>", "Registry path; defaults to profile registryRepo.")
-  .option("--yes", "Skip confirmation prompt (REQUIRED in non-interactive shells).")
+  .option("--yes", "Skip confirmation prompt. Required in non-interactive shells; LINKA_SKILLHUB_FORCE_YES=1 has the same effect.")
   .action(async (options: { from: string; to: string; skill?: string; plan?: string; repo?: string; yes?: boolean }) => {
     const from = assertKnownAgent(options.from, "agent (--from)");
     if (!from) return;
@@ -790,7 +790,7 @@ repo
   .description("Commit local changes and push to the registry remote.")
   .option("--repo <path>", "Registry path; defaults to profile registryRepo.")
   .option("--message <message>", "commit message", "Update skill registry")
-  .option("--yes", "Skip confirmation prompt (REQUIRED in non-interactive shells).")
+  .option("--yes", "Skip confirmation prompt. Required in non-interactive shells; LINKA_SKILLHUB_FORCE_YES=1 has the same effect.")
   .action(async (options: { repo?: string; message: string; yes?: boolean }) => {
     const runtime = await loadRuntimeConfig();
     const repoPath = resolveRepoOption(options.repo, runtime.profile.registryRepo);
@@ -842,7 +842,7 @@ fix
   .option("--repo <path>", "Registry path; defaults to profile registryRepo.")
   .option("--allow-unsafe-source", "Allow writing to skill sources outside the active profile's sandbox.")
   .option("--dry-run", "Print what would be written without modifying any files.")
-  .option("--yes", "Skip confirmation prompt (REQUIRED in non-interactive shells).")
+  .option("--yes", "Skip confirmation prompt. Required in non-interactive shells; LINKA_SKILLHUB_FORCE_YES=1 has the same effect.")
   .action(async (id: string, options: { repo?: string; allowUnsafeSource?: boolean; dryRun?: boolean; yes?: boolean }) => {
     const runtime = await loadRuntimeConfig();
     const repoPath = resolveRepoOption(options.repo, runtime.profile.registryRepo);
@@ -907,7 +907,7 @@ program
   .description("Start the local Web console and API server.")
   .option("--host <host>", "host", "127.0.0.1")
   .option("--port <port>", "port", "4873")
-  .option("--repo <path>", "registry path; defaults to profile registryRepo")
+  .option("--repo <path>", "Registry path; defaults to profile registryRepo.")
   .action(async (options: { host: string; port: string; repo?: string }) => {
     const runtime = await loadRuntimeConfig();
     const port = Number.parseInt(options.port, 10);
