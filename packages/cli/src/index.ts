@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import fs from "node:fs/promises";
 import path from "node:path";
-import { Command } from "commander";
+import { Command, CommanderError } from "commander";
 import {
   applyDistributionPlan,
   applyFrontmatterFix,
@@ -300,6 +300,13 @@ program
   .version("0.1.0")
   .option("--config <path>", "Config file path; defaults to nearest linka-skillhub.config.json.")
   .option("--profile <name>", "Active profile name.");
+
+// Hand all commander-driven exits to our outer try/catch so user-input
+// errors (unknown option/command, missing required option) exit 2 instead
+// of commander's default 1, while --help / --version still exit 0.
+// Must be called BEFORE any program.command(...) so subcommands inherit
+// the exit callback via copyInheritedSettings().
+program.exitOverride();
 
 program
   .command("list")
@@ -869,6 +876,20 @@ const friendlyMessage = (error: unknown): string => {
 try {
   await program.parseAsync(argv);
 } catch (error) {
+  // Commander errors: messages were already written by commander itself
+  // (errors to stderr, --help/--version to stdout). We only need to set
+  // the exit code so shell scripts can distinguish user input errors (2)
+  // from successful help/version output (0).
+  if (error instanceof CommanderError) {
+    if (
+      error.code === "commander.help" ||
+      error.code === "commander.helpDisplayed" ||
+      error.code === "commander.version"
+    ) {
+      process.exit(0);
+    }
+    process.exit(2);
+  }
   process.stderr.write(`${friendlyMessage(error)}\n`);
   if (process.env.LINKA_SKILLHUB_DEBUG === "1" && error instanceof Error && error.stack) {
     process.stderr.write(`${error.stack}\n`);
