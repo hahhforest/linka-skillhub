@@ -1,10 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { FolderPlus, Loader2, X } from "lucide-react";
+import { ChevronDown, ChevronRight, FolderPlus, Loader2, X } from "lucide-react";
 import type { AgentDefinition, SkillScope } from "@linka-skillhub/core";
 import { api, type AddSourceResponse } from "../api.js";
 import { humanizeError } from "../humanize-error.js";
 import { messages, type Language } from "../i18n.js";
-import { scopeLabel } from "./skillVisuals.js";
 import { useModalFocusTrap } from "./useModalFocusTrap.js";
 
 export interface AddSourceDialogProps {
@@ -17,27 +16,30 @@ export interface AddSourceDialogProps {
 // Same shape as the server's VALID_SCOPES. Kept here so the dropdown stays in
 // lockstep with the backend without an extra round-trip. If a future SkillScope
 // is added, drop it into both places.
-const SCOPE_OPTIONS: readonly SkillScope[] = ["user", "private", "builtin", "system", "project", "unknown"];
+const SCOPE_OPTIONS: readonly SkillScope[] = ["user", "private", "project", "builtin", "system", "unknown"];
 
 // Agent-kind validator — mirrors AGENT_KIND_PATTERN in server.ts so the user
 // sees the same rule the backend will enforce. Surface client-side first so
 // we don't burn a round-trip for a clearly invalid name.
 const AGENT_KIND_PATTERN = /^[a-z][a-z0-9-]*$/;
 
-// R35-C4: the modal that lets the user point at any directory on disk and
-// register it as a managed skill source for the active profile.
+// R35-C4: register a directory on disk as a managed skill source.
+// R35-C5 follow-up: the original form had four fields (path / agent / scope /
+// label) which the user flagged as confusing — "label" was redundant with the
+// custom-agent name, and "scope" exposed 6 raw enum values without explaining
+// what they meant for distribution defaults. This rewrite collapses the form
+// down to:
 //
-// Two notable behaviours:
-//   1. Agent kind is a dropdown over the *already-known* agent kinds plus a
-//      "Custom name…" pseudo-option. Picking the pseudo-option reveals a
-//      free-text field; the typed value becomes the kebab-case agent kind.
-//      We validate it against ^[a-z][a-z0-9-]*$ before submitting so the
-//      server's strictly-typed code/message never surfaces.
-//   2. Submit calls api.addSource which the server validates a second time
-//      (path exists, inside profile root, not duplicate). On success we close
-//      the modal AND fire onAdded, which the parent uses to trigger a fresh
-//      scan + loadShell so the new skills show up in the source-bars chart
-//      without the user reloading.
+//   1. Path — required.
+//   2. Group (旧"归属 Agent") — dropdown over existing agent kinds plus a
+//      "新建分组" pseudo-option. When the pseudo-option is picked we reveal
+//      a single text input that becomes BOTH the agent kind AND the chart
+//      label — no separate "display name" field.
+//   3. Scope — collapsed under an "Advanced" disclosure with per-option
+//      explanations next to each radio. Defaults to "user" which is what
+//      90% of users want; only opens if they actively need a different
+//      scope. The help line tells them what scope decides (whether the
+//      skills land in the default distribution set).
 export function AddSourceDialog({ lang, agents, onAdded, onClose }: AddSourceDialogProps): JSX.Element {
   const t = messages[lang];
   const dialogRef = useRef<HTMLDivElement>(null);
@@ -48,16 +50,16 @@ export function AddSourceDialog({ lang, agents, onAdded, onClose }: AddSourceDia
     return () => window.removeEventListener("keydown", handleKey);
   }, [onClose]);
 
-  // "__custom__" is the pseudo-option for the "Custom name…" entry in the
-  // agent dropdown. We never send this value to the API — instead it gates
-  // the customAgentKind input.
+  // "__custom__" is the pseudo-option for the "新建分组" entry in the group
+  // dropdown. We never send this value to the API — instead it gates the
+  // customAgentKind input below.
   const CUSTOM_OPTION = "__custom__";
   const agentOptions = useMemo(() => agents.map((agent) => ({ kind: agent.kind, label: agent.label })), [agents]);
-  const [agentKind, setAgentKind] = useState<string>(agentOptions[0]?.kind ?? CUSTOM_OPTION);
+  const [agentKind, setAgentKind] = useState<string>(CUSTOM_OPTION);
   const [customAgentKind, setCustomAgentKind] = useState<string>("");
   const [scope, setScope] = useState<SkillScope>("user");
   const [pathInput, setPathInput] = useState<string>("");
-  const [label, setLabel] = useState<string>("");
+  const [showAdvanced, setShowAdvanced] = useState<boolean>(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -88,8 +90,7 @@ export function AddSourceDialog({ lang, agents, onAdded, onClose }: AddSourceDia
       const result = await api.addSource({
         agentKind: effectiveAgentKind,
         scope,
-        path: pathInput.trim(),
-        label: label.trim().length > 0 ? label.trim() : undefined
+        path: pathInput.trim()
       });
       onAdded(result);
       onClose();
@@ -98,6 +99,18 @@ export function AddSourceDialog({ lang, agents, onAdded, onClose }: AddSourceDia
     } finally {
       setBusy(false);
     }
+  };
+
+  // Per-scope help is the table of options the user used to see as opaque
+  // enum values. Localized via the existing scope_* keys so labels stay in
+  // sync with the source-bars chip.
+  const scopeHelpFor = (s: SkillScope): string => {
+    const table = messages[lang] as Record<string, string>;
+    return table[`scope_help_${s}`] ?? "";
+  };
+  const scopeLabelLocalized = (s: SkillScope): string => {
+    const table = messages[lang] as Record<string, string>;
+    return table[`scope_${s}`] ?? s;
   };
 
   return (
@@ -126,13 +139,14 @@ export function AddSourceDialog({ lang, agents, onAdded, onClose }: AddSourceDia
             <small className="add-source-field-help">{t.addSourcePathHelp}</small>
           </label>
           <label className="add-source-field">
-            <span className="add-source-field-label">{t.addSourceAgentLabel}</span>
+            <span className="add-source-field-label">{t.addSourceGroupLabel}</span>
             <select value={agentKind} onChange={(event) => setAgentKind(event.target.value)}>
+              <option value={CUSTOM_OPTION}>{t.addSourceGroupCustomOption}</option>
               {agentOptions.map((option) => (
-                <option key={option.kind} value={option.kind}>{option.label} ({option.kind})</option>
+                <option key={option.kind} value={option.kind}>{option.label}</option>
               ))}
-              <option value={CUSTOM_OPTION}>{t.addSourceAgentCustomOption}</option>
             </select>
+            <small className="add-source-field-help">{t.addSourceGroupHelp}</small>
           </label>
           {agentKind === CUSTOM_OPTION && (
             <label className="add-source-field">
@@ -146,23 +160,42 @@ export function AddSourceDialog({ lang, agents, onAdded, onClose }: AddSourceDia
               <small className="add-source-field-help">{t.addSourceCustomAgentHelp}</small>
             </label>
           )}
-          <label className="add-source-field">
-            <span className="add-source-field-label">{t.addSourceScopeLabel}</span>
-            <select value={scope} onChange={(event) => setScope(event.target.value as SkillScope)}>
-              {SCOPE_OPTIONS.map((s) => (
-                <option key={s} value={s}>{scopeLabel(s, lang)}</option>
-              ))}
-            </select>
-          </label>
-          <label className="add-source-field">
-            <span className="add-source-field-label">{t.addSourceLabelLabel}</span>
-            <input
-              type="text"
-              value={label}
-              placeholder={t.addSourceLabelPlaceholder}
-              onChange={(event) => setLabel(event.target.value)}
-            />
-          </label>
+          <div className="add-source-advanced">
+            <button
+              type="button"
+              className="add-source-advanced-toggle"
+              onClick={() => setShowAdvanced((v) => !v)}
+              aria-expanded={showAdvanced}
+            >
+              {showAdvanced ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+              {t.addSourceAdvanced}
+              <em className="muted-copy add-source-advanced-value">
+                ({t.addSourceScopeLabel}: {scopeLabelLocalized(scope)})
+              </em>
+            </button>
+            {showAdvanced && (
+              <div className="add-source-advanced-body">
+                <p className="muted-copy add-source-advanced-help">{t.addSourceScopeHelp}</p>
+                <div className="add-source-scope-options">
+                  {SCOPE_OPTIONS.map((s) => (
+                    <label key={s} className={`add-source-scope-option${scope === s ? " selected" : ""}`}>
+                      <input
+                        type="radio"
+                        name="add-source-scope"
+                        value={s}
+                        checked={scope === s}
+                        onChange={() => setScope(s)}
+                      />
+                      <div>
+                        <strong>{scopeLabelLocalized(s)}</strong>
+                        <small>{scopeHelpFor(s)}</small>
+                      </div>
+                    </label>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
         </div>
         {error ? <p className="danger-line add-source-error">{error}</p> : null}
         <div className="dialog-actions">

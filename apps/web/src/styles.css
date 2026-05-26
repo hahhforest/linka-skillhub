@@ -1587,6 +1587,74 @@ textarea:focus-visible {
   color: var(--danger);
   font-size: var(--fs-xs);
 }
+
+/* R35-C5 follow-up: Advanced disclosure for the scope picker. Collapsed by
+   default so the common case (scope=user) doesn't burden the user with six
+   enum values they don't understand. When opened, each scope shows its
+   localized label + the help line explaining the distribution impact. */
+.add-source-advanced {
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--surface-2);
+}
+.add-source-advanced-toggle {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-2) var(--sp-3);
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: var(--fs-sm);
+  cursor: pointer;
+  text-align: left;
+}
+.add-source-advanced-toggle:hover { background: var(--surface-3); border-radius: var(--r-md); }
+.add-source-advanced-value {
+  margin-left: auto;
+  font-style: normal;
+  font-size: var(--fs-xs);
+}
+.add-source-advanced-body {
+  padding: 0 var(--sp-3) var(--sp-3);
+  display: grid;
+  gap: var(--sp-2);
+}
+.add-source-advanced-help {
+  margin: 0;
+}
+.add-source-scope-options {
+  display: grid;
+  gap: var(--sp-1);
+}
+.add-source-scope-option {
+  display: grid;
+  grid-template-columns: 16px 1fr;
+  gap: var(--sp-3);
+  align-items: start;
+  padding: var(--sp-2) var(--sp-3);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  cursor: pointer;
+  transition: background var(--t-fast), border-color var(--t-fast);
+}
+.add-source-scope-option:hover { background: var(--surface-2); }
+.add-source-scope-option.selected {
+  border-color: var(--primary);
+  background: var(--primary-soft);
+}
+.add-source-scope-option input { margin-top: 3px; cursor: pointer; }
+.add-source-scope-option strong { display: block; font-size: var(--fs-sm); }
+.add-source-scope-option small {
+  display: block;
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: var(--fs-xs);
+  line-height: var(--lh-base);
+}
 @media (max-width: 620px) {
   .overview-grid .section-head {
     flex-wrap: wrap;

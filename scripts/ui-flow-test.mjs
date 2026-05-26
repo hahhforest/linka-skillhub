@@ -216,10 +216,9 @@ await expectText("添加自定义来源目录", "add source dialog title");
 // Empty path → primary button should be disabled (form-level validation).
 const primaryButton = page.locator(".add-source-dialog .primary");
 if (await primaryButton.isEnabled()) failures.push("Add Source primary button should stay disabled while path is empty");
-// Switch to custom agent kind and verify the secondary input appears.
-const agentSelect = page.locator(".add-source-dialog .add-source-field select").first();
-await agentSelect.selectOption("__custom__");
-await page.locator(".add-source-dialog input[placeholder=\"my-custom-agent\"]").fill("my-custom-agent");
+// R35-C5 follow-up: the group dropdown now defaults to "新建分组…" so the
+// custom-name input is already visible. Just fill the name + path.
+await page.locator(".add-source-dialog input[placeholder=\"my-skills\"]").fill("my-custom-agent");
 const pathInput = page.locator(".add-source-dialog input[placeholder*=\"sources/shared-agents\"]");
 // First try a path that doesn't exist on disk — server should respond with
 // invalid_path and the inline error should surface.
@@ -231,12 +230,10 @@ await page.waitForFunction(() => {
 }, undefined, { timeout: 5000 });
 const badPathError = await page.locator(".add-source-error").innerText();
 if (!badPathError) failures.push("Add Source dialog should surface a server-side error for a missing path");
-// Now fill a real fixture path and submit successfully.
+// Now fill a real fixture path and submit successfully. Scope stays at the
+// default "user" — the advanced disclosure is collapsed by design so we
+// don't have to interact with it for the common case.
 await pathInput.fill("./.sandbox/local-mirror/sources/custom-test/example-skill");
-// .add-source-field select returns ONLY the two select elements (agent + scope).
-// Custom agent kind / path / label use <input>, not <select>.
-const scopeSelect = page.locator(".add-source-dialog .add-source-field select").nth(1);
-await scopeSelect.selectOption("user");
 await screenshot("11-add-source-form");
 await primaryButton.click();
 // If the agent was already in the server's cached config (e.g. a previous
