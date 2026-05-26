@@ -1,7 +1,7 @@
 import os from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
-import type { AgentDefinition, AgentKind, DistributionTarget, SkillHubConfig, SkillSource } from "./types.js";
+import type { AgentDefinition, AgentKind, DistributionTarget, SkillHubConfig, SkillSource, SkillSourceTemplate } from "./types.js";
 
 const home = os.homedir();
 
@@ -94,10 +94,48 @@ const configuredAgent = (
   };
 };
 
-export const getAgentDefinitions = (cwd = process.cwd(), config?: SkillHubConfig, profileName?: string): AgentDefinition[] =>
-  Object.values(DEFAULT_AGENTS)
+// R35-C4: agents declared only in the config (e.g. an arbitrary kind the user
+// added via "Add Source Directory" from the Overview page) need to surface as
+// first-class AgentDefinitions too. The DEFAULT_AGENTS loop above misses them
+// because they aren't keys in that record. We synthesise a definition here:
+// the label defaults to the agent kind itself (the AgentLogo fallback in the
+// web layer renders a deterministic color tint + initial), targetDir defaults
+// to the first source path (so a future Distribute action has a sensible
+// guess), and sourceDirs come straight from the config. If the user later
+// extends DEFAULT_AGENTS or a built-in ships with the same kind, that branch
+// takes precedence — this helper only kicks in for truly-custom kinds.
+const synthesizeCustomAgent = (
+  agentKind: string,
+  override: { readonly enabled?: boolean; readonly targetDir?: string; readonly sourceDirs?: readonly SkillSourceTemplate[] }
+): AgentDefinition | undefined => {
+  if (override.enabled === false) return undefined;
+  const sourceDirs = override.sourceDirs ?? [];
+  const firstSource = sourceDirs[0];
+  return {
+    kind: agentKind as AgentKind,
+    label: agentKind,
+    color: "#64748b",
+    defaultTargetDir: override.targetDir ?? firstSource?.path ?? `~/${agentKind}/skills`,
+    sourceDirs
+  };
+};
+
+export const getAgentDefinitions = (cwd = process.cwd(), config?: SkillHubConfig, profileName?: string): AgentDefinition[] => {
+  const built = Object.values(DEFAULT_AGENTS)
     .map((agent) => configuredAgent(agent, cwd, config, profileName))
     .filter((agent): agent is AgentDefinition => Boolean(agent));
+  const profile = config?.profiles[profileName ?? config?.activeProfile ?? ""];
+  if (!profile?.agents) return built;
+  const knownKinds = new Set(Object.keys(DEFAULT_AGENTS));
+  const customs: AgentDefinition[] = [];
+  for (const [kind, override] of Object.entries(profile.agents)) {
+    if (knownKinds.has(kind)) continue;
+    if (!override) continue;
+    const synth = synthesizeCustomAgent(kind, override);
+    if (synth) customs.push(synth);
+  }
+  return [...built, ...customs];
+};
 
 export const getDistributionTargets = (cwd = process.cwd(), config?: SkillHubConfig, profileName?: string): DistributionTarget[] =>
   getAgentDefinitions(cwd, config, profileName).map((agent) => ({

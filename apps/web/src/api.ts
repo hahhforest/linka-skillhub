@@ -1,4 +1,4 @@
-import type { AgentDefinition, DistributionPlan, DistributionRun, DistributionTarget, RegistryManifest, ReviewResult, SkillPackage, SkillSource } from "@linka-skillhub/core";
+import type { AgentDefinition, DistributionPlan, DistributionRun, DistributionTarget, RegistryManifest, ReviewResult, SkillPackage, SkillScope, SkillSource } from "@linka-skillhub/core";
 
 export interface ScanResponse {
   readonly skills: SkillPackage[];
@@ -85,6 +85,26 @@ const request = async <T>(path: string, options: RequestInit = {}): Promise<T> =
   return (parsed ?? {}) as T;
 };
 
+// R35-C4: AddSource is intentionally typed with `agentKind: string` (NOT the
+// AgentKind union) because the modal lets users invent arbitrary kinds for
+// directories that don't belong to a built-in agent. The server validates the
+// string shape via ^[a-z][a-z0-9-]*$.
+export interface AddSourcePayload {
+  readonly agentKind: string;
+  readonly scope: SkillScope;
+  readonly path: string;
+  readonly label?: string;
+}
+
+export interface AddSourceResponse {
+  readonly ok: true;
+  readonly agentKind: string;
+  readonly scope: SkillScope;
+  readonly path: string;
+  readonly totalSources: number;
+  readonly configPath: string;
+}
+
 export const api = {
   agents: () => request<AgentsResponse>("/api/agents"),
   scan: (includeDefaultExcluded = true) => request<ScanResponse>("/api/scan", { method: "POST", body: JSON.stringify({ includeDefaultExcluded }) }),
@@ -92,6 +112,7 @@ export const api = {
   skills: () => request<ScanResponse>("/api/skills"),
   reviewers: () => request<{ reviewers: ReviewerInfo[] }>("/api/reviewers"),
   review: (skillIds: string[], reviewer: string, language: "zh" | "en") => request<{ reviews: ReviewResult[] }>("/api/reviews/run", { method: "POST", body: JSON.stringify({ skillIds, reviewer, language }) }),
+  addSource: (payload: AddSourcePayload) => request<AddSourceResponse>("/api/sources", { method: "POST", body: JSON.stringify(payload) }),
   // skillIds is intentionally optional: an undefined value omits the key in the
   // JSON body, and the server treats a missing skillIds as "include every
   // skill in the registry". Callers that want "all registry skills" must pass

@@ -1497,3 +1497,71 @@ textarea:focus-visible {
   .repo-body { grid-template-columns: 1fr; }
   .repo-detail-panel { position: static; }
 }
+
+/* R35-C4: Add Source Directory button on the Overview page header. Sits
+   beside the title block, mirrors the .ghost button style used elsewhere on
+   the page. The .overview-add-source class lets the responsive override
+   (below) collapse the button onto its own row without affecting other
+   .ghost buttons that may live in the section-head of another page. */
+.overview-add-source {
+  white-space: nowrap;
+  height: var(--ctrl-sm);
+  padding: 0 var(--sp-3);
+  font-size: var(--fs-xs);
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  flex-shrink: 0;
+}
+.overview-add-source svg { width: 14px; height: 14px; }
+
+/* R35-C4: Add Source dialog form. Field stack uses the existing dialog
+   container; the form only needs to lay out label+input pairs vertically so
+   they stay legible at the dialog's 520px max width. */
+.add-source-dialog .add-source-form {
+  display: grid;
+  gap: var(--sp-3);
+  margin: var(--sp-3) 0;
+}
+.add-source-field {
+  display: grid;
+  gap: var(--sp-1);
+}
+.add-source-field-label {
+  font-size: var(--fs-sm);
+  color: var(--text-2);
+  font-weight: var(--fw-medium);
+}
+.add-source-field-help {
+  color: var(--muted);
+  font-size: var(--fs-xs);
+  line-height: var(--lh-base);
+}
+.add-source-field input,
+.add-source-field select {
+  height: var(--ctrl-md);
+  padding: 0 var(--sp-3);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  color: var(--text);
+  font-size: var(--fs-sm);
+  font-family: var(--font-mono);
+}
+.add-source-field select {
+  font-family: inherit;
+}
+.add-source-error {
+  margin: var(--sp-2) 0 0;
+  color: var(--danger);
+  font-size: var(--fs-xs);
+}
+@media (max-width: 620px) {
+  .overview-grid .section-head {
+    flex-wrap: wrap;
+    height: auto;
+    padding: var(--sp-2) var(--sp-1);
+    gap: var(--sp-2);
+  }
+  .overview-add-source { width: 100%; justify-content: center; }
+}

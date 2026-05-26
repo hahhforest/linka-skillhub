@@ -4,6 +4,7 @@ import {
   ArrowRight,
   Check,
   Database,
+  FolderPlus,
   GitBranch,
   GitCompareArrows,
   HardDriveDownload,
@@ -19,6 +20,7 @@ import {
 import type { AgentDefinition, DistributionPlan, DistributionTarget, SkillPackage, SkillScope } from "@linka-skillhub/core";
 import { api, type ReviewerInfo, type Summary } from "./api.js";
 import { messages, tReason, type Language } from "./i18n.js";
+import { AddSourceDialog } from "./components/AddSourceDialog.js";
 import { ConfirmPlanModal } from "./components/ConfirmPlanModal.js";
 import { useModalFocusTrap } from "./components/useModalFocusTrap.js";
 import { AgentLogo, agentTone, scopeLabel } from "./components/skillVisuals.js";
@@ -28,7 +30,7 @@ import { RepoBrowser } from "./components/RepoBrowser.js";
 import { humanizeError } from "./humanize-error.js";
 
 type View = "overview" | "intersect" | "distribute" | "repo";
-type Dialog = "scan" | "review" | "confirmPlan" | null;
+type Dialog = "scan" | "review" | "confirmPlan" | "addSource" | null;
 
 // Mirrors @linka-skillhub/core's summarizeSkills semantics (kept local because
 // the core barrel imports node:* modules that don't survive a browser bundle).
@@ -135,7 +137,7 @@ function Sidebar({ view, setView, lang }: {
   );
 }
 
-function Overview({ skills, focusedSkillId, focusSkill, lang, totalSkillCount, allSkills, query, onClearQuery, agents, overviewAgentFilter, setOverviewAgentFilter }: {
+function Overview({ skills, focusedSkillId, focusSkill, lang, totalSkillCount, allSkills, query, onClearQuery, agents, overviewAgentFilter, setOverviewAgentFilter, onOpenAddSource }: {
   readonly skills: SkillPackage[];
   readonly focusedSkillId: string | null;
   readonly focusSkill: (id: string) => void;
@@ -147,6 +149,7 @@ function Overview({ skills, focusedSkillId, focusSkill, lang, totalSkillCount, a
   readonly agents: AgentDefinition[];
   readonly overviewAgentFilter: string;
   readonly setOverviewAgentFilter: (value: string) => void;
+  readonly onOpenAddSource: () => void;
 }) {
   const t = messages[lang];
   // R34 commit 2: agent filtering moved off the sidebar and into this header
@@ -225,12 +228,17 @@ function Overview({ skills, focusedSkillId, focusSkill, lang, totalSkillCount, a
   );
 
   if (totalSkillCount === 0) {
-    return <section className="work-card empty-state span-all"><Info size={24} /><h2>{t.noScanTitle}</h2><p>{t.noScanBody}</p></section>;
+    return (
+      <section className="panel-grid overview-grid">
+        <div className="section-head span-all"><div><h2>{t.overview}</h2><p>{t.currentScope}: {sourceLabel}</p></div><button className="ghost overview-add-source" type="button" onClick={onOpenAddSource}><FolderPlus size={16} /> {t.addSourceButton}</button></div>
+        <section className="work-card empty-state span-all"><Info size={24} /><h2>{t.noScanTitle}</h2><p>{t.noScanBody}</p></section>
+      </section>
+    );
   }
   if (cardsSummary.total === 0) {
     return (
       <section className="panel-grid overview-grid">
-        <div className="section-head span-all"><div><h2>{t.overview}</h2><p>{t.currentScope}: {sourceLabel}</p></div></div>
+        <div className="section-head span-all"><div><h2>{t.overview}</h2><p>{t.currentScope}: {sourceLabel}</p></div><button className="ghost overview-add-source" type="button" onClick={onOpenAddSource}><FolderPlus size={16} /> {t.addSourceButton}</button></div>
         {filteredBanner}
         <section className="work-card empty-state span-all"><Info size={24} /><h2>{t.noMatchTitle}</h2><p>{t.noMatchBody}</p></section>
       </section>
@@ -239,7 +247,7 @@ function Overview({ skills, focusedSkillId, focusSkill, lang, totalSkillCount, a
 
   return (
     <section className="panel-grid overview-grid">
-      <div className="section-head span-all"><div><h2>{t.overview}</h2><p>{t.currentScope}: {sourceLabel}</p></div></div>
+      <div className="section-head span-all"><div><h2>{t.overview}</h2><p>{t.currentScope}: {sourceLabel}</p></div><button className="ghost overview-add-source" type="button" onClick={onOpenAddSource}><FolderPlus size={16} /> {t.addSourceButton}</button></div>
       {filteredBanner}
       <StatCard tone="neutral" title={t.totalSkills} value={cardsSummary.total} sub={`${cardsSummary.valid} ${t.valid}`} icon={<PackageCheck size={18} />} />
       <StatCard tone="success" title={t.shareable} value={cardsSummary.portable} sub={t.defaultDistributionScope} icon={<Check size={18} />} />
@@ -469,7 +477,7 @@ export function App() {
       <div className="workspace">
         <Sidebar view={view} setView={setView} lang={lang} />
         <div className="content">
-          {view === "overview" && <Overview skills={visibleSkills} focusedSkillId={focusedSkillId} focusSkill={focusSkill} lang={lang} totalSkillCount={skills.length} allSkills={skills} query={query} onClearQuery={clearQuery} agents={agents} overviewAgentFilter={overviewAgentFilter} setOverviewAgentFilter={setOverviewAgentFilter} />}
+          {view === "overview" && <Overview skills={visibleSkills} focusedSkillId={focusedSkillId} focusSkill={focusSkill} lang={lang} totalSkillCount={skills.length} allSkills={skills} query={query} onClearQuery={clearQuery} agents={agents} overviewAgentFilter={overviewAgentFilter} setOverviewAgentFilter={setOverviewAgentFilter} onOpenAddSource={() => setDialog("addSource")} />}
           {view === "repo" && (
             <RepoBrowser
               skills={visibleSkills}
@@ -510,6 +518,26 @@ export function App() {
           busy={busy}
           onConfirm={() => void confirmApplyPending()}
           onCancel={() => { setDialog(null); setPendingPlan(null); }}
+        />
+      )}
+      {dialog === "addSource" && (
+        <AddSourceDialog
+          lang={lang}
+          agents={agents}
+          onAdded={async (result) => {
+            // Re-issue scan + reload the agents/skills shell so the new source
+            // immediately appears in the source-bars chart and the skill table.
+            // Server has already reloaded its own config snapshot in /api/sources.
+            try {
+              const scan = await api.scan(includeBuiltin);
+              setSkills(scan.skills);
+              await loadShell();
+              setMessage(`${t.addSourceSuccess} (${result.agentKind} / ${scopeLabel(result.scope, lang)})`);
+            } catch (error) {
+              setMessage(humanizeError(error, lang));
+            }
+          }}
+          onClose={() => setDialog(null)}
         />
       )}
     </main>

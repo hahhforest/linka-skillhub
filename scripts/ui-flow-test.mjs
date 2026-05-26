@@ -188,6 +188,103 @@ await page.waitForFunction(() => document.body.innerText.includes("已切换到 
 await expectText("已切换到 Registry", "load registry success message");
 await screenshot("10-load-registry");
 
+// R35-C4: Add Source Directory flow. Verify the modal opens from Overview,
+// keeps the submit button disabled while the form is invalid, rejects a path
+// that doesn't exist on disk (server-side invalid_path), then submits a real
+// path pointing at a throwaway fixture under .sandbox. After submission the
+// modal closes, the source-bars chart picks up a new (agent, scope) row for
+// "my-custom-agent / 用户", and the footer shows the addSourceSuccess
+// message. We clean up afterwards by reading linka-skillhub.config.json,
+// deleting the my-custom-agent entry from the mirror profile, and writing
+// the file back atomically so subsequent runs start from the same state.
+//
+// Bootstrap the fixture directory if it's missing — .sandbox/ is gitignored
+// so a fresh clone won't have it. Skipping this step would silently fail
+// the next assertion.
+const fixtureDir = path.join(process.cwd(), ".sandbox/local-mirror/sources/custom-test/example-skill");
+await fs.mkdir(fixtureDir, { recursive: true });
+await fs.writeFile(
+  path.join(fixtureDir, "SKILL.md"),
+  "---\nname: example-skill\ndescription: Throwaway fixture for R35-C4 add-source flow.\n---\n# example-skill\n",
+  "utf8"
+);
+await page.getByRole("button", { name: /总览/ }).click();
+await page.waitForTimeout(150);
+const initiallyPresent = await page.locator(".source-bars > div span").filter({ hasText: "my-custom-agent" }).count();
+await page.getByRole("button", { name: /添加自定义目录/ }).click();
+await expectText("添加自定义来源目录", "add source dialog title");
+// Empty path → primary button should be disabled (form-level validation).
+const primaryButton = page.locator(".add-source-dialog .primary");
+if (await primaryButton.isEnabled()) failures.push("Add Source primary button should stay disabled while path is empty");
+// Switch to custom agent kind and verify the secondary input appears.
+const agentSelect = page.locator(".add-source-dialog .add-source-field select").first();
+await agentSelect.selectOption("__custom__");
+await page.locator(".add-source-dialog input[placeholder=\"my-custom-agent\"]").fill("my-custom-agent");
+const pathInput = page.locator(".add-source-dialog input[placeholder*=\"sources/shared-agents\"]");
+// First try a path that doesn't exist on disk — server should respond with
+// invalid_path and the inline error should surface.
+await pathInput.fill("./.sandbox/no-such-directory-r35-c4");
+await primaryButton.click();
+await page.waitForFunction(() => {
+  const el = document.querySelector(".add-source-error");
+  return el && /路径|path/i.test(el.textContent ?? "");
+}, undefined, { timeout: 5000 });
+const badPathError = await page.locator(".add-source-error").innerText();
+if (!badPathError) failures.push("Add Source dialog should surface a server-side error for a missing path");
+// Now fill a real fixture path and submit successfully.
+await pathInput.fill("./.sandbox/local-mirror/sources/custom-test/example-skill");
+// .add-source-field select returns ONLY the two select elements (agent + scope).
+// Custom agent kind / path / label use <input>, not <select>.
+const scopeSelect = page.locator(".add-source-dialog .add-source-field select").nth(1);
+await scopeSelect.selectOption("user");
+await screenshot("11-add-source-form");
+await primaryButton.click();
+// If the agent was already in the server's cached config (e.g. a previous
+// flow run left it behind without restarting the server), the duplicate
+// guard fires. Either branch is acceptable for this assertion: success
+// closes the dialog, duplicate shows the inline error. We accept both and
+// move on to verify the source-bars list AFTER the add.
+await page.waitForFunction(() => {
+  const dialogOpen = document.body.innerText.includes("添加自定义来源目录");
+  const errorVisible = document.querySelector(".add-source-error");
+  return !dialogOpen || (errorVisible && /已注册|already/i.test(errorVisible.textContent ?? ""));
+}, undefined, { timeout: 10000 });
+const dialogStillOpen = await page.locator(".add-source-dialog").count();
+if (dialogStillOpen > 0) {
+  // Duplicate case: close the dialog explicitly so the rest of the flow can continue.
+  await page.locator(".add-source-dialog .dialog-close").click();
+}
+// In the success branch the footer flips to addSourceSuccess; in the duplicate
+// branch the footer is unchanged. Verify the new (agent, scope) row exists in
+// the source-bars chart regardless, since that's the user-visible outcome
+// that matters.
+await page.waitForFunction(() => {
+  const rows = Array.from(document.querySelectorAll(".source-bars > div span"));
+  return rows.some((span) => span.textContent && span.textContent.includes("my-custom-agent"));
+}, undefined, { timeout: 5000 });
+const finallyPresent = await page.locator(".source-bars > div span").filter({ hasText: "my-custom-agent" }).count();
+if (finallyPresent === 0) {
+  failures.push("Add Source should leave at least one my-custom-agent row in source-bars");
+}
+if (initiallyPresent === 0 && finallyPresent === 0) {
+  failures.push("Add Source should add a my-custom-agent row when none existed before");
+}
+await screenshot("12-add-source-after");
+
+// Cleanup: read linka-skillhub.config.json, drop the my-custom-agent entry,
+// write atomically so the next run starts from a clean state. We do this
+// after the assertions so a partial run still surfaces the new entry — the
+// final cleanup only runs when everything else passed.
+const configPath = path.join(process.cwd(), "linka-skillhub.config.json");
+const configRaw = await fs.readFile(configPath, "utf8");
+const config = JSON.parse(configRaw);
+if (config?.profiles?.mirror?.agents && Object.prototype.hasOwnProperty.call(config.profiles.mirror.agents, "my-custom-agent")) {
+  delete config.profiles.mirror.agents["my-custom-agent"];
+  const tmp = `${configPath}.tmp`;
+  await fs.writeFile(tmp, `${JSON.stringify(config, null, 2)}\n`, "utf8");
+  await fs.rename(tmp, configPath);
+}
+
 await browser.close();
 await fs.writeFile(path.join(outDir, "result.json"), JSON.stringify({ failures }, null, 2), "utf8");
 if (failures.length > 0) {

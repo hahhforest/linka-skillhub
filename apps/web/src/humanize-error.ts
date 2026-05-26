@@ -50,6 +50,15 @@ export function humanizeError(error: unknown, lang: Language): string {
   if (code === "not_a_directory") return t.errorRegistryNotADirectory;
   if (code === "invalid_manifest") return t.errorRegistryInvalidManifest;
   if (code === "missing_repo_path") return t.errorRegistryMissingRepoPath;
+  // R35-C4 — POST /api/sources validation codes. Each maps to a single
+  // human-facing string the AddSourceDialog footer can render verbatim.
+  if (code === "missing_path") return t.errorAddSourceMissingPath;
+  if (code === "invalid_path") return t.errorAddSourceInvalidPath;
+  if (code === "invalid_agent_kind") return t.errorAddSourceInvalidAgentKind;
+  if (code === "invalid_scope") return t.errorAddSourceInvalidScope;
+  if (code === "duplicate_source") return t.errorAddSourceDuplicate;
+  if (code === "profile_not_found") return t.errorAddSourceProfileNotFound;
+  if (code === "missing_config") return t.errorAddSourceMissingConfig;
 
   if (text && NETWORK_HINTS.some((hint) => text.includes(hint))) {
     return t.errorNetworkUnreachable;

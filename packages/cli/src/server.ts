@@ -3,6 +3,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { execFile } from "node:child_process";
 import {
+  addSourceToProfile,
   applyDistributionPlan,
   createDistributionPlan,
   discoverSkillSources,
@@ -13,6 +14,7 @@ import {
   gitPush,
   gitStatus,
   importSkillsToRepository,
+  loadSkillHubConfig,
   readRegistryManifest,
   reviewSkillWithAgent,
   reviewSkillWithRules,
@@ -24,10 +26,18 @@ import {
   type AgentKind,
   type DistributionPlan,
   type SkillHubConfig,
-  type SkillPackage
+  type SkillPackage,
+  type SkillScope,
+  type SkillSourceTemplate
 } from "@linka-skillhub/core";
 
 const PLAN_TTL_MS = 10 * 60 * 1000;
+
+// R35-C4: validation helpers for POST /api/sources. The web modal lets users
+// register arbitrary directories as skill sources; we mirror the codes here so
+// humanizeError on the client can show a localized message per failure mode.
+const VALID_SCOPES: readonly SkillScope[] = ["user", "private", "builtin", "system", "project", "unknown"];
+const AGENT_KIND_PATTERN = /^[a-z][a-z0-9-]*$/;
 
 interface ServerOptions {
   readonly port: number;
@@ -130,6 +140,15 @@ export const startServer = (options: ServerOptions): http.Server => {
   let currentRepoIsExternal = false;
   const profileRepoRoot = path.resolve(options.repoPath);
   const profileRoot = options.stateDir ? path.dirname(path.resolve(options.stateDir)) : path.resolve(options.cwd);
+  // R35-C4: mutable so POST /api/sources can refresh in-memory after writing
+  // the new source to linka-skillhub.config.json. Without this the next /api/scan
+  // call still uses the snapshot taken at server boot and the user's new
+  // directory silently doesn't show up until the server is restarted.
+  let currentConfig = options.config;
+  const reloadConfigFromDisk = async (): Promise<void> => {
+    const resolved = await loadSkillHubConfig({ cwd: options.cwd, profileName: options.profileName });
+    currentConfig = resolved.raw;
+  };
   const planCache = new Map<string, DistributionPlan>();
   const planCreatedAt = new Map<string, number>();
   const cachePlan = (plan: DistributionPlan): void => {
@@ -163,10 +182,10 @@ export const startServer = (options: ServerOptions): http.Server => {
       }
 
       if (request.method === "GET" && url.pathname === "/api/agents") {
-        const sources = await discoverSkillSources(options.cwd, options.config, options.profileName);
+        const sources = await discoverSkillSources(options.cwd, currentConfig, options.profileName);
         sendJson(response, 200, {
-          agents: getAgentDefinitions(options.cwd, options.config, options.profileName),
-          targets: getDistributionTargets(options.cwd, options.config, options.profileName),
+          agents: getAgentDefinitions(options.cwd, currentConfig, options.profileName),
+          targets: getDistributionTargets(options.cwd, currentConfig, options.profileName),
           sources,
           profile: options.profileName,
           registryRepo: currentRepoPath,
@@ -215,20 +234,146 @@ export const startServer = (options: ServerOptions): http.Server => {
       }
 
       if (request.method === "GET" && url.pathname === "/api/reviewers") {
-        sendJson(response, 200, { reviewers: await listReviewers(options.cwd, options.config, options.profileName) });
+        sendJson(response, 200, { reviewers: await listReviewers(options.cwd, currentConfig, options.profileName) });
         return;
       }
 
       if (request.method === "POST" && url.pathname === "/api/scan") {
         const body = await readJsonBody<{ includeDefaultExcluded?: boolean }>(request);
-        const skills = await scanSkills({ cwd: options.cwd, config: options.config, profileName: options.profileName, includeDefaultExcluded: body.includeDefaultExcluded ?? true });
+        const skills = await scanSkills({ cwd: options.cwd, config: currentConfig, profileName: options.profileName, includeDefaultExcluded: body.includeDefaultExcluded ?? true });
         sendJson(response, 200, { skills, summary: summarize(skills) });
+        return;
+      }
+
+      if (request.method === "POST" && url.pathname === "/api/sources") {
+        // R35-C4: register a directory on disk as a managed skill source under
+        // the active profile. Steps:
+        //   1. Body-shape validation (agentKind / scope / path required + typed).
+        //   2. agentKind must match ^[a-z][a-z0-9-]*$ so it stays a safe JSON key
+        //      and fits the same conventions the built-in kinds use.
+        //   3. scope must be one of the six SkillScope variants.
+        //   4. Path is resolved against options.cwd, must exist, must be a
+        //      directory, and its realpath must live under profileRoot. This is
+        //      the same realpath-and-assertPathInside pattern that
+        //      validateRegistryPath uses for the Switch Registry flow — keeps
+        //      the user from accidentally pinning a source outside their
+        //      profile (which would silently fail to scan).
+        //   5. addSourceToProfile rewrites linka-skillhub.config.json atomically
+        //      via fs.writeFile(.tmp) + fs.rename so a crash mid-write never
+        //      bricks the JSON.
+        // The endpoint returns enough info for the UI to surface a success
+        // toast and trigger a fresh /api/scan + /api/agents pair.
+        const body = await readJsonBody<{ agentKind?: string; label?: string; scope?: string; path?: string }>(request);
+        if (!options.profileName) {
+          sendJson(response, 500, { error: "Active profile name is required", code: "profile_not_found" });
+          return;
+        }
+        if (!body.path || typeof body.path !== "string" || body.path.trim().length === 0) {
+          sendJson(response, 400, { error: "path is required", code: "missing_path" });
+          return;
+        }
+        if (!body.agentKind || typeof body.agentKind !== "string") {
+          sendJson(response, 400, { error: "agentKind is required", code: "invalid_agent_kind" });
+          return;
+        }
+        const agentKind = body.agentKind.trim();
+        if (!AGENT_KIND_PATTERN.test(agentKind)) {
+          sendJson(response, 400, {
+            error: `Invalid agentKind: must match ${AGENT_KIND_PATTERN}`,
+            code: "invalid_agent_kind"
+          });
+          return;
+        }
+        if (!body.scope || typeof body.scope !== "string" || !VALID_SCOPES.includes(body.scope as SkillScope)) {
+          sendJson(response, 400, {
+            error: `Invalid scope: must be one of ${VALID_SCOPES.join(", ")}`,
+            code: "invalid_scope"
+          });
+          return;
+        }
+        const requested = path.resolve(options.cwd, body.path.trim());
+        let stat: Awaited<ReturnType<typeof fs.lstat>>;
+        try {
+          stat = await fs.lstat(requested);
+        } catch {
+          sendJson(response, 400, { error: `Path not found: ${requested}`, code: "invalid_path", path: requested });
+          return;
+        }
+        if (!stat.isDirectory() && !stat.isSymbolicLink()) {
+          sendJson(response, 400, { error: `Not a directory: ${requested}`, code: "invalid_path", path: requested });
+          return;
+        }
+        let realPath: string;
+        try {
+          realPath = await fs.realpath(requested);
+        } catch {
+          sendJson(response, 400, { error: `Path not resolvable: ${requested}`, code: "invalid_path", path: requested });
+          return;
+        }
+        const realStat = await fs.stat(realPath);
+        if (!realStat.isDirectory()) {
+          sendJson(response, 400, { error: `Not a directory: ${realPath}`, code: "invalid_path", path: realPath });
+          return;
+        }
+        try {
+          let realProfileRoot = profileRoot;
+          try {
+            realProfileRoot = await fs.realpath(profileRoot);
+          } catch {
+            // profileRoot may not exist on disk yet; fall back to the resolved value.
+          }
+          const relative = path.relative(realProfileRoot, realPath);
+          if (relative.startsWith("..") || path.isAbsolute(relative)) {
+            sendJson(response, 400, {
+              error: `Path is outside the active profile root (${profileRoot})`,
+              code: "outside_profile_root",
+              path: realPath
+            });
+            return;
+          }
+        } catch (error) {
+          sendJson(response, 400, {
+            error: error instanceof Error ? error.message : String(error),
+            code: "outside_profile_root",
+            path: realPath
+          });
+          return;
+        }
+        const source: SkillSourceTemplate = {
+          path: realPath,
+          scope: body.scope as SkillScope,
+          defaultSelected: true,
+          note: body.label && body.label.trim().length > 0 && body.label.trim() !== agentKind ? body.label.trim() : undefined
+        };
+        try {
+          const result = await addSourceToProfile(options.profileName, agentKind, source, { cwd: options.cwd });
+          // R35-C4: refresh in-memory currentConfig so the very next /api/scan
+          // and /api/agents calls (which the web layer fires right after this
+          // handler resolves) reflect the new source. Without this, the user's
+          // new directory would only surface after the next server restart.
+          await reloadConfigFromDisk();
+          sendJson(response, 200, {
+            ok: true,
+            agentKind: result.agentKind,
+            scope: source.scope,
+            path: realPath,
+            totalSources: result.totalSources,
+            configPath: result.configPath
+          });
+        } catch (error) {
+          const code = (error as { code?: string }).code ?? "invalid_path";
+          const status = code === "duplicate_source" ? 409 : code === "profile_not_found" ? 404 : 400;
+          sendJson(response, status, {
+            error: error instanceof Error ? error.message : String(error),
+            code
+          });
+        }
         return;
       }
 
       if (request.method === "POST" && url.pathname === "/api/import") {
         const body = await readJsonBody<{ repoPath?: string; includeDefaultExcluded?: boolean }>(request);
-        const result = await importSkillsToRepository({ repoPath: resolveRepoPath(body.repoPath), cwd: options.cwd, config: options.config, profileName: options.profileName, includeDefaultExcluded: body.includeDefaultExcluded ?? false });
+        const result = await importSkillsToRepository({ repoPath: resolveRepoPath(body.repoPath), cwd: options.cwd, config: currentConfig, profileName: options.profileName, includeDefaultExcluded: body.includeDefaultExcluded ?? false });
         sendJson(response, 200, result);
         return;
       }
@@ -265,7 +410,7 @@ export const startServer = (options: ServerOptions): http.Server => {
         const plan = await createDistributionPlan({
           registryPath: resolveRepoPath(body.registryPath),
           cwd: options.cwd,
-          config: options.config,
+          config: currentConfig,
           profileName: options.profileName,
           backupDir: options.stateDir ? path.join(options.stateDir, "backups") : undefined,
           targetAgents: body.targetAgents,
@@ -306,7 +451,7 @@ export const startServer = (options: ServerOptions): http.Server => {
           const recomputed = await createDistributionPlan({
             registryPath: resolveRepoPath(body.registryPath),
             cwd: options.cwd,
-            config: options.config,
+            config: currentConfig,
             profileName: options.profileName,
             backupDir: options.stateDir ? path.join(options.stateDir, "backups") : undefined,
             targetAgents: body.targetAgents,
