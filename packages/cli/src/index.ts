@@ -174,6 +174,22 @@ const summarize = (skills: Awaited<ReturnType<typeof scanSkills>>): Record<strin
   invalid: skills.filter((skill) => skill.status.includes("invalid")).length
 });
 
+const byAgentCounts = (skills: Awaited<ReturnType<typeof scanSkills>>): Record<string, number> => {
+  const counts: Record<string, number> = {};
+  for (const skill of skills) {
+    const agent = skill.source.agent;
+    counts[agent] = (counts[agent] ?? 0) + 1;
+  }
+  return counts;
+};
+
+const formatByAgentLine = (skills: Awaited<ReturnType<typeof scanSkills>>): string => {
+  const counts = byAgentCounts(skills);
+  const entries = Object.entries(counts).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+  const body = entries.length === 0 ? "(none)" : entries.map(([agent, n]) => `${agent} ${n}`).join("  ");
+  return `${c.cyan("By agent:")} ${body}`;
+};
+
 const compactPlan = (plan: Awaited<ReturnType<typeof createDistributionPlan>>) => ({
   id: plan.id,
   createdAt: plan.createdAt,
@@ -441,6 +457,7 @@ program
       process.stdout.write(
         `${c.cyan(`Profile ${runtime.profileName}.`)} Scanned ${c.bold(String(summary.total))} skills: ${c.green(`${summary.valid} valid`)}, ${c.green(`${summary.portable} portable`)}, ${c.yellow(`${summary.agentBound} agent-bound`)}, ${c.red(`${summary.unsafe} unsafe`)}, ${c.red(`${summary.invalid} invalid`)}.\n`
       );
+      process.stdout.write(`${formatByAgentLine(skills)}\n`);
       for (const skill of skills.slice(0, 30)) {
         process.stdout.write(`${skill.id}  ${skill.name}  ${skill.source.agent}/${skill.source.scope}  ${colorStatusList(skill.status, ",")}\n`);
       }
