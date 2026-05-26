@@ -42,6 +42,7 @@ const buildItem = (overrides: Partial<DistributionItemPlan>): DistributionItemPl
   target: overrides.target ?? buildTarget("codex"),
   action: overrides.action ?? "copy",
   reason: overrides.reason ?? "test",
+  reasonCode: overrides.reasonCode ?? "new",
   existingPath: overrides.existingPath,
   backupPath: overrides.backupPath
 });

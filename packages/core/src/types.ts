@@ -121,11 +121,18 @@ export interface DistributionTarget {
   readonly targetDir: string;
 }
 
+export type DistributionItemReasonCode =
+  | "not_shareable"
+  | "same_content"
+  | "different_content_will_backup"
+  | "new";
+
 export interface DistributionItemPlan {
   readonly skill: SkillPackage;
   readonly target: DistributionTarget;
   readonly action: "copy" | "overwrite" | "skip";
   readonly reason: string;
+  readonly reasonCode: DistributionItemReasonCode;
   readonly existingPath?: string;
   readonly backupPath?: string;
 }

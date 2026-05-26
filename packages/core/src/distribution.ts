@@ -57,20 +57,20 @@ export const createDistributionPlan = async (options: DistributionOptions): Prom
       const existing = await pathExists(targetPath);
       const shareable = isShareable(skill, options);
       if (!shareable) {
-        items.push({ skill, target, action: "skip", reason: "Skill is not valid, portable, and shareable by default.", existingPath: existing ? targetPath : undefined });
+        items.push({ skill, target, action: "skip", reason: "Skill is not valid, portable, and shareable by default.", reasonCode: "not_shareable", existingPath: existing ? targetPath : undefined });
         continue;
       }
       if (existing) {
         const existingHash = await hashDirectory(targetPath).catch(() => "unreadable");
         if (existingHash === skill.hash) {
-          items.push({ skill, target, action: "skip", reason: "Target already has the same content.", existingPath: targetPath });
+          items.push({ skill, target, action: "skip", reason: "Target already has the same content.", reasonCode: "same_content", existingPath: targetPath });
         } else {
           const backupPath = path.join(backupBase, sha256(createdAt).slice(0, 12), target.agent, sanitizePathSegment(skill.name));
           assertPathInside(backupBase, backupPath, "backup path");
-          items.push({ skill, target, action: "overwrite", reason: "Target has different content; backup will be created before overwrite.", existingPath: targetPath, backupPath });
+          items.push({ skill, target, action: "overwrite", reason: "Target has different content; backup will be created before overwrite.", reasonCode: "different_content_will_backup", existingPath: targetPath, backupPath });
         }
       } else {
-        items.push({ skill, target, action: "copy", reason: "Target does not have this skill yet." });
+        items.push({ skill, target, action: "copy", reason: "Target does not have this skill yet.", reasonCode: "new" });
       }
     }
   }

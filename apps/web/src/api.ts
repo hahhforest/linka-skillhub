@@ -49,6 +49,7 @@ export interface ReviewerInfo {
   readonly command?: string;
   readonly path?: string;
   readonly reason: string;
+  readonly reasonCode?: "rules_only" | "available" | "unavailable_command";
 }
 
 const request = async <T>(path: string, options: RequestInit = {}): Promise<T> => {

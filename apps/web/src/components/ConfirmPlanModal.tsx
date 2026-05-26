@@ -13,6 +13,13 @@ export interface ConfirmPlanModalProps {
   readonly onCancel: () => void;
 }
 
+function resolveReason(item: DistributionPlan["items"][number], lang: Language): string {
+  const t = messages[lang] as Record<string, string>;
+  if (!item.reasonCode) return item.reason;
+  const key = `reason_${item.reasonCode}`;
+  return typeof t[key] === "string" ? t[key] : item.reason;
+}
+
 export function ConfirmPlanModal({ plan, confirmToken, lang, busy, onConfirm, onCancel }: ConfirmPlanModalProps): JSX.Element {
   const t = messages[lang];
   const counts = {
@@ -50,7 +57,7 @@ export function ConfirmPlanModal({ plan, confirmToken, lang, busy, onConfirm, on
             <div key={`${item.target.agent}-${item.skill.id}`} className={`confirm-plan-item action-${item.action}`}>
               <strong>{item.action === "copy" ? t.confirmCopy : item.action === "overwrite" ? t.confirmOverwrite : t.confirmSkip}</strong>
               <span>{item.skill.name} → {item.target.label}</span>
-              <small>{item.reason}</small>
+              <small>{resolveReason(item, lang)}</small>
               {item.existingPath ? <code>{item.existingPath}</code> : null}
               {item.backupPath ? <code className="backup-hint">backup {item.backupPath}</code> : null}
             </div>

@@ -138,6 +138,24 @@ function actionLabel(action: string, lang: Language): string {
   return action;
 }
 
+function localizedPlanReason(item: DistributionPlan["items"][number], lang: Language): string {
+  const t = messages[lang] as Record<string, string>;
+  if (!item.reasonCode) return item.reason;
+  const key = `reason_${item.reasonCode}`;
+  return typeof t[key] === "string" ? t[key] : item.reason;
+}
+
+function localizedReviewerReason(reviewer: ReviewerInfo, lang: Language): string {
+  const t = messages[lang] as Record<string, string>;
+  if (!reviewer.reasonCode) return reviewer.reason;
+  const key = `reviewer_reason_${reviewer.reasonCode}`;
+  const template = t[key];
+  if (typeof template !== "string") return reviewer.reason;
+  return template
+    .replace("{command}", reviewer.command ?? "")
+    .replace("{path}", reviewer.path ?? "");
+}
+
 function PlanItems({ plan, lang }: { readonly plan: DistributionPlan; readonly lang: Language }) {
   const t = messages[lang];
   return (
@@ -149,7 +167,7 @@ function PlanItems({ plan, lang }: { readonly plan: DistributionPlan; readonly l
             <span>{item.skill.name} → {item.target.label}</span>
           </div>
           <dl>
-            <dt>{t.reason}</dt><dd>{item.reason}</dd>
+            <dt>{t.reason}</dt><dd>{localizedPlanReason(item, lang)}</dd>
             {item.existingPath && <><dt>{t.existingPath}</dt><dd><code>{item.existingPath}</code></dd></>}
             {item.backupPath && <><dt>{t.backupPath}</dt><dd><code>{item.backupPath}</code></dd></>}
           </dl>
@@ -466,7 +484,7 @@ export function App() {
         </div>
       </div>
       {dialog === "scan" && <DialogFrame title={t.scanDialogTitle} onClose={() => setDialog(null)} closeLabel={t.cancel}><p>{t.scanDialogBody}</p><label className="checkbox-line"><input type="checkbox" checked={includeBuiltin} onChange={(event) => setIncludeBuiltin(event.target.checked)} /> {t.includeBuiltin}</label><div className="dialog-actions"><button className="ghost" onClick={() => setDialog(null)}>{t.cancel}</button><button className="primary" onClick={runScan} disabled={busy}>{t.confirmScan}</button></div></DialogFrame>}
-      {dialog === "review" && <DialogFrame title={t.reviewDialogTitle} onClose={() => setDialog(null)} closeLabel={t.cancel}><p>{t.reviewDialogBody}</p><div className="review-meta"><span>{t.reviewScope}: {selected.size ? `${selected.size} ${t.selectedCount}` : `${visibleSkills.length} visible`}</span><span>{t.reviewOutputLanguage}: {lang === "zh" ? "中文" : "English"}</span><span>{t.reviewWriteTarget}: registry/reviews/*.json</span></div><div className="reviewer-list">{reviewers.map((item) => <label key={item.kind} className={`reviewer-option ${reviewer === item.kind ? "active" : ""} ${!item.available ? "disabled" : ""}`}><input type="radio" name="reviewer" value={item.kind} checked={reviewer === item.kind} disabled={!item.available} onChange={() => setReviewer(item.kind)} /><strong>{item.kind === "rules" ? t.reviewerRules : item.label}</strong><span>{item.available ? t.reviewerAvailable : t.reviewerUnavailable}</span><small>{item.reason}</small></label>)}</div><p className="muted-copy">{t.agentUnavailable}</p><div className="dialog-actions"><button className="ghost" onClick={() => setDialog(null)}>{t.cancel}</button><button className="primary" onClick={runReview} disabled={busy || !reviewers.find((item) => item.kind === reviewer)?.available}>{t.startReview}</button></div></DialogFrame>}
+      {dialog === "review" && <DialogFrame title={t.reviewDialogTitle} onClose={() => setDialog(null)} closeLabel={t.cancel}><p>{t.reviewDialogBody}</p><div className="review-meta"><span>{t.reviewScope}: {selected.size ? `${selected.size} ${t.selectedCount}` : `${visibleSkills.length} visible`}</span><span>{t.reviewOutputLanguage}: {lang === "zh" ? "中文" : "English"}</span><span>{t.reviewWriteTarget}: registry/reviews/*.json</span></div><div className="reviewer-list">{reviewers.map((item) => <label key={item.kind} className={`reviewer-option ${reviewer === item.kind ? "active" : ""} ${!item.available ? "disabled" : ""}`}><input type="radio" name="reviewer" value={item.kind} checked={reviewer === item.kind} disabled={!item.available} onChange={() => setReviewer(item.kind)} /><strong>{item.kind === "rules" ? t.reviewerRules : item.label}</strong><span>{item.available ? t.reviewerAvailable : t.reviewerUnavailable}</span><small>{localizedReviewerReason(item, lang)}</small></label>)}</div><p className="muted-copy">{t.agentUnavailable}</p><div className="dialog-actions"><button className="ghost" onClick={() => setDialog(null)}>{t.cancel}</button><button className="primary" onClick={runReview} disabled={busy || !reviewers.find((item) => item.kind === reviewer)?.available}>{t.startReview}</button></div></DialogFrame>}
       {dialog === "confirmPlan" && pendingPlan && (
         <ConfirmPlanModal
           plan={pendingPlan.plan}

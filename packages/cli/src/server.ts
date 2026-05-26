@@ -113,8 +113,8 @@ const commandExists = (command: string): Promise<string | undefined> =>
 
 const listReviewers = async (cwd: string, config?: SkillHubConfig, profileName?: string) => {
   const agents = getAgentDefinitions(cwd, config, profileName).filter((agent) => agent.kind !== "shared");
-  const reviewers: Array<{ kind: string; label: string; available: boolean; reason: string; command?: string; path?: string }> = [
-    { kind: "rules", label: "Rules", available: true, reason: "Deterministic local checks; no Code Agent call." }
+  const reviewers: Array<{ kind: string; label: string; available: boolean; reason: string; reasonCode: "rules_only" | "available" | "unavailable_command"; command?: string; path?: string }> = [
+    { kind: "rules", label: "Rules", available: true, reason: "Deterministic local checks; no Code Agent call.", reasonCode: "rules_only" }
   ];
   for (const agent of agents) {
     const command = reviewerCommand[agent.kind];
@@ -125,7 +125,8 @@ const listReviewers = async (cwd: string, config?: SkillHubConfig, profileName?:
       available: Boolean(path),
       command,
       path,
-      reason: path ? `Found ${command} at ${path}.` : `Command not found: ${command ?? agent.kind}.`
+      reason: path ? `Found ${command} at ${path}.` : `Command not found: ${command ?? agent.kind}.`,
+      reasonCode: path ? "available" : "unavailable_command"
     });
   }
   return reviewers;
