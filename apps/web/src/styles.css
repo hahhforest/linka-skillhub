@@ -296,24 +296,6 @@ textarea:focus-visible {
   color: var(--primary);
   font-weight: var(--fw-bold);
 }
-.agent-legend {
-  display: grid;
-  gap: var(--sp-2);
-  color: var(--muted);
-  font-size: var(--fs-xs);
-}
-.agent-legend span {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-2);
-}
-.agent-chip {
-  min-height: 30px;
-  padding: 0 var(--sp-2);
-  border-radius: var(--r-md);
-  color: var(--muted);
-  background: transparent;
-}
 
 .content {
   min-width: 0;

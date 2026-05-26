@@ -111,10 +111,9 @@ function PlanItems({ plan, lang }: { readonly plan: DistributionPlan; readonly l
   );
 }
 
-function Sidebar({ view, setView, agents, lang }: {
+function Sidebar({ view, setView, lang }: {
   readonly view: View;
   readonly setView: (view: View) => void;
-  readonly agents: AgentDefinition[];
   readonly lang: Language;
 }) {
   const t = messages[lang];
@@ -132,18 +131,6 @@ function Sidebar({ view, setView, agents, lang }: {
       </div>
       <div className="sidebar-group-label">{t.navGroupLabel}</div>
       <nav>{items.map(([key, icon, label]) => <button key={key} className={view === key ? "active" : ""} onClick={() => setView(key)}>{icon}{label}</button>)}</nav>
-      <div className="sidebar-group-label">{t.filterGroupLabel}</div>
-      {/* Pure-display chips: R34 commit 2 removed the sidebar agent filter so
-          the legend no longer acts as a hidden global filter on top of each
-          page's own controls. Filtering now lives in the Overview header
-          dropdown / Intersect's from/to / Distribute's target picker. */}
-      <div className="agent-legend">
-        {agents.map((agent) => (
-          <span key={agent.kind} className="agent-chip">
-            <AgentLogo agent={agent.kind} /> {agentTone[agent.kind]?.label ?? agent.label}
-          </span>
-        ))}
-      </div>
     </aside>
   );
 }
@@ -458,7 +445,7 @@ export function App() {
         <div className="top-actions"><div className="search-box"><Search size={16} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t.search} />{query && (<button className="search-clear" onClick={() => setQuery("")} aria-label={t.clearSearch} type="button"><X size={14} /></button>)}</div><button className="ghost" onClick={() => setDialog("scan")}>{busy ? <Loader2 className="spin" size={16} /> : <RefreshCw size={16} />} {busy ? t.scanning : t.scan}</button><button className="ghost" onClick={() => setLang(lang === "zh" ? "en" : "zh")}>{t.language}</button></div>
       </header>
       <div className="workspace">
-        <Sidebar view={view} setView={setView} agents={agents} lang={lang} />
+        <Sidebar view={view} setView={setView} lang={lang} />
         <div className="content">
           {view === "overview" && <Overview skills={visibleSkills} focusedSkillId={focusedSkillId} focusSkill={focusSkill} lang={lang} totalSkillCount={skills.length} allSkills={skills} query={query} onClearQuery={clearQuery} agents={agents} overviewAgentFilter={overviewAgentFilter} setOverviewAgentFilter={setOverviewAgentFilter} />}
           {view === "repo" && (
