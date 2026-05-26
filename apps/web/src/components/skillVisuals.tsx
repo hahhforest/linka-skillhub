@@ -16,6 +16,7 @@ export const agentTone: Record<string, { label: string }> = {
   claude: { label: "Claude Code" },
   codex: { label: "Codex" },
   cursor: { label: "Cursor" },
+  openclaw: { label: "OpenClaw" },
   shared: { label: ".agents/skills" }
 };
 

@@ -69,6 +69,16 @@ export const DEFAULT_AGENTS: Record<AgentKind, AgentDefinition> = {
       { path: "~/.cursor/skills-cursor", scope: "user", defaultSelected: true }
     ]
   },
+  openclaw: {
+    kind: "openclaw",
+    label: "OpenClaw",
+    command: "openclaw",
+    color: "#dc2626",
+    defaultTargetDir: "~/.openclaw/workspace/skills",
+    sourceDirs: [
+      { path: "~/.openclaw/workspace/skills", scope: "user", defaultSelected: true }
+    ]
+  },
   shared: {
     kind: "shared",
     label: ".agents/skills",
