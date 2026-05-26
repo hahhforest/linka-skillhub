@@ -67,28 +67,3 @@ export const setRemote = async (repoPath: string, url: string, name = "origin"):
   if (remotes.includes(name)) await run("git", ["remote", "set-url", name, url], { cwd: repoPath });
   else await run("git", ["remote", "add", name, url], { cwd: repoPath });
 };
-
-export const cloneRepository = async (url: string, targetPath: string): Promise<void> => {
-  if (await exists(targetPath)) throw new Error(`Target path already exists: ${targetPath}`);
-  await run("git", ["clone", url, targetPath]);
-};
-
-const keychainService = "linka-skillhub";
-
-export const storeGithubToken = async (token: string, account = "github"): Promise<void> => {
-  await run("security", ["delete-generic-password", "-s", keychainService, "-a", account]).catch(() => ({ stdout: "", stderr: "" }));
-  await run("security", ["add-generic-password", "-s", keychainService, "-a", account, "-w", token]);
-};
-
-export const readGithubToken = async (account = "github"): Promise<string | undefined> => {
-  try {
-    return (await run("security", ["find-generic-password", "-s", keychainService, "-a", account, "-w"])).stdout;
-  } catch {
-    return undefined;
-  }
-};
-
-export const ghCreateRepository = async (name: string, options: { readonly private?: boolean; readonly repoPath?: string } = {}): Promise<string> => {
-  const args = ["repo", "create", name, options.private === false ? "--public" : "--private", "--source", options.repoPath ?? ".", "--remote", "origin"];
-  return (await run("gh", args, { cwd: options.repoPath })).stdout;
-};

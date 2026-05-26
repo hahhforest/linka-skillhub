@@ -2,7 +2,6 @@ import http from "node:http";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { execFile } from "node:child_process";
-import { fileURLToPath } from "node:url";
 import {
   applyDistributionPlan,
   createDistributionPlan,
@@ -384,4 +383,3 @@ export const startServer = (options: ServerOptions): http.Server => {
 
 export const defaultRepoPath = (cwd = process.env.INIT_CWD ?? process.cwd()): string => path.join(cwd, ".linka-skillhub", "registry-repo");
 
-export const currentCliFile = fileURLToPath(import.meta.url);

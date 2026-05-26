@@ -16,7 +16,7 @@ export const assertNoPathSeparators = (name: string, label: string): void => {
   }
 };
 
-export const isPathInside = (parent: string, child: string): boolean => {
+const isPathInside = (parent: string, child: string): boolean => {
   const relative = path.relative(path.resolve(parent), path.resolve(child));
   return relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative));
 };
