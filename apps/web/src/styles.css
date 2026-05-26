@@ -112,7 +112,6 @@ textarea:focus-visible {
 .action-card:focus-visible,
 .skill-row:focus-visible,
 .target:focus-visible,
-.agent-filter:focus-visible,
 .sidebar nav button:focus-visible,
 .search-box input:focus-visible,
 .field-label input:focus-visible {
@@ -309,6 +308,13 @@ textarea:focus-visible {
   display: flex;
   align-items: center;
   gap: var(--sp-2);
+}
+.agent-chip {
+  min-height: 30px;
+  padding: 0 var(--sp-2);
+  border-radius: var(--r-md);
+  color: var(--muted);
+  background: transparent;
 }
 
 .content {
@@ -584,7 +590,6 @@ textarea:focus-visible {
 .agent-codex { background: #111827; }
 .agent-shared { background: #64748b; }
 .agent-generic { background: #64748b; }
-.agent-all { background: var(--surface-3); color: var(--muted); box-shadow: inset 0 0 0 1px var(--border); }
 
 .intersect-layout {
   display: grid;
@@ -831,31 +836,29 @@ textarea:focus-visible {
   .donut-card { grid-template-columns: 1fr; justify-items: start; }
 }
 
-.agent-legend.selectable { gap: var(--sp-1); }
-.agent-filter {
-  min-height: 30px;
-  border: 0;
-  border-radius: var(--r-md);
-  background: transparent;
-  color: var(--muted);
-  display: flex;
-  align-items: center;
-  gap: var(--sp-3);
-  padding: 0 var(--sp-2);
-  text-align: left;
-  transition: background var(--t-fast), color var(--t-fast);
-}
-.agent-filter:hover { background: var(--surface-2); color: var(--text-2); }
-.agent-filter.active {
-  background: var(--primary-soft);
-  color: var(--primary);
-  font-weight: var(--fw-bold);
-}
-.agent-filter.active:hover { background: var(--primary-soft); color: var(--primary); }
 .card-head p {
   margin: var(--sp-1) 0 0;
   color: var(--muted);
   font-size: var(--fs-xs);
+}
+.overview-agent-filter {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  font-size: var(--fs-xs);
+  color: var(--muted);
+}
+.overview-agent-filter-label {
+  white-space: nowrap;
+}
+.overview-agent-filter select {
+  height: var(--ctrl-sm);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  padding: 0 var(--sp-3);
+  background: var(--surface);
+  color: var(--text);
+  font-size: var(--fs-sm);
 }
 .scrollable-list {
   max-height: 430px;

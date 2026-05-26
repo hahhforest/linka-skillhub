@@ -37,11 +37,22 @@ let body = await page.locator("body").innerText();
 if (body.includes("确认扫描来源")) failures.push("Scan dialog did not close after cancel");
 
 const allTotal = await page.locator(".stat-card strong").first().innerText();
-await page.locator(".agent-filter").filter({ hasText: "Mavis" }).click();
+// R34 commit 2: agent filtering is now an Overview header dropdown, not a
+// clickable sidebar legend. Pick Mavis from the select and confirm the table
+// + cards narrow accordingly.
+await page.locator(".overview-agent-filter select").selectOption("mavis");
+await page.waitForTimeout(200);
 await screenshot("04-mavis-filter");
 const mavisTotal = await page.locator(".stat-card strong").first().innerText();
 if (Number(mavisTotal) >= Number(allTotal)) failures.push(`Agent filter did not reduce total: all=${allTotal}, mavis=${mavisTotal}`);
 await expectText("当前范围: Mavis", "Mavis scope label");
+// Sidebar legend should now be pure-display chips (no clickable agent-filter
+// buttons). If the old class survives, the dual-filter regression is back.
+const legacyAgentFilters = await page.locator(".sidebar .agent-filter").count();
+if (legacyAgentFilters > 0) failures.push(`Sidebar still renders ${legacyAgentFilters} agent-filter buttons`);
+// Reset for the rest of the flow so subsequent assertions see the full set.
+await page.locator(".overview-agent-filter select").selectOption("all");
+await page.waitForTimeout(150);
 
 await page.getByRole("button", { name: /仓库管理/ }).click();
 await expectText("导入到 Registry", "import action");
@@ -78,7 +89,6 @@ await expectText("确认复制到选中的目标 Agent", "distribution apply but
 await screenshot("08-distribution-copy");
 
 // New: confirm-plan modal flow + load registry
-await page.getByRole("button", { name: /^全部来源$/ }).click();
 await page.getByRole("button", { name: /总览/ }).click();
 await page.waitForTimeout(200);
 const overviewRows = await page.locator(".skill-row").count();

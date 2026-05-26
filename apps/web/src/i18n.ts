@@ -26,7 +26,7 @@ export const messages = {
     noScanTitle: "还没有扫描结果",
     noScanBody: "点击“扫描 skills”后，会读取当前环境配置中的来源目录。当前默认环境只读取沙箱镜像。",
     noMatchTitle: "没有匹配的 skills",
-    noMatchBody: "当前搜索或筛选条件下没有匹配项。清空搜索框或选择“全部来源”可以重新看到全部 skills。",
+    noMatchBody: "当前搜索或筛选条件下没有匹配项。清空搜索框或把表头的“按来源过滤”切回“全部来源”可以重新看到全部 skills。",
     totalSkills: "Skills",
     valid: "合法",
     shareable: "可共享",
@@ -42,7 +42,10 @@ export const messages = {
     selectionHint: "点击条目可加入审查/分发选择",
     noDescription: "无描述",
     filteredHint: "已筛选：当前显示 {visible} / 全部 {total} 个 skills",
+    filteredQuerySuffix: "·搜索 \"{query}\"",
+    filteredAgentSuffix: "·来源 {agent}",
     clearFilters: "清除筛选",
+    overviewAgentFilterLabel: "按来源过滤",
     importToRegistry: "导入到 Registry",
     importToRegistryDesc: "把当前扫描到的 skill 包复制到 registry，并更新 registry/skills.json。",
     runRuleReview: "运行确定性规则审查",
@@ -146,7 +149,7 @@ export const messages = {
     errorRegistryMissingRepoPath: "请输入 registry 路径",
     errorUnknown: "未知错误",
     navGroupLabel: "导航",
-    filterGroupLabel: "按来源筛选"
+    filterGroupLabel: "来源说明（不可点）"
   },
   en: {
     appTitle: "Skill Manager",
@@ -173,7 +176,7 @@ export const messages = {
     noScanTitle: "No scan result yet",
     noScanBody: "Click Scan skills to read the source directories from the active profile. The default profile reads only the sandbox mirror.",
     noMatchTitle: "No matching skills",
-    noMatchBody: "No skills match the current search or filter. Clear the search box or pick All sources to see every skill again.",
+    noMatchBody: "No skills match the current search or filter. Clear the search box or set the table header \"Filter by agent\" back to All sources to see every skill again.",
     totalSkills: "Skills",
     valid: "valid",
     shareable: "Shareable",
@@ -189,7 +192,10 @@ export const messages = {
     selectionHint: "Click rows to select for review/distribution",
     noDescription: "No description",
     filteredHint: "Filtered: showing {visible} of {total} skills",
+    filteredQuerySuffix: " · search \"{query}\"",
+    filteredAgentSuffix: " · source {agent}",
     clearFilters: "Clear filters",
+    overviewAgentFilterLabel: "Filter by agent",
     importToRegistry: "Import to Registry",
     importToRegistryDesc: "Copy scanned skill packages into the registry and update registry/skills.json.",
     runRuleReview: "Run Deterministic Review",
@@ -293,7 +299,7 @@ export const messages = {
     errorRegistryMissingRepoPath: "Registry path is required",
     errorUnknown: "Unknown error",
     navGroupLabel: "Navigation",
-    filterGroupLabel: "Filter by source"
+    filterGroupLabel: "Sources legend (display only)"
   }
 } as const;
 

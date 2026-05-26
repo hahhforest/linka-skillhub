@@ -28,8 +28,6 @@ import { humanizeError } from "./humanize-error.js";
 type View = "overview" | "intersect" | "distribute" | "repo";
 type Dialog = "scan" | "review" | "confirmPlan" | null;
 
-const emptySummary: Summary = { total: 0, valid: 0, portable: 0, agentBound: 0, unsafe: 0, invalid: 0 };
-
 const agentTone: Record<string, { label: string; mark: string; className: string }> = {
   mavis: { label: "Mavis", mark: "M", className: "agent-mavis" },
   opencode: { label: "OpenCode", mark: "O", className: "agent-opencode" },
@@ -182,12 +180,10 @@ function PlanItems({ plan, lang }: { readonly plan: DistributionPlan; readonly l
   );
 }
 
-function Sidebar({ view, setView, agents, selectedAgent, setSelectedAgent, lang }: {
+function Sidebar({ view, setView, agents, lang }: {
   readonly view: View;
   readonly setView: (view: View) => void;
   readonly agents: AgentDefinition[];
-  readonly selectedAgent: string | null;
-  readonly setSelectedAgent: (agent: string | null) => void;
   readonly lang: Language;
 }) {
   const t = messages[lang];
@@ -206,49 +202,66 @@ function Sidebar({ view, setView, agents, selectedAgent, setSelectedAgent, lang 
       <div className="sidebar-group-label">{t.navGroupLabel}</div>
       <nav>{items.map(([key, icon, label]) => <button key={key} className={view === key ? "active" : ""} onClick={() => setView(key)}>{icon}{label}</button>)}</nav>
       <div className="sidebar-group-label">{t.filterGroupLabel}</div>
-      <div className="agent-legend selectable">
-        <button className={selectedAgent === null ? "agent-filter active" : "agent-filter"} onClick={() => setSelectedAgent(null)}><span className="agent-logo agent-all" aria-hidden="true" />{t.allSources}</button>
+      {/* Pure-display chips: R34 commit 2 removed the sidebar agent filter so
+          the legend no longer acts as a hidden global filter on top of each
+          page's own controls. Filtering now lives in the Overview header
+          dropdown / Intersect's from/to / Distribute's target picker. */}
+      <div className="agent-legend">
         {agents.map((agent) => (
-          <button key={agent.kind} className={selectedAgent === agent.kind ? "agent-filter active" : "agent-filter"} onClick={() => setSelectedAgent(selectedAgent === agent.kind ? null : agent.kind)}>
+          <span key={agent.kind} className="agent-chip">
             <AgentLogo agent={agent.kind} /> {agentTone[agent.kind]?.label ?? agent.label}
-          </button>
+          </span>
         ))}
       </div>
     </aside>
   );
 }
 
-function Overview({ skills, summary, focusedSkillId, focusSkill, lang, selectedAgent, totalSkillCount, fallbackSkills, fallbackSummary, allSkills, query, onClearFilters, agents }: {
+function Overview({ skills, focusedSkillId, focusSkill, lang, totalSkillCount, allSkills, query, onClearQuery, agents, overviewAgentFilter, setOverviewAgentFilter }: {
   readonly skills: SkillPackage[];
-  readonly summary: Summary;
   readonly focusedSkillId: string | null;
   readonly focusSkill: (id: string) => void;
   readonly lang: Language;
-  readonly selectedAgent: string | null;
   readonly totalSkillCount: number;
-  readonly fallbackSkills: SkillPackage[];
-  readonly fallbackSummary: Summary;
   readonly allSkills: SkillPackage[];
   readonly query: string;
-  readonly onClearFilters: () => void;
+  readonly onClearQuery: () => void;
   readonly agents: AgentDefinition[];
+  readonly overviewAgentFilter: string;
+  readonly setOverviewAgentFilter: (value: string) => void;
 }) {
   const t = messages[lang];
-  // When the query filters everything out, keep stat cards / charts based on
-  // the agent-filtered scope so the page does not collapse to a single empty
-  // state. Only the scan-results table shows the no-match message.
+  // R34 commit 2: agent filtering moved off the sidebar and into this header
+  // dropdown. The state lives in App so it survives view switches, but only
+  // Overview reads/writes it — Intersect / Distribute / Repo each manage
+  // their own scope and never see this value.
+  const agentMatches = (skill: SkillPackage) => overviewAgentFilter === "all" || skill.source.agent === overviewAgentFilter;
+  const displayedSkills = useMemo(() => skills.filter(agentMatches), [skills, overviewAgentFilter]);
+  const summary = useMemo(() => summarizeSkills(displayedSkills), [displayedSkills]);
+  // When the combined filter empties the table, fall back to the agent-only
+  // scope for the stat cards / charts so the page does not collapse to one
+  // empty state. The table still shows the no-match message on its own.
+  const agentOnlySkills = useMemo(() => allSkills.filter(agentMatches), [allSkills, overviewAgentFilter]);
+  const agentOnlySummary = useMemo(() => summarizeSkills(agentOnlySkills), [agentOnlySkills]);
   const tableEmpty = summary.total === 0;
-  const cardsSkills = tableEmpty ? fallbackSkills : skills;
-  const cardsSummary = tableEmpty ? fallbackSummary : summary;
-  const isFiltered = query.trim().length > 0 || selectedAgent !== null;
+  const cardsSkills = tableEmpty ? agentOnlySkills : displayedSkills;
+  const cardsSummary = tableEmpty ? agentOnlySummary : summary;
+  const isAgentFiltered = overviewAgentFilter !== "all";
+  const isFiltered = query.trim().length > 0 || isAgentFiltered;
+  const clearAllFilters = () => { onClearQuery(); setOverviewAgentFilter("all"); };
+  const sourceLabel = isAgentFiltered ? (agentTone[overviewAgentFilter]?.label ?? overviewAgentFilter) : t.allSources;
+  const filteredBannerText = (() => {
+    const head = t.filteredHint
+      .replace("{visible}", String(displayedSkills.length))
+      .replace("{total}", String(totalSkillCount));
+    const querySuffix = query.trim() ? t.filteredQuerySuffix.replace("{query}", query.trim()) : "";
+    const agentSuffix = isAgentFiltered ? t.filteredAgentSuffix.replace("{agent}", sourceLabel) : "";
+    return `${head}${querySuffix}${agentSuffix}`;
+  })();
   const filteredBanner = isFiltered && totalSkillCount > 0 ? (
     <div className="filtered-banner span-all">
-      <span>
-        {t.filteredHint
-          .replace("{visible}", String(skills.length))
-          .replace("{total}", String(totalSkillCount))}
-      </span>
-      <button className="ghost" type="button" onClick={onClearFilters}>{t.clearFilters}</button>
+      <span>{filteredBannerText}</span>
+      <button className="ghost" type="button" onClick={clearAllFilters}>{t.clearFilters}</button>
     </div>
   ) : null;
   const byAgent = useMemo(() => {
@@ -260,21 +273,30 @@ function Overview({ skills, summary, focusedSkillId, focusSkill, lang, selectedA
   }, [cardsSkills, agents]);
   const duplicateNames = useMemo(() => {
     const counts = new Map<string, number>();
-    for (const skill of skills) counts.set(skill.name, (counts.get(skill.name) ?? 0) + 1);
+    for (const skill of displayedSkills) counts.set(skill.name, (counts.get(skill.name) ?? 0) + 1);
     const dups = new Set<string>();
     for (const [name, count] of counts) if (count >= 2) dups.add(name);
     return dups;
-  }, [skills]);
+  }, [displayedSkills]);
   const donutStyle = { "--ok": cardsSummary.portable, "--warn": cardsSummary.agentBound, "--bad": cardsSummary.invalid, "--all": Math.max(cardsSummary.total, 1) } as React.CSSProperties;
   // The Overview row is now single-focus: the focused skill drives the inline
-  // detail panel below. multi-select (selectedSkillsAll / visibleSelected /
-  // multi-summary branches) is dead in R34 commit 1 but kept around until the
-  // next commit unifies the SkillTable component.
+  // detail panel below. Focus survives changes to the agent filter so the user
+  // can switch dropdown values without losing their inspection target.
   const focusedSkill = useMemo(
     () => (focusedSkillId ? allSkills.find((skill) => skill.id === focusedSkillId) ?? null : null),
     [focusedSkillId, allSkills]
   );
-  const focusedHidden = focusedSkill ? !skills.some((skill) => skill.id === focusedSkill.id) : false;
+  const focusedHidden = focusedSkill ? !displayedSkills.some((skill) => skill.id === focusedSkill.id) : false;
+
+  const agentDropdown = (
+    <label className="overview-agent-filter">
+      <span className="overview-agent-filter-label">{t.overviewAgentFilterLabel}</span>
+      <select value={overviewAgentFilter} onChange={(event) => setOverviewAgentFilter(event.target.value)}>
+        <option value="all">{t.allSources}</option>
+        {agents.map((agent) => <option key={agent.kind} value={agent.kind}>{agentTone[agent.kind]?.label ?? agent.label}</option>)}
+      </select>
+    </label>
+  );
 
   if (totalSkillCount === 0) {
     return <section className="work-card empty-state span-all"><Info size={24} /><h2>{t.noScanTitle}</h2><p>{t.noScanBody}</p></section>;
@@ -282,7 +304,7 @@ function Overview({ skills, summary, focusedSkillId, focusSkill, lang, selectedA
   if (cardsSummary.total === 0) {
     return (
       <section className="panel-grid overview-grid">
-        <div className="section-head span-all"><div><h2>{t.overview}</h2><p>{t.currentScope}: {selectedAgent ? agentTone[selectedAgent]?.label : t.allSources}</p></div></div>
+        <div className="section-head span-all"><div><h2>{t.overview}</h2><p>{t.currentScope}: {sourceLabel}</p></div></div>
         {filteredBanner}
         <section className="work-card empty-state span-all"><Info size={24} /><h2>{t.noMatchTitle}</h2><p>{t.noMatchBody}</p></section>
       </section>
@@ -291,7 +313,7 @@ function Overview({ skills, summary, focusedSkillId, focusSkill, lang, selectedA
 
   return (
     <section className="panel-grid overview-grid">
-      <div className="section-head span-all"><div><h2>{t.overview}</h2><p>{t.currentScope}: {selectedAgent ? agentTone[selectedAgent]?.label : t.allSources}</p></div></div>
+      <div className="section-head span-all"><div><h2>{t.overview}</h2><p>{t.currentScope}: {sourceLabel}</p></div></div>
       {filteredBanner}
       <StatCard tone="neutral" title={t.totalSkills} value={cardsSummary.total} sub={`${cardsSummary.valid} ${t.valid}`} icon={<PackageCheck size={18} />} />
       <StatCard tone="success" title={t.shareable} value={cardsSummary.portable} sub={t.defaultDistributionScope} icon={<Check size={18} />} />
@@ -312,11 +334,11 @@ function Overview({ skills, summary, focusedSkillId, focusSkill, lang, selectedA
       </div>
       <div className="overview-results-row span-all">
         <div className="work-card table-card">
-          <div className="card-head"><div><h3>{t.scanResults}<span className="title-count">{skills.length === totalSkillCount ? totalSkillCount : `${skills.length} / ${totalSkillCount}`}</span></h3><p>{t.selectionHint}</p></div><span>{focusedSkillId ? 1 : 0} {t.focusedCount}</span></div>
+          <div className="card-head"><div><h3>{t.scanResults}<span className="title-count">{displayedSkills.length === totalSkillCount ? totalSkillCount : `${displayedSkills.length} / ${totalSkillCount}`}</span></h3><p>{t.selectionHint}</p></div>{agentDropdown}</div>
           {tableEmpty ? (
             <div className="empty-state table-empty"><Info size={20} /><h2>{t.noMatchTitle}</h2><p>{t.noMatchBody}</p></div>
           ) : (
-            <div className="skill-table scrollable-list">{skills.map((skill) => <SkillRow key={skill.id} skill={skill} selected={skill.id === focusedSkillId} onToggle={focusSkill} lang={lang} showAgent={duplicateNames.has(skill.name)} />)}</div>
+            <div className="skill-table scrollable-list">{displayedSkills.map((skill) => <SkillRow key={skill.id} skill={skill} selected={skill.id === focusedSkillId} onToggle={focusSkill} lang={lang} showAgent={duplicateNames.has(skill.name)} />)}</div>
           )}
         </div>
         <div className="overview-detail-panel">
@@ -386,12 +408,16 @@ export function App() {
   const [targets, setTargets] = useState<DistributionTarget[]>([]);
   const [profile, setProfile] = useState("unknown");
   const [registryRepo, setRegistryRepo] = useState("");
-  const [selectedAgent, setSelectedAgent] = useState<string | null>(null);
   // focusedSkillId is the "browse" semantic: which single skill is currently
   // open in the Overview detail panel. It is no longer used to drive
   // multi-select operations -- Intersect and Distribute each manage their own
   // per-page selection sets internally. R34 commit 1 splits these.
   const [focusedSkillId, setFocusedSkillId] = useState<string | null>(null);
+  // Overview's agent filter is conceptually owned by the Overview page — only
+  // Overview reads or writes it. It lives in App state so it survives view
+  // switches (otherwise Overview unmounts and the dropdown resets on every
+  // tab change). Intersect / Distribute / Repo never see this value.
+  const [overviewAgentFilter, setOverviewAgentFilter] = useState<string>("all");
   const [plan, setPlan] = useState<DistributionPlan | undefined>();
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
@@ -420,22 +446,24 @@ export function App() {
   // import/load, so this only nukes the in-page transient strings.
   useEffect(() => { setMessage(""); }, [view]);
 
-  const agentFilteredSkills = useMemo(
-    () => skills.filter((skill) => !selectedAgent || skill.source.agent === selectedAgent),
-    [selectedAgent, skills]
-  );
+  // R34 commit 2: the global agent filter that used to live in the sidebar is
+  // gone. visibleSkills now only narrows by the topbar search query; agent
+  // narrowing happens inside Overview / Intersect / Distribute / Repo, each
+  // owning their own scope. summary is computed in Overview from its own
+  // displayedSkills, so it no longer needs to live in App state.
   const visibleSkills = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return agentFilteredSkills;
-    return agentFilteredSkills.filter((skill) => `${skill.name} ${skill.description} ${skill.source.agent}`.toLowerCase().includes(q));
-  }, [query, agentFilteredSkills]);
-  const summary = useMemo(() => summarizeSkills(visibleSkills), [visibleSkills]);
-  const fallbackSummary = useMemo(() => summarizeSkills(agentFilteredSkills), [agentFilteredSkills]);
+    if (!q) return skills;
+    return skills.filter((skill) => `${skill.name} ${skill.description} ${skill.source.agent}`.toLowerCase().includes(q));
+  }, [query, skills]);
 
   // Single-focus toggle: clicking the row that is already focused clears it
   // (so the detail panel returns to the empty state), otherwise replace.
   const focusSkill = (id: string) => setFocusedSkillId(id === focusedSkillId ? null : id);
-  const clearFilters = () => { setQuery(""); setSelectedAgent(null); };
+  // The global clear only owns the search query. The Overview's agent
+  // dropdown is local state — Overview combines this clear with its own
+  // setter when the filtered banner's clear button fires.
+  const clearQuery = () => { setQuery(""); };
 
   const runScan = async () => { setBusy(true); try { const scan = await api.scan(includeBuiltin); setSkills(scan.skills); setMessage(`${t.scan}: ${scan.summary.total}`); setDialog(null); } catch (error) { setMessage(humanizeError(error, lang)); } finally { setBusy(false); } };
   const importRepo = async () => { setBusy(true); try { const result = await api.import(); setMessage(`${t.imported} ${result.imported} skills → ${result.repoPath}`); await loadShell(); } catch (error) { setMessage(humanizeError(error, lang)); } finally { setBusy(false); } };
@@ -523,9 +551,9 @@ export function App() {
         <div className="top-actions"><div className="search-box"><Search size={16} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t.search} />{query && (<button className="search-clear" onClick={() => setQuery("")} aria-label={t.clearSearch} type="button"><X size={14} /></button>)}</div><button className="ghost" onClick={() => setDialog("scan")}>{busy ? <Loader2 className="spin" size={16} /> : <RefreshCw size={16} />} {busy ? t.scanning : t.scan}</button><button className="ghost" onClick={() => setLang(lang === "zh" ? "en" : "zh")}>{t.language}</button></div>
       </header>
       <div className="workspace">
-        <Sidebar view={view} setView={setView} agents={agents} selectedAgent={selectedAgent} setSelectedAgent={setSelectedAgent} lang={lang} />
+        <Sidebar view={view} setView={setView} agents={agents} lang={lang} />
         <div className="content">
-          {view === "overview" && <Overview skills={visibleSkills} summary={summary} focusedSkillId={focusedSkillId} focusSkill={focusSkill} lang={lang} selectedAgent={selectedAgent} totalSkillCount={skills.length} fallbackSkills={agentFilteredSkills} fallbackSummary={fallbackSummary} allSkills={skills} query={query} onClearFilters={clearFilters} agents={agents} />}
+          {view === "overview" && <Overview skills={visibleSkills} focusedSkillId={focusedSkillId} focusSkill={focusSkill} lang={lang} totalSkillCount={skills.length} allSkills={skills} query={query} onClearQuery={clearQuery} agents={agents} overviewAgentFilter={overviewAgentFilter} setOverviewAgentFilter={setOverviewAgentFilter} />}
           {view === "repo" && <RepoView onImport={importRepo} onReview={() => void openReviewDialog("rules")} onAgentReview={() => void openReviewDialog("codex")} onRefreshGit={refreshGit} onPull={pullRegistry} onPush={pushRegistry} gitStatus={gitStatusText} commitMessage={commitMessage} setCommitMessage={setCommitMessage} busy={busy} message={message} lang={lang} registryRepo={registryRepo} onRegistryLoaded={(result) => { setRegistryRepo(result.repoPath); if (result.skills) setSkills(result.skills); setMessage(`${messages[lang].loadRegistrySuccess}: ${result.repoPath} (${result.skillCount ?? result.skills?.length ?? 0})`); }} />}
           {view === "intersect" && <Intersect skills={visibleSkills} targets={targets} lang={lang} plan={plan} onPlan={planDistribution} onApply={applyDistribution} agents={agents} />}
           {view === "distribute" && <Distribute targets={targets} onPlan={planDistribution} onApply={applyDistribution} plan={plan} busy={busy} lang={lang} />}
