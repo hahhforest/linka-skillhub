@@ -20,6 +20,7 @@ import {
   writeRegistryManifest,
   writeReviewResult,
   type AgentKind,
+  type FrontmatterFixResult,
   type ReviewLanguage,
   type ReviewResult,
   type SkillPackage
@@ -350,6 +351,51 @@ const formatDistributePreviewHuman = (
   lines.push(
     `Use 'lsh distribute apply --target ${targetAgents.join(",")} --yes' to write, or pass --json for full plan.`
   );
+  return `${lines.join("\n")}\n`;
+};
+
+// Reason codes from FrontmatterFixResult are short enums; translate them to
+// the single short phrase the human view shows after "No change for ...".
+const frontmatterFixReasonText = (reason: FrontmatterFixResult["reason"] | undefined): string => {
+  if (reason === "frontmatter_already_present") return "frontmatter already present";
+  if (reason === "unsafe_source_blocked") return "unsafe source blocked";
+  if (reason === "skill_not_found") return "skill not found";
+  if (reason === "dry_run") return "dry run";
+  return reason ?? "unknown";
+};
+
+const formatFrontmatterFixHuman = (
+  skill: SkillPackage,
+  manifestPath: string,
+  result: FrontmatterFixResult
+): string => {
+  const lines: string[] = [];
+  const nameAndId = `${c.bold(skill.name)} (${skill.id})`;
+  if (result.applied) {
+    lines.push(`${c.green("Fixed frontmatter for")} ${nameAndId}`);
+    if (result.writtenPath) lines.push(`  ${c.cyan("Written to:")}       ${c.dim(c.gray(result.writtenPath))}`);
+    lines.push(`  ${c.cyan("Manifest updated:")} ${c.dim(c.gray(manifestPath))}`);
+    return `${lines.join("\n")}\n`;
+  }
+  if (result.reason === "dry_run") {
+    lines.push(`${c.bold("Dry run for")} ${nameAndId}`);
+    lines.push(`  ${c.cyan("Source:")} ${c.dim(c.gray(skill.skillDir))}`);
+    if (skill.issues.length > 0) {
+      lines.push(`  ${c.cyan("Issues:")}`);
+      for (const issue of skill.issues) {
+        lines.push(`    ${c.red(issue.code)}: ${issue.message}`);
+      }
+    }
+    if (result.newFrontmatter) {
+      lines.push(`  ${c.cyan("Would write frontmatter:")}`);
+      lines.push(`    name: ${result.newFrontmatter.name}`);
+      lines.push(`    description: ${result.newFrontmatter.description}`);
+    }
+    lines.push("");
+    lines.push(c.dim("Pass --yes to apply (without --dry-run)."));
+    return `${lines.join("\n")}\n`;
+  }
+  lines.push(`${c.bold("No change for")} ${nameAndId}: ${frontmatterFixReasonText(result.reason)}`);
   return `${lines.join("\n")}\n`;
 };
 
@@ -884,7 +930,8 @@ fix
   .option("--allow-unsafe-source", "Allow writing to skill sources outside the active profile's sandbox.")
   .option("--dry-run", "Print what would be written without modifying any files.")
   .option("--yes", "Skip confirmation prompt. Required in non-interactive shells; LINKA_SKILLHUB_FORCE_YES=1 has the same effect.")
-  .action(async (id: string, options: { repo?: string; allowUnsafeSource?: boolean; dryRun?: boolean; yes?: boolean }) => {
+  .option("--json", "Print full JSON output instead of the human summary.")
+  .action(async (id: string, options: { repo?: string; allowUnsafeSource?: boolean; dryRun?: boolean; yes?: boolean; json?: boolean }) => {
     const runtime = await loadRuntimeConfig();
     const repoPath = resolveRepoOption(options.repo, runtime.profile.registryRepo);
     const manifest = await readRegistryManifest(repoPath);
@@ -907,6 +954,7 @@ fix
       allowUnsafeSource: options.allowUnsafeSource === true || options.dryRun === true || runtime.profileName === "mirror",
       dryRun: options.dryRun
     });
+    const manifestPath = path.join(repoPath, "registry", "skills.json");
     if (fixResult.applied) {
       const updatedSkills = manifest.skills.map((entry) => {
         if (entry.id !== id) return entry;
@@ -925,7 +973,7 @@ fix
             `Skill: ${skill.name} (${id})`,
             `Source dir: ${skill.skillDir}`,
             `New frontmatter: ${JSON.stringify(fixResult.newFrontmatter)}`,
-            `Will rewrite manifest: ${repoPath}/registry/skills.json`
+            `Will rewrite manifest: ${manifestPath}`
           ],
           totalItems: 1,
           yes: options.yes
@@ -933,14 +981,12 @@ fix
       );
       const nextManifest = { ...manifest, skills: updatedSkills, generatedAt: new Date().toISOString() };
       await writeRegistryManifest(repoPath, nextManifest);
-      process.stdout.write(`Frontmatter applied to ${skill.skillFile}\n`);
-    } else {
-      process.stdout.write(`No change: ${fixResult.reason ?? "unknown"}\n`);
-      if (fixResult.reason === "dry_run" && fixResult.newFrontmatter) {
-        process.stdout.write(`Would write frontmatter: ${JSON.stringify(fixResult.newFrontmatter)}\n`);
-      }
     }
-    printJson({ id, ...fixResult });
+    if (options.json) {
+      printJson({ id, ...fixResult });
+      return;
+    }
+    process.stdout.write(formatFrontmatterFixHuman(skill, manifestPath, fixResult));
   });
 
 program
