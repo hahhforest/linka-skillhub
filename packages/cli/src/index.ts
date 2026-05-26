@@ -499,6 +499,14 @@ distribute
       includeUnsafe: options.includeUnsafe ?? false,
       includeAgentBound: options.includeAgentBound ?? false
     });
+    if (options.plan && options.plan !== plan.id) {
+      process.stderr.write(
+        `error: --plan id mismatch (expected: ${options.plan}, got: ${plan.id})\n` +
+          `       The registry or target may have changed since 'distribute preview'. Re-run 'distribute preview' and pass the new plan id.\n`
+      );
+      process.exitCode = 2;
+      return;
+    }
     await handleConfirmationFailure(
       assertInteractiveOrYes({
         action: "distribute apply",
@@ -510,7 +518,10 @@ distribute
       })
     );
     const run = await applyDistributionPlan(repoPath, plan);
-    printJson({ plan: compactPlan(plan), run, planIdEcho: options.plan });
+    if (!options.plan) {
+      process.stdout.write(`Plan id: ${plan.id}\n`);
+    }
+    printJson({ plan: compactPlan(plan), run });
   });
 
 const copy = program.command("copy").description("Copy skills from one agent's source to a single target agent.");
@@ -578,6 +589,14 @@ copy
       includeUnsafe: false,
       includeAgentBound: false
     });
+    if (options.plan && options.plan !== plan.id) {
+      process.stderr.write(
+        `error: --plan id mismatch (expected: ${options.plan}, got: ${plan.id})\n` +
+          `       The registry or target may have changed since 'copy preview'. Re-run 'copy preview' and pass the new plan id.\n`
+      );
+      process.exitCode = 2;
+      return;
+    }
     await handleConfirmationFailure(
       assertInteractiveOrYes({
         action: "copy apply",
@@ -589,7 +608,10 @@ copy
       })
     );
     const run = await applyDistributionPlan(repoPath, plan);
-    printJson({ from, to, plan: compactPlan(plan), run, planIdEcho: options.plan });
+    if (!options.plan) {
+      process.stdout.write(`Plan id: ${plan.id}\n`);
+    }
+    printJson({ from, to, plan: compactPlan(plan), run });
   });
 
 const repo = program.command("repo").description("Manage the registry Git repository.");
