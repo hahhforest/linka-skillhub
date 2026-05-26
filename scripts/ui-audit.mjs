@@ -80,7 +80,11 @@ const repoText = await visibleText();
 for (const unclear of ["汇总到仓库", "Ready"]) {
   if (repoText.includes(unclear)) issues.push({ severity: "high", area: "repo", text: `仓库管理存在不清楚文案：${unclear}` });
 }
-for (const required of ["导入到 Registry", "运行确定性规则审查", "使用 Code Agent 审查", "不调用 LLM"]) {
+// R34 commit 5: RepoBrowser collapsed the four-card layout into an inline
+// action bar; the "不调用 LLM" line lived on a now-removed action card. The
+// per-action description still surfaces via button title (tooltip), so we
+// only require the action labels themselves to be present.
+for (const required of ["导入到 Registry", "运行确定性规则审查", "使用 Code Agent 审查", "Registry Skills", "切换 Registry"]) {
   if (!repoText.includes(required)) issues.push({ severity: "high", area: "repo", text: `仓库管理缺少必要解释：${required}` });
 }
 
@@ -108,7 +112,11 @@ for (const required of ["预览复制结果", "确认复制到选中的目标 Ag
 
 await page.getByRole("button", { name: /仓库管理/ }).click();
 const repoFinalText = await visibleText();
-for (const required of ["Git 状态", "刷新 Git 状态", "提交并推送 Registry", "只作用于当前 Registry 仓库"]) {
+// R34 commit 5: git-card got renamed into a meta-bar branch chip + a compact
+// repo-git-status pre that only renders after a manual refresh. So instead of
+// asserting "Git 状态" is always on screen, we assert the Registry sync verbs
+// (which are always-visible buttons in the action bar).
+for (const required of ["刷新 Git 状态", "提交并推送 Registry", "从 GitHub 拉取 Registry"]) {
   if (!repoFinalText.includes(required)) issues.push({ severity: "high", area: "repo-git", text: `Registry/GitHub 区域缺少必要元素：${required}` });
 }
 

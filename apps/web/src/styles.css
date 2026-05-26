@@ -109,12 +109,10 @@ select:focus-visible,
 textarea:focus-visible {
   transition: box-shadow var(--t-fast), outline-color var(--t-fast);
 }
-.action-card:focus-visible,
 .skill-row:focus-visible,
 .target:focus-visible,
 .sidebar nav button:focus-visible,
-.search-box input:focus-visible,
-.field-label input:focus-visible {
+.search-box input:focus-visible {
   outline: none;
   box-shadow: 0 0 0 2px var(--primary);
 }
@@ -331,8 +329,6 @@ textarea:focus-visible {
   align-content: start;
 }
 .overview-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
-.repo-grid { grid-template-columns: 1.2fr 1fr; }
-.repo-grid { align-items: start; }
 .span-all { grid-column: 1 / -1; }
 
 .section-head {
@@ -367,7 +363,7 @@ textarea:focus-visible {
   background: var(--surface);
 }
 
-.stat-card, .work-card, .action-card {
+.stat-card, .work-card {
   border: 1px solid var(--border);
   border-radius: var(--r-md);
   background: rgba(255, 255, 255, 0.92);
@@ -981,30 +977,6 @@ textarea:focus-visible {
   font-size: var(--fs-xs);
 }
 
-.action-card {
-  min-height: 150px;
-  padding: var(--sp-4);
-  display: grid;
-  justify-items: start;
-  gap: var(--sp-2);
-  text-align: left;
-  transition: background var(--t-fast), border-color var(--t-fast), box-shadow var(--t-base), transform var(--t-base);
-}
-.action-card:hover:not(:disabled) {
-  border-color: var(--border-hover);
-  background: var(--surface-2);
-  box-shadow: var(--shadow-pop);
-  transform: translateY(-1px);
-}
-.action-card:active:not(:disabled) {
-  transform: translateY(0);
-  box-shadow: var(--shadow-md);
-}
-.action-card svg { color: var(--primary); }
-.action-card strong { font-size: var(--fs-lg); }
-.action-card span { color: var(--muted); }
-.log-panel pre { margin: 0; white-space: pre-wrap; color: var(--text-2); }
-
 .status-footer {
   min-height: 42px;
   justify-content: space-between;
@@ -1036,7 +1008,7 @@ textarea:focus-visible {
   .workspace { display: block; }
   .sidebar { min-height: auto; margin-bottom: var(--sp-3); }
   .sidebar nav { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .panel-grid, .overview-grid, .repo-grid, .intersect-layout, .intersect-body, .distribute-layout, .distribute-body {
+  .panel-grid, .overview-grid, .intersect-layout, .intersect-body, .distribute-layout, .distribute-body, .repo-browser-layout, .repo-body {
     grid-template-columns: 1fr;
   }
   .source-card, .donut-card { grid-column: auto; }
@@ -1253,8 +1225,7 @@ textarea:focus-visible {
   font-size: var(--fs-xs);
 }
 
-.load-registry-panel { display: grid; gap: var(--sp-3); }
-.load-registry-panel .current-registry code {
+.current-registry code {
   font-size: var(--fs-xs);
   word-break: break-all;
 }
@@ -1373,49 +1344,142 @@ textarea:focus-visible {
   color: var(--muted);
 }
 
-.git-card {
-  grid-column: 1 / -1;
+/* R34 commit 5 — RepoBrowser layout. Meta bar + action bar + table/detail +
+   utility cards. Mirrors Overview/Distribute structure so the four views
+   feel like siblings instead of bespoke pages. */
+.repo-browser-layout {
+  display: grid;
+  gap: var(--sp-3);
+  align-content: start;
+}
+.repo-meta-bar {
+  padding: var(--sp-3) var(--sp-4);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  flex-wrap: wrap;
+}
+.repo-meta-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  align-items: center;
+}
+.repo-meta-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-1) var(--sp-3);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--surface-2);
+  color: var(--text-2);
+  font-size: var(--fs-xs);
+  max-width: 100%;
+}
+.repo-meta-chip code {
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 36ch;
+}
+.repo-meta-bar button.ghost {
+  height: var(--ctrl-sm);
+  padding: 0 var(--sp-3);
+  font-size: var(--fs-xs);
+}
+.repo-action-bar {
+  padding: var(--sp-3) var(--sp-4);
   display: grid;
   gap: var(--sp-3);
 }
-.git-card pre {
+.repo-action-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2);
+}
+.repo-action-row-compact {
+  font-size: var(--fs-xs);
+  color: var(--muted);
+}
+.repo-action-spacer { flex: 1 1 auto; }
+.repo-action-row button.ghost,
+.repo-action-row button.primary {
+  height: var(--ctrl-sm);
+  padding: 0 var(--sp-3);
+  font-size: var(--fs-xs);
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+.repo-commit-message {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  font-size: var(--fs-xs);
+  color: var(--muted);
+}
+.repo-commit-message input {
+  height: var(--ctrl-sm);
+  min-width: 220px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  padding: 0 var(--sp-3);
+  color: var(--text);
+  font-size: var(--fs-xs);
+}
+.repo-review-scope {
+  font-variant-numeric: tabular-nums;
+}
+.repo-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(280px, 1fr);
+  gap: var(--sp-3);
+  align-items: start;
+}
+.repo-detail-panel {
+  position: sticky;
+  top: var(--sp-3);
+  display: grid;
+  gap: var(--sp-3);
+  min-width: 0;
+}
+.repo-detail-panel .detail-empty {
+  min-height: 220px;
+  padding: var(--sp-4);
+  text-align: center;
+}
+.repo-detail-panel .detail-empty h2 {
   margin: 0;
+  font-size: var(--fs-md);
+  color: var(--muted);
+  font-weight: var(--fw-medium);
+}
+.repo-git-status pre {
+  margin: var(--sp-2) 0 0;
   max-height: 180px;
   overflow: auto;
-  background: #0f172a;
-  color: #dbeafe;
+  background: var(--surface-2);
+  color: var(--text);
+  border: 1px solid var(--border);
   border-radius: var(--r-md);
   padding: var(--sp-3);
   font-family: var(--font-mono);
   font-size: var(--fs-xs);
 }
-.git-card .git-empty-line {
-  margin: 0;
-  padding: var(--sp-3);
-  border: 1px dashed var(--border);
-  border-radius: var(--r-md);
-  background: var(--surface-2);
-  color: var(--muted);
+.repo-log-card pre {
+  margin: var(--sp-2) 0 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: var(--text-2);
   font-size: var(--fs-xs);
-  display: flex;
-  align-items: center;
-  gap: var(--sp-2);
 }
-.field-label {
-  display: grid;
-  gap: var(--sp-2);
-  color: var(--muted);
-  font-size: var(--fs-sm);
-}
-.field-label input {
-  height: var(--ctrl-md);
-  border: 1px solid var(--border);
-  border-radius: var(--r-md);
-  padding: 0 var(--sp-3);
-  color: var(--text);
-}
-.button-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--sp-3);
+@media (max-width: 1100px) {
+  .repo-body { grid-template-columns: 1fr; }
+  .repo-detail-panel { position: static; }
 }

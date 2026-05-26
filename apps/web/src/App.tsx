@@ -13,7 +13,6 @@ import {
   RefreshCw,
   Search,
   ShieldAlert,
-  Sparkles,
   UploadCloud,
   X
 } from "lucide-react";
@@ -21,11 +20,11 @@ import type { AgentDefinition, DistributionPlan, DistributionTarget, SkillPackag
 import { api, type ReviewerInfo, type Summary } from "./api.js";
 import { messages, tReason, type Language } from "./i18n.js";
 import { ConfirmPlanModal } from "./components/ConfirmPlanModal.js";
-import { LoadRegistryPanel } from "./components/LoadRegistryPanel.js";
 import { useModalFocusTrap } from "./components/useModalFocusTrap.js";
 import { AgentLogo, agentTone } from "./components/skillVisuals.js";
 import { SkillTable } from "./components/SkillTable.js";
 import { DetailPanel } from "./components/DetailPanel.js";
+import { RepoBrowser } from "./components/RepoBrowser.js";
 import { humanizeError } from "./humanize-error.js";
 
 type View = "overview" | "intersect" | "distribute" | "repo";
@@ -281,29 +280,6 @@ function Overview({ skills, focusedSkillId, focusSkill, lang, totalSkillCount, a
   );
 }
 
-function RepoView({ onImport, onReview, onAgentReview, onRefreshGit, onPull, onPush, gitStatus, commitMessage, setCommitMessage, busy, message, lang, registryRepo, onRegistryLoaded }: { readonly onImport: () => void; readonly onReview: () => void; readonly onAgentReview: () => void; readonly onRefreshGit: () => void; readonly onPull: () => void; readonly onPush: () => void; readonly gitStatus: string; readonly commitMessage: string; readonly setCommitMessage: (value: string) => void; readonly busy: boolean; readonly message: string; readonly lang: Language; readonly registryRepo: string; readonly onRegistryLoaded: (result: import("./api.js").RegistryLoadResponse) => void }) {
-  const t = messages[lang];
-  return (
-    <section className="panel-grid repo-grid">
-      <div className="section-head span-all"><div><h2>{t.repositoryTitle}</h2><p>{t.repositoryDesc}</p></div></div>
-      <button className="action-card" onClick={onImport} disabled={busy}><Database size={22} /><strong>{t.importToRegistry}</strong><span>{t.importToRegistryDesc}</span></button>
-      <button className="action-card" onClick={onReview} disabled={busy}><Sparkles size={22} /><strong>{t.runRuleReview}</strong><span>{t.runRuleReviewDesc}</span></button>
-      <button className="action-card" onClick={onAgentReview} disabled={busy}><Sparkles size={22} /><strong>{t.runAgentReview}</strong><span>{t.runAgentReviewDesc}</span></button>
-      <LoadRegistryPanel lang={lang} currentRepoPath={registryRepo} onLoaded={onRegistryLoaded} />
-      <div className="work-card git-card">
-        <h3>{t.gitStatus}</h3>
-        <p className="muted-copy">{t.remoteSyncDesc}</p>
-        {gitStatus
-          ? <pre>{gitStatus}</pre>
-          : <p className="git-empty-line"><Info size={14} /> {t.waitingOperation}</p>}
-        <label className="field-label">{t.commitMessage}<input value={commitMessage} onChange={(event) => setCommitMessage(event.target.value)} /></label>
-        <div className="button-row"><button className="ghost" onClick={onRefreshGit} disabled={busy}>{t.refreshGitStatus}</button><button className="ghost" onClick={onPull} disabled={busy}>{t.pullRegistry}</button><button className="primary" onClick={onPush} disabled={busy}>{t.pushRegistry}</button></div>
-      </div>
-      <div className="work-card span-all log-panel"><h3>{t.operationLog}</h3><pre>{message || t.waitingOperation}</pre></div>
-    </section>
-  );
-}
-
 function DialogFrame({ title, children, onClose, closeLabel }: { readonly title: string; readonly children: React.ReactNode; readonly onClose: () => void; readonly closeLabel?: string }) {
   useEffect(() => {
     const handleKey = (event: KeyboardEvent) => { if (event.key === "Escape") onClose(); };
@@ -353,6 +329,11 @@ export function App() {
   const [gitStatusText, setGitStatusText] = useState("");
   const [commitMessage, setCommitMessage] = useState<string>(t.commitMessageDefault);
   const [pendingPlan, setPendingPlan] = useState<{ plan: DistributionPlan; confirmToken: string; targetAgents: string[]; skillIds: string[] | undefined } | null>(null);
+  // Review scope selection: ids the Repo page checkboxes have queued. Empty
+  // array means "no explicit scope" so runReview falls back to the entire
+  // registry. The dialog also displays the count so the user knows which
+  // subset is about to run.
+  const [reviewScopeIds, setReviewScopeIds] = useState<string[]>([]);
 
   const loadShell = async () => {
     const [agentData, registry] = await Promise.all([api.agents(), api.skills()]);
@@ -394,12 +375,12 @@ export function App() {
   const runReview = async () => {
     setBusy(true);
     try {
-      // Review run defaults to every skill in the registry. The previous
-      // implementation borrowed the global `selected` set as a default, which
-      // tied the Repo page action to the Overview's browsing state. After R34
-      // commit 1 each page owns its selection; reviews now run against the
-      // full registry unless a future commit wires per-row checkboxes here.
-      const ids = skills.map((skill) => skill.id);
+      // Scope precedence: Repo page checkboxes win when present, otherwise
+      // fall back to every Registry skill. This restores the "review the
+      // whole Registry" default that the four-action-card layout used to
+      // implicitly mean, while letting power users narrow it via the
+      // checkbox column added in R34 commit 5.
+      const ids = reviewScopeIds.length > 0 ? reviewScopeIds : skills.map((skill) => skill.id);
       const result = await api.review(ids, reviewer, lang);
       setMessage(`${t.reviewed} ${result.reviews.length} skills`);
       setDialog(null);
@@ -409,8 +390,9 @@ export function App() {
       setBusy(false);
     }
   };
-  const openReviewDialog = async (preferred = "rules") => {
+  const openReviewDialog = async (preferred = "rules", scopeIds: string[] = []) => {
     setReviewer(preferred);
+    setReviewScopeIds(scopeIds);
     setDialog("review");
     try {
       const result = await api.reviewers();
@@ -479,14 +461,38 @@ export function App() {
         <Sidebar view={view} setView={setView} agents={agents} lang={lang} />
         <div className="content">
           {view === "overview" && <Overview skills={visibleSkills} focusedSkillId={focusedSkillId} focusSkill={focusSkill} lang={lang} totalSkillCount={skills.length} allSkills={skills} query={query} onClearQuery={clearQuery} agents={agents} overviewAgentFilter={overviewAgentFilter} setOverviewAgentFilter={setOverviewAgentFilter} />}
-          {view === "repo" && <RepoView onImport={importRepo} onReview={() => void openReviewDialog("rules")} onAgentReview={() => void openReviewDialog("codex")} onRefreshGit={refreshGit} onPull={pullRegistry} onPush={pushRegistry} gitStatus={gitStatusText} commitMessage={commitMessage} setCommitMessage={setCommitMessage} busy={busy} message={message} lang={lang} registryRepo={registryRepo} onRegistryLoaded={(result) => { setRegistryRepo(result.repoPath); if (result.skills) setSkills(result.skills); setMessage(`${messages[lang].loadRegistrySuccess}: ${result.repoPath} (${result.skillCount ?? result.skills?.length ?? 0})`); }} />}
+          {view === "repo" && (
+            <RepoBrowser
+              skills={visibleSkills}
+              allSkills={skills}
+              totalSkillCount={skills.length}
+              agents={agents}
+              focusedSkillId={focusedSkillId}
+              onFocus={focusSkill}
+              lang={lang}
+              registryRepo={registryRepo}
+              busy={busy}
+              message={message}
+              query={query}
+              gitStatus={gitStatusText}
+              commitMessage={commitMessage}
+              setCommitMessage={setCommitMessage}
+              onImport={importRepo}
+              onReview={(ids) => void openReviewDialog("rules", ids)}
+              onAgentReview={(ids) => void openReviewDialog("codex", ids)}
+              onRefreshGit={refreshGit}
+              onPull={pullRegistry}
+              onPush={pushRegistry}
+              onRegistryLoaded={(result) => { setRegistryRepo(result.repoPath); if (result.skills) setSkills(result.skills); setMessage(`${messages[lang].loadRegistrySuccess}: ${result.repoPath} (${result.skillCount ?? result.skills?.length ?? 0})`); }}
+            />
+          )}
           {view === "intersect" && <Intersect skills={visibleSkills} allSkills={skills} targets={targets} lang={lang} plan={plan} onPlan={planDistribution} onApply={applyDistribution} agents={agents} focusedSkillId={focusedSkillId} onFocus={focusSkill} />}
           {view === "distribute" && <Distribute skills={visibleSkills} allSkills={skills} totalSkillCount={skills.length} targets={targets} onPlan={planDistribution} onApply={applyDistribution} plan={plan} busy={busy} lang={lang} focusedSkillId={focusedSkillId} onFocus={focusSkill} query={query} />}
           <footer className="status-footer"><span>{agents.length} agents</span><span>{focusedSkillId ? 1 : 0} {t.focusedCount}</span><span className="status-message" title={message}>{message}</span></footer>
         </div>
       </div>
       {dialog === "scan" && <DialogFrame title={t.scanDialogTitle} onClose={() => setDialog(null)} closeLabel={t.cancel}><p>{t.scanDialogBody}</p><label className="checkbox-line"><input type="checkbox" checked={includeBuiltin} onChange={(event) => setIncludeBuiltin(event.target.checked)} /> {t.includeBuiltin}</label><div className="dialog-actions"><button className="ghost" onClick={() => setDialog(null)}>{t.cancel}</button><button className="primary" onClick={runScan} disabled={busy}>{t.confirmScan}</button></div></DialogFrame>}
-      {dialog === "review" && <DialogFrame title={t.reviewDialogTitle} onClose={() => setDialog(null)} closeLabel={t.cancel}><p>{t.reviewDialogBody}</p><div className="review-meta"><span>{t.reviewScope}: {t.reviewScopeRegistry.replace("{n}", String(skills.length))}</span><span>{t.reviewOutputLanguage}: {lang === "zh" ? "中文" : "English"}</span><span>{t.reviewWriteTarget}: registry/reviews/*.json</span></div><div className="reviewer-list">{reviewers.map((item) => <label key={item.kind} className={`reviewer-option ${reviewer === item.kind ? "active" : ""} ${!item.available ? "disabled" : ""}`}><input type="radio" name="reviewer" value={item.kind} checked={reviewer === item.kind} disabled={!item.available} onChange={() => setReviewer(item.kind)} /><strong>{item.kind === "rules" ? t.reviewerRules : item.label}</strong><span>{item.available ? t.reviewerAvailable : t.reviewerUnavailable}</span><small>{localizedReviewerReason(item, lang)}</small></label>)}</div><p className="muted-copy">{t.agentUnavailable}</p><div className="dialog-actions"><button className="ghost" onClick={() => setDialog(null)}>{t.cancel}</button><button className="primary" onClick={runReview} disabled={busy || !reviewers.find((item) => item.kind === reviewer)?.available}>{t.startReview}</button></div></DialogFrame>}
+      {dialog === "review" && <DialogFrame title={t.reviewDialogTitle} onClose={() => setDialog(null)} closeLabel={t.cancel}><p>{t.reviewDialogBody}</p><div className="review-meta"><span>{t.reviewScope}: {reviewScopeIds.length > 0 ? t.reviewScopeSelected.replace("{n}", String(reviewScopeIds.length)) : t.reviewScopeAllRegistry.replace("{n}", String(skills.length))}</span><span>{t.reviewOutputLanguage}: {lang === "zh" ? "中文" : "English"}</span><span>{t.reviewWriteTarget}: registry/reviews/*.json</span></div><div className="reviewer-list">{reviewers.map((item) => <label key={item.kind} className={`reviewer-option ${reviewer === item.kind ? "active" : ""} ${!item.available ? "disabled" : ""}`}><input type="radio" name="reviewer" value={item.kind} checked={reviewer === item.kind} disabled={!item.available} onChange={() => setReviewer(item.kind)} /><strong>{item.kind === "rules" ? t.reviewerRules : item.label}</strong><span>{item.available ? t.reviewerAvailable : t.reviewerUnavailable}</span><small>{localizedReviewerReason(item, lang)}</small></label>)}</div><p className="muted-copy">{t.agentUnavailable}</p><div className="dialog-actions"><button className="ghost" onClick={() => setDialog(null)}>{t.cancel}</button><button className="primary" onClick={runReview} disabled={busy || !reviewers.find((item) => item.kind === reviewer)?.available}>{t.startReview}</button></div></DialogFrame>}
       {dialog === "confirmPlan" && pendingPlan && (
         <ConfirmPlanModal
           plan={pendingPlan.plan}

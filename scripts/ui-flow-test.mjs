@@ -55,18 +55,42 @@ await page.locator(".overview-agent-filter select").selectOption("all");
 await page.waitForTimeout(150);
 
 await page.getByRole("button", { name: /仓库管理/ }).click();
+// R34 commit 5: RepoBrowser replaces RepoView. Verify the new meta bar, the
+// inline action bar (buttons now visible without scrolling), and that the
+// Registry SkillTable renders. Old card-style action layout is gone.
 await expectText("导入到 Registry", "import action");
 await expectText("运行确定性规则审查", "rule review action");
-await expectText("不调用 LLM", "rule review explanation");
-await expectText("Git 状态", "git status panel");
+await expectText("Registry Skills", "registry browser title");
+await expectText("切换 Registry", "switch registry button");
 await expectText("刷新 Git 状态", "refresh git status button");
 await expectText("提交并推送 Registry", "push registry button");
+const repoTableRows = await page.locator(".repo-table-card .skill-row").count();
+if (repoTableRows === 0) failures.push("RepoBrowser table is empty — Registry skills should be listed");
+const legacyActionCards = await page.locator(".action-card").count();
+if (legacyActionCards > 0) failures.push(`RepoBrowser should not render legacy .action-card (got ${legacyActionCards})`);
 await screenshot("05-repo");
 
-await page.getByRole("button", { name: /运行确定性规则审查/ }).click();
+// Import confirm dialog gates the destructive write (was fire-on-click pre-R34).
+await page.getByRole("button", { name: /^导入到 Registry$/ }).click();
+await expectText("确认导入到 Registry", "import confirm dialog title");
+await expectText("目标 Registry", "import confirm target label");
+await page.locator(".dialog .ghost", { hasText: "取消" }).click();
+let importDialogText = await page.locator("body").innerText();
+if (importDialogText.includes("确认导入到 Registry")) failures.push("Import confirm dialog did not close on cancel");
+
+// Switch Registry button opens a modal (LoadRegistryDialog) — old inline
+// LoadRegistryPanel is gone.
+await page.getByRole("button", { name: /切换 Registry/ }).click();
+await expectText("加载已有 Registry", "switch registry dialog opens");
+await page.locator(".dialog .dialog-close").click();
+let switchDialogText = await page.locator("body").innerText();
+if (switchDialogText.includes("加载已有 Registry")) failures.push("Switch Registry dialog did not close on dialog-close");
+
+await page.getByRole("button", { name: /^运行确定性规则审查$/ }).click();
 await expectText("选择审查方式", "review dialog");
 await expectText("规则审查", "reviewer choice");
 await expectText("审查范围", "review scope");
+await expectText("全部 Registry", "review default scope is the entire registry");
 await expectText("输出语言", "review output language");
 await expectText("写入位置", "review write target");
 await expectText("Codex", "codex reviewer option");
@@ -154,9 +178,12 @@ const refreshedCounter = await page.locator(".distribute-action-bar .action-bar-
 if (refreshedCounter.trim() !== "0") failures.push(`Distribute selection should reset on re-entry, got counter=${refreshedCounter}`);
 
 await page.getByRole("button", { name: /仓库管理/ }).click();
-await expectText("加载已有 Registry", "load registry panel");
-await page.locator(".load-registry-row input").fill("./.sandbox/my-skills-registry");
-await page.getByRole("button", { name: /^加载$/ }).click();
+// R34 commit 5: LoadRegistryPanel is now LoadRegistryDialog. Open via the
+// "切换 Registry" button in the meta bar, then fill+submit inside the modal.
+await page.getByRole("button", { name: /切换 Registry/ }).click();
+await expectText("加载已有 Registry", "load registry dialog");
+await page.locator(".dialog .load-registry-row input").fill("./.sandbox/my-skills-registry");
+await page.locator(".dialog .primary", { hasText: "加载" }).click();
 await page.waitForFunction(() => document.body.innerText.includes("已切换到 Registry"), undefined, { timeout: 10000 });
 await expectText("已切换到 Registry", "load registry success message");
 await screenshot("10-load-registry");

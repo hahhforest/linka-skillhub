@@ -29,7 +29,7 @@ const messageOf = (error: unknown): string | undefined => {
  *   plan_id_mismatch) to localized strings.
  * - Maps registry validation codes from POST /api/registry/load
  *   (missing_manifest, outside_profile_root, not_a_directory,
- *   invalid_manifest, missing_repo_path) so LoadRegistryPanel does not
+ *   invalid_manifest, missing_repo_path) so LoadRegistryDialog does not
  *   leak snake_case codes like "Cannot load registry: outside_profile_root".
  * - Falls back to the original error.message for any other error so callers
  *   keep the existing detail.
