@@ -305,7 +305,7 @@ function Overview({ skills, summary, selected, toggleSkill, lang, selectedAgent,
       </div>
       <div className="overview-results-row span-all">
         <div className="work-card table-card">
-          <div className="card-head"><div><h3>{t.scanResults}</h3><p>{t.selectionHint}</p></div><span>{selected.size} {t.selectedCount}</span></div>
+          <div className="card-head"><div><h3>{t.scanResults}<span className="title-count">{skills.length === totalSkillCount ? totalSkillCount : `${skills.length} / ${totalSkillCount}`}</span></h3><p>{t.selectionHint}</p></div><span>{selected.size} {t.selectedCount}</span></div>
           {tableEmpty ? (
             <div className="empty-state table-empty"><Info size={20} /><h2>{t.noMatchTitle}</h2><p>{t.noMatchBody}</p></div>
           ) : (
@@ -330,7 +330,7 @@ function Overview({ skills, summary, selected, toggleSkill, lang, selectedAgent,
               <PackageCheck size={20} />
               <h3>{t.multipleSelectedSummary.replace("{n}", String(visibleSelected.length))}</h3>
               <div className="selected-chip-list">
-                {visibleSelected.slice(0, 8).map((skill) => <span key={skill.id}>{skill.name}</span>)}
+                {visibleSelected.slice(0, 8).map((skill) => <span key={skill.id} title={skill.name}>{skill.name}</span>)}
                 {visibleSelected.length > 8 && <span className="muted-copy">+{visibleSelected.length - 8}</span>}
               </div>
               {hiddenSelectedCount > 0 && (
@@ -562,7 +562,7 @@ function Intersect({ skills, targets, selected, toggleSkill, lang, plan, onPlan,
         {sameSourceTarget && <p className="warning-line" role="alert">{t.sameSourceTargetWarning}</p>}
         <GitCompareArrows size={26} />
         <strong>{selectedSkills.length} {t.selectedSkills}</strong>
-        <div className="selected-chip-list">{selectedSkills.slice(0, 8).map((skill) => <span key={skill.id}>{skill.name}</span>)}</div>
+        <div className="selected-chip-list">{selectedSkills.slice(0, 8).map((skill) => <span key={skill.id} title={skill.name}>{skill.name}</span>)}</div>
         {selectedSkills.length === 0 && <p className="muted-copy">{t.noSourceSelection}</p>}
         <button className="primary" disabled={selectedSkills.length === 0 || sameSourceTarget} onClick={() => onPlan([to], selectedIds)}><UploadCloud size={16} /> {t.previewIntersection}</button>
         {plan && selectedSkills.length > 0 && !sameSourceTarget && <button className="primary" onClick={() => onApply([to], selectedIds)}><Check size={16} /> {t.applyIntersection}</button>}

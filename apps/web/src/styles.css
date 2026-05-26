@@ -426,6 +426,12 @@ textarea:focus-visible {
   gap: var(--sp-3);
 }
 .card-head span { color: var(--muted); font-size: var(--fs-xs); }
+.card-head h3 .title-count {
+  color: var(--muted);
+  font-size: var(--fs-xs);
+  margin-left: var(--sp-2);
+  font-weight: var(--fw-regular);
+}
 
 .source-bars { display: grid; gap: var(--sp-3); }
 .source-bars > div {
