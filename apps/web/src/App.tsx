@@ -3,6 +3,7 @@ import {
   AlertTriangle,
   ArrowRight,
   Check,
+  Copy,
   Database,
   FolderPlus,
   GitBranch,
@@ -314,12 +315,57 @@ function Overview({ skills, focusedSkillId, focusSkill, lang, totalSkillCount, a
         </div>
       </div>
       <div className="work-card donut-card">
+        {/* R35-C7: when a source bar is selected, the donut-card grows a small
+            path strip on top so the user sees which directories actually feed
+            the bucket they just narrowed to. paths come from the agent's
+            declared sourceDirs filtered by the selected scope — already
+            expandHome'd by the server. Multiple paths are listed (e.g. an
+            opencode/user scope can be 4 dirs). */}
+        {selectedSourceKey && (() => {
+          const [selAgent, selScope] = selectedSourceKey.split("::") as [string, SkillScope];
+          const def = agents.find((entry) => entry.kind === selAgent);
+          const paths = def ? def.sourceDirs.filter((s) => s.scope === selScope).map((s) => s.path) : [];
+          return (
+            <div className="selected-source-paths">
+              <div className="selected-source-head">
+                <AgentLogo agent={selAgent} />
+                <strong>{agentTone[selAgent]?.label ?? selAgent}</strong>
+                <em className="scope-tag">{scopeLabel(selScope, lang)}</em>
+              </div>
+              {paths.length === 0 ? (
+                <p className="muted-copy">{t.selectedSourceNoPaths}</p>
+              ) : (
+                <ul className="source-path-list">
+                  {paths.map((p) => (
+                    <li key={p}>
+                      <code title={p}>{p}</code>
+                      <button
+                        type="button"
+                        className="ghost source-path-copy"
+                        onClick={() => { void navigator.clipboard.writeText(p); }}
+                        aria-label={t.copyPath}
+                        title={t.copyPath}
+                      >
+                        <Copy size={12} />
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          );
+        })()}
         <h3>{t.statusDistribution}</h3><div className="donut" style={donutStyle} />
         <div className="status-list"><span><i className="dot ok" />{t.shareable} {cardsSummary.portable}</span><span><i className="dot warn" />{t.agentBound} {cardsSummary.agentBound}</span><span><i className="dot bad" />{t.problematic} {cardsSummary.invalid}</span></div>
       </div>
       <div className="overview-results-row span-all">
         <div className="work-card table-card">
-          <div className="card-head"><div><h3>{t.scanResults}<span className="title-count">{displayedSkills.length === totalSkillCount ? totalSkillCount : `${displayedSkills.length} / ${totalSkillCount}`}</span></h3><p>{t.selectionHint}</p></div>{agentDropdown}</div>
+          {/* R35-C7 cleanup: dropped the "点击条目可加入审查/分发选择" subtitle —
+              Overview has no checkbox column (R34-C1 made it single-focus),
+              so the hint was a lie. Card head now only shows the count +
+              agent dropdown. The selectionHint i18n key still drives the row
+              tooltip in Intersect / Distribute where checkboxes do exist. */}
+          <div className="card-head"><div><h3>{t.scanResults}<span className="title-count">{displayedSkills.length === totalSkillCount ? totalSkillCount : `${displayedSkills.length} / ${totalSkillCount}`}</span></h3></div>{agentDropdown}</div>
           {/* SkillTable handles both the row markup and the empty-state hint
               when displayedSkills is empty. Overview never passes selectedIds
               so the table renders in pure-browse mode (no checkbox column). */}

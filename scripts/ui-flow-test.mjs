@@ -286,6 +286,16 @@ const selectedCount = await page.locator(".source-bars .source-bar-row.selected"
 if (selectedCount !== 1) {
   failures.push(`Exactly one source-bar should carry .selected after click; got ${selectedCount}`);
 }
+// R35-C7: the donut-card grows a "selected-source-paths" strip listing the
+// configured sourceDir.path entries for the (agent, scope) the user clicked.
+const pathBlockVisible = await page.locator(".donut-card .selected-source-paths").count();
+if (pathBlockVisible !== 1) {
+  failures.push(`Donut card should show the path block after source-bar click; got ${pathBlockVisible}`);
+}
+const pathItems = await page.locator(".donut-card .source-path-list li code").count();
+if (pathItems === 0) {
+  failures.push("Path block should list at least one configured path for the selected source");
+}
 await screenshot("13-source-bar-selected");
 // Click again to deselect.
 await firstBar.click();
@@ -297,6 +307,10 @@ if (totalAfterDeselect !== totalBefore) {
 const selectedAfter = await page.locator(".source-bars .source-bar-row.selected").count();
 if (selectedAfter !== 0) {
   failures.push(`No source-bar should carry .selected after deselect; got ${selectedAfter}`);
+}
+const pathBlockAfter = await page.locator(".donut-card .selected-source-paths").count();
+if (pathBlockAfter !== 0) {
+  failures.push(`Path block should disappear after deselect; got ${pathBlockAfter}`);
 }
 
 // Cleanup: read linka-skillhub.config.json, drop the my-custom-agent entry,

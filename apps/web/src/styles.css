@@ -402,6 +402,59 @@ textarea:focus-visible {
   align-items: center;
   gap: var(--sp-4);
 }
+/* R35-C7: when a source bar is selected, the donut-card grows a top strip
+   that lists the configured directory paths for that (agent, scope) bucket.
+   The strip spans both grid columns so the title + path list reads as a
+   single block above the donut + status list. */
+.donut-card .selected-source-paths {
+  grid-column: 1 / -1;
+  padding: var(--sp-3);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--surface-2);
+  display: grid;
+  gap: var(--sp-2);
+}
+.selected-source-head {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  font-size: var(--fs-sm);
+}
+.selected-source-head strong { color: var(--text); }
+.source-path-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: var(--sp-1);
+}
+.source-path-list li {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  min-width: 0;
+}
+.source-path-list code {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  color: var(--text-2);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  padding: 4px var(--sp-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.source-path-copy {
+  flex: 0 0 auto;
+  min-width: 0;
+  height: 24px;
+  padding: 0 var(--sp-2);
+}
 .card-head {
   display: flex;
   align-items: center;
