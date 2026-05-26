@@ -17,57 +17,19 @@ import {
   UploadCloud,
   X
 } from "lucide-react";
-import type { AgentDefinition, DistributionPlan, DistributionTarget, SkillPackage, SkillStatus } from "@linka-skillhub/core";
+import type { AgentDefinition, DistributionPlan, DistributionTarget, SkillPackage } from "@linka-skillhub/core";
 import { api, type ReviewerInfo, type Summary } from "./api.js";
 import { messages, tReason, type Language } from "./i18n.js";
 import { ConfirmPlanModal } from "./components/ConfirmPlanModal.js";
 import { LoadRegistryPanel } from "./components/LoadRegistryPanel.js";
 import { useModalFocusTrap } from "./components/useModalFocusTrap.js";
+import { AgentLogo, agentTone } from "./components/skillVisuals.js";
+import { SkillTable } from "./components/SkillTable.js";
+import { DetailPanel } from "./components/DetailPanel.js";
 import { humanizeError } from "./humanize-error.js";
 
 type View = "overview" | "intersect" | "distribute" | "repo";
 type Dialog = "scan" | "review" | "confirmPlan" | null;
-
-const agentTone: Record<string, { label: string; mark: string; className: string }> = {
-  mavis: { label: "Mavis", mark: "M", className: "agent-mavis" },
-  opencode: { label: "OpenCode", mark: "O", className: "agent-opencode" },
-  claude: { label: "Claude Code", mark: "C", className: "agent-claude" },
-  codex: { label: "Codex", mark: "X", className: "agent-codex" },
-  shared: { label: ".agents/skills", mark: "S", className: "agent-shared" }
-};
-
-const statusLabel = (lang: Language): Record<SkillStatus, string> => ({
-  valid: messages[lang].shareable,
-  portable: messages[lang].shareable,
-  invalid: messages[lang].problematic,
-  agent_bound: messages[lang].agentBound,
-  unsafe: messages[lang].problematic,
-  unreviewed: lang === "zh" ? "未审查" : "Unreviewed"
-});
-
-const statusClass = (skill: SkillPackage): string => {
-  if (skill.status.includes("unsafe") || skill.status.includes("invalid")) return "status-danger";
-  if (skill.status.includes("agent_bound")) return "status-warning";
-  if (skill.status.includes("portable") && skill.status.includes("valid")) return "status-ok";
-  return "status-muted";
-};
-
-const bucket = (skill: SkillPackage): "problem" | "agentBound" | "shareable" | "other" => {
-  if (skill.status.includes("unsafe") || skill.status.includes("invalid")) return "problem";
-  if (skill.status.includes("agent_bound")) return "agentBound";
-  if (skill.status.includes("valid") && skill.status.includes("portable")) return "shareable";
-  return "other";
-};
-
-const bucketLabel = (skill: SkillPackage, lang: Language): string => {
-  const t = messages[lang];
-  switch (bucket(skill)) {
-    case "shareable": return t.shareable;
-    case "agentBound": return t.agentBound;
-    case "problem": return t.problematic;
-    default: return t.unreviewedBucket;
-  }
-};
 
 // Mirrors @linka-skillhub/core's summarizeSkills semantics (kept local because
 // the core barrel imports node:* modules that don't survive a browser bundle).
@@ -86,11 +48,6 @@ const summarizeSkills = (skills: readonly SkillPackage[]): Summary => ({
   invalid: skills.filter((skill) => skill.status.includes("invalid")).length
 });
 
-function AgentLogo({ agent }: { readonly agent: string }) {
-  const tone = agentTone[agent] ?? { label: agent, mark: agent.slice(0, 1).toUpperCase(), className: "agent-generic" };
-  return <span className={`agent-logo ${tone.className}`} title={tone.label}>{tone.mark}</span>;
-}
-
 function profileLabel(profile: string, lang: Language): string {
   if (profile === "mirror") return messages[lang].profileMirror;
   if (profile === "sandbox") return messages[lang].profileSandbox;
@@ -108,31 +65,6 @@ function StatCard({ title, value, sub, icon, tone = "neutral" }: { readonly titl
         <span>{sub}</span>
       </div>
     </div>
-  );
-}
-
-function SkillRow({ skill, selected, onToggle, lang, showAgent = false }: { readonly skill: SkillPackage; readonly selected: boolean; readonly onToggle: (id: string) => void; readonly lang: Language; readonly showAgent?: boolean }) {
-  const labels = statusLabel(lang);
-  const displayStatus = skill.status.includes("unsafe") || skill.status.includes("invalid")
-    ? labels.invalid
-    : skill.status.includes("agent_bound")
-      ? labels.agent_bound
-      : skill.status.includes("portable") && skill.status.includes("valid")
-        ? labels.portable
-        : labels.unreviewed;
-  const agentName = agentTone[skill.source.agent]?.label ?? skill.source.agent;
-  return (
-    <button className={`skill-row ${selected ? "selected" : ""}`} onClick={() => onToggle(skill.id)} title={messages[lang].selectionHint}>
-      <AgentLogo agent={skill.source.agent} />
-      <span className="skill-main">
-        <span className="skill-title-line">
-          <strong>{skill.name}</strong>
-          {showAgent && <span className="agent-tag" title={agentName}>{agentName}</span>}
-        </span>
-        <small title={skill.description || messages[lang].noDescription}>{skill.description || messages[lang].noDescription}</small>
-      </span>
-      <span className={`status-pill ${statusClass(skill)}`}>{displayStatus}</span>
-    </button>
   );
 }
 
@@ -271,13 +203,6 @@ function Overview({ skills, focusedSkillId, focusSkill, lang, totalSkillCount, a
     for (const skill of cardsSkills) counts.set(skill.source.agent, (counts.get(skill.source.agent) ?? 0) + 1);
     return [...counts.entries()].sort((a, b) => b[1] - a[1]);
   }, [cardsSkills, agents]);
-  const duplicateNames = useMemo(() => {
-    const counts = new Map<string, number>();
-    for (const skill of displayedSkills) counts.set(skill.name, (counts.get(skill.name) ?? 0) + 1);
-    const dups = new Set<string>();
-    for (const [name, count] of counts) if (count >= 2) dups.add(name);
-    return dups;
-  }, [displayedSkills]);
   const donutStyle = { "--ok": cardsSummary.portable, "--warn": cardsSummary.agentBound, "--bad": cardsSummary.invalid, "--all": Math.max(cardsSummary.total, 1) } as React.CSSProperties;
   // The Overview row is now single-focus: the focused skill drives the inline
   // detail panel below. Focus survives changes to the agent filter so the user
@@ -335,19 +260,18 @@ function Overview({ skills, focusedSkillId, focusSkill, lang, totalSkillCount, a
       <div className="overview-results-row span-all">
         <div className="work-card table-card">
           <div className="card-head"><div><h3>{t.scanResults}<span className="title-count">{displayedSkills.length === totalSkillCount ? totalSkillCount : `${displayedSkills.length} / ${totalSkillCount}`}</span></h3><p>{t.selectionHint}</p></div>{agentDropdown}</div>
-          {tableEmpty ? (
-            <div className="empty-state table-empty"><Info size={20} /><h2>{t.noMatchTitle}</h2><p>{t.noMatchBody}</p></div>
-          ) : (
-            <div className="skill-table scrollable-list">{displayedSkills.map((skill) => <SkillRow key={skill.id} skill={skill} selected={skill.id === focusedSkillId} onToggle={focusSkill} lang={lang} showAgent={duplicateNames.has(skill.name)} />)}</div>
-          )}
+          {/* SkillTable handles both the row markup and the empty-state hint
+              when displayedSkills is empty. Overview never passes selectedIds
+              so the table renders in pure-browse mode (no checkbox column). */}
+          <SkillTable
+            skills={displayedSkills}
+            lang={lang}
+            focusedId={focusedSkillId}
+            onFocus={focusSkill}
+          />
         </div>
         <div className="overview-detail-panel">
-          {!focusedSkill && (
-            <section className="work-card detail-empty"><PackageCheck size={24} /><h2>{t.selectSkillToInspect}</h2></section>
-          )}
-          {focusedSkill && (
-            <Detail skill={focusedSkill} lang={lang} />
-          )}
+          <DetailPanel skill={focusedSkill ?? undefined} lang={lang} />
           {focusedSkill && focusedHidden && (
             <p className="muted-copy">{t.focusedHidden}</p>
           )}
@@ -585,6 +509,11 @@ function Intersect({ skills, targets, lang, plan, onPlan, onApply, agents: agent
   // state with Overview's focus and Distribute's selection. R34 commit 1
   // localises it so other pages can't pollute the copy plan.
   const [selectedForCopy, setSelectedForCopy] = useState<Set<string>>(new Set());
+  // R34 commit 3: Intersect grew its own focused-skill semantic so the right
+  // sticky DetailPanel can mirror what the user is inspecting on this page,
+  // independent of Overview's focused-skill state. Switching tabs unmounts
+  // Intersect, so this resets every visit by design.
+  const [focusedId, setFocusedId] = useState<string | null>(null);
   const toggleSelectForCopy = (id: string) => {
     setSelectedForCopy((prev) => {
       const next = new Set(prev);
@@ -592,6 +521,7 @@ function Intersect({ skills, targets, lang, plan, onPlan, onApply, agents: agent
       return next;
     });
   };
+  const focusSkill = (id: string) => setFocusedId((current) => (current === id ? null : id));
   const agents = agentDefs.map((agent) => agent.kind);
   const handleFromChange = (newFrom: string) => {
     setFrom(newFrom);
@@ -602,7 +532,6 @@ function Intersect({ skills, targets, lang, plan, onPlan, onApply, agents: agent
   };
   const sameSourceTarget = from === to;
   const left = skills.filter((skill) => skill.source.agent === from).slice(0, 40);
-  const right = skills.filter((skill) => skill.source.agent === to).slice(0, 40);
   // selectedSkills filters local selectedForCopy by the current `from` agent.
   // Switching `from` therefore yields a fresh-feeling lane even if the user
   // checked rows under a different `from` earlier in the same Intersect visit.
@@ -610,9 +539,13 @@ function Intersect({ skills, targets, lang, plan, onPlan, onApply, agents: agent
   const selectedIds = selectedSkills.map((skill) => skill.id);
   const sourcePath = left[0]?.source.rootPath ?? "-";
   const targetPath = targets.find((target) => target.agent === to)?.targetDir ?? "-";
+  // The right sticky panel mirrors `focusedId` from the left lane. We resolve
+  // against `left` (not the full registry) so a stale focus from a prior `from`
+  // value doesn't surface a skill that's no longer visible in the table.
+  const focusedSkill = focusedId ? left.find((skill) => skill.id === focusedId) : undefined;
   return (
     <section className="intersect-layout">
-      <div className="section-head span-all">
+      <div className="section-head">
         <div><h2>{t.navIntersect}</h2><p>{t.intersectDesc}</p></div>
         <div className="agent-selects">
           <select value={from} onChange={(event) => handleFromChange(event.target.value)}>{agents.map((agent) => <option key={agent} value={agent}>{agentTone[agent]?.label}</option>)}</select>
@@ -620,25 +553,48 @@ function Intersect({ skills, targets, lang, plan, onPlan, onApply, agents: agent
           <select value={to} onChange={(event) => setTo(event.target.value)}>{agents.map((agent) => <option key={agent} value={agent} disabled={agent === from}>{agentTone[agent]?.label}</option>)}</select>
         </div>
       </div>
-      <div className="work-card lane-card">
-        <h3><AgentLogo agent={from} /> {t.sourceSkills}</h3>
-        <div className="path-note"><strong>{t.sourcePath}</strong><code title={sourcePath}>{sourcePath}</code></div>
-        <div className="skill-list compact scrollable-list">{left.map((skill) => <SkillRow key={skill.id} skill={skill} selected={selectedForCopy.has(skill.id)} onToggle={toggleSelectForCopy} lang={lang} />)}</div>
+      <div className="intersect-body">
+        <div className="work-card intersect-table-card">
+          <div className="card-head">
+            <div>
+              <h3><AgentLogo agent={from} /> {t.sourceSkills}<span className="title-count">{left.length}</span></h3>
+              <p className="path-line">{t.sourcePath}: <code title={sourcePath}>{sourcePath}</code></p>
+            </div>
+          </div>
+          {/* SkillTable handles row markup, focused highlight, checkbox click,
+              and the no-rows fallback. Passing selectedIds + onToggleSelect
+              flips it into multi-select mode for the copy queue. */}
+          <SkillTable
+            skills={left}
+            lang={lang}
+            focusedId={focusedId}
+            onFocus={focusSkill}
+            selectedIds={selectedForCopy}
+            onToggleSelect={toggleSelectForCopy}
+          />
+        </div>
+        <div className="intersect-detail-panel">
+          <DetailPanel skill={focusedSkill} lang={lang} />
+        </div>
       </div>
-      <div className="work-card intersection-actions">
+      <div className="work-card intersect-action-bar">
         {sameSourceTarget && <p className="warning-line" role="alert">{t.sameSourceTargetWarning}</p>}
-        <GitCompareArrows size={26} />
-        <strong>{selectedSkills.length} {t.selectedSkills}</strong>
-        <div className="selected-chip-list">{selectedSkills.slice(0, 8).map((skill) => <span key={skill.id} title={skill.name}>{skill.name}</span>)}</div>
+        <div className="action-bar-row">
+          <span className="action-bar-counter">
+            <strong>{selectedSkills.length}</strong> {t.selectedCount} / {left.length}
+          </span>
+          <p className="target-path-line">{t.targetPath}: <code title={targetPath}>{targetPath}</code></p>
+          <span className="action-bar-spacer" />
+          <button className="primary" disabled={selectedSkills.length === 0 || sameSourceTarget} onClick={() => onPlan([to], selectedIds)}><UploadCloud size={16} /> {t.previewIntersection}</button>
+          {plan && selectedSkills.length > 0 && !sameSourceTarget && <button className="primary" onClick={() => onApply([to], selectedIds)}><Check size={16} /> {t.applyIntersection}</button>}
+        </div>
         {selectedSkills.length === 0 && <p className="muted-copy">{t.noSourceSelection}</p>}
-        <button className="primary" disabled={selectedSkills.length === 0 || sameSourceTarget} onClick={() => onPlan([to], selectedIds)}><UploadCloud size={16} /> {t.previewIntersection}</button>
-        {plan && selectedSkills.length > 0 && !sameSourceTarget && <button className="primary" onClick={() => onApply([to], selectedIds)}><Check size={16} /> {t.applyIntersection}</button>}
-        {plan && <><h3>{t.planSummary}</h3><PlanItems plan={plan} lang={lang} /></>}
-      </div>
-      <div className="work-card lane-card">
-        <h3><AgentLogo agent={to} /> {t.targetExisting}</h3>
-        <div className="path-note"><strong>{t.targetPath}</strong><code title={targetPath}>{targetPath}</code></div>
-        <div className="skill-list compact scrollable-list">{right.map((skill) => <SkillRow key={skill.id} skill={skill} selected={false} onToggle={() => undefined} lang={lang} />)}</div>
+        {plan && (
+          <div className="action-bar-plan">
+            <h3>{t.planSummary}</h3>
+            <PlanItems plan={plan} lang={lang} />
+          </div>
+        )}
       </div>
     </section>
   );
@@ -654,10 +610,4 @@ function Distribute({ targets, onPlan, onApply, plan, busy, lang }: { readonly t
   const [chosen, setChosen] = useState<Set<string>>(new Set(["codex", "claude"]));
   const toggle = (agent: string) => { const next = new Set(chosen); next.has(agent) ? next.delete(agent) : next.add(agent); setChosen(next); };
   return <section className="panel-grid distribute-grid"><div className="section-head span-all"><div><h2>{t.navDistribute}</h2><p>{t.distributeDesc}</p></div><button className="primary" disabled={busy || chosen.size === 0} onClick={() => onPlan([...chosen])}><UploadCloud size={16} /> {t.generatePlan}</button></div><div className="work-card target-card"><h3>{t.targets}</h3><div className="target-grid">{targets.map((target) => <button key={target.agent} className={chosen.has(target.agent) ? "target selected" : "target"} onClick={() => toggle(target.agent)}><AgentLogo agent={target.agent} /><span>{target.label}<small title={target.targetDir}>{target.targetDir}</small></span>{chosen.has(target.agent) && <Check size={16} />}</button>)}</div></div><div className="work-card plan-card"><h3>{t.planSummary}</h3>{plan ? <div className="plan-list"><strong>{plan.items.filter((item) => item.action !== "skip").length} {t.toCopyOrOverwrite}</strong><PlanItems plan={plan} lang={lang} /><button className="primary plan-apply-btn" disabled={busy || chosen.size === 0} onClick={() => onApply([...chosen])}><Check size={16} /> {t.applyDistribution}</button></div> : <div className="empty-state"><Info size={18} />{t.waitingPlan}<button className="primary" disabled><Check size={16} /> {t.applyDistribution}</button></div>}</div></section>;
-}
-
-function Detail({ skill, lang }: { readonly skill?: SkillPackage; readonly lang: Language }) {
-  const t = messages[lang];
-  if (!skill) return <section className="work-card detail-empty"><PackageCheck size={24} /><h2>{t.detailEmpty}</h2></section>;
-  return <section className="detail-inline"><div className="detail-head"><div><h2>{skill.name}</h2><p>{skill.description}</p></div><span className={`status-pill ${statusClass(skill)}`}>{bucketLabel(skill, lang)}</span></div><div className="work-card"><h3>{t.metadata}</h3><dl className="meta-list"><dt>{t.source}</dt><dd><AgentLogo agent={skill.source.agent} /> {agentTone[skill.source.agent]?.label}</dd><dt>{t.scope}</dt><dd>{skill.source.scope}</dd><dt>{t.hash}</dt><dd><code>{skill.hash.slice(0, 16)}</code></dd><dt>{t.variant}</dt><dd><code>{skill.variantId}</code></dd></dl></div><div className="work-card"><h3>{t.evidence}</h3><div className="evidence-list">{skill.issues.map((issue) => <span key={issue.code} className="danger-line">{issue.code}: {issue.message}</span>)}{skill.evidence.map((item) => <span key={item}>{item}</span>)}{skill.issues.length === 0 && skill.evidence.length === 0 && <span>{lang === "zh" ? "无阻断证据" : "No blocking evidence"}</span>}</div></div><div className="work-card path-card"><h3>{t.path}</h3><code>{skill.skillDir}</code></div></section>;
 }

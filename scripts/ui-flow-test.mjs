@@ -77,10 +77,20 @@ await page.getByRole("button", { name: /交汇中心/ }).click();
 await expectText("来源路径", "intersection source path");
 await expectText("目标路径", "intersection target path");
 await expectText("预览交汇复制", "intersection preview button");
-await page.locator(".lane-card").first().locator(".skill-row").first().click();
+// R34 commit 3: Intersect's old left/right dual-lane layout collapsed into a
+// single SkillTable + sticky DetailPanel + bottom action bar. Row click only
+// focuses (DetailPanel mirrors). To queue a row for the copy plan we click
+// the checkbox on the row.
+const intersectFirstRow = page.locator(".intersect-table-card .skill-row").first();
+await intersectFirstRow.click();
+await page.locator(".intersect-detail-panel .detail-inline").waitFor({ state: "visible", timeout: 5000 });
+await intersectFirstRow.locator(".skill-row-check").click();
 await page.getByRole("button", { name: /预览交汇复制/ }).click();
 await page.waitForFunction(() => document.body.innerText.includes("复制预览"), undefined, { timeout: 30000 });
 await expectText("复制预览", "intersection copy preview");
+// The right "目标现有" lane is gone after R34 C3 — guard against regressions.
+const targetExistingLane = await page.locator("text=目标现有").count();
+if (targetExistingLane > 0) failures.push("Intersect right lane '目标现有' should be removed");
 await screenshot("07-intersection-preview");
 
 await page.getByRole("button", { name: /分发管理/ }).click();
