@@ -96,6 +96,14 @@ await screenshot("07-intersection-preview");
 await page.getByRole("button", { name: /分发管理/ }).click();
 await expectText("预览复制结果", "distribution preview button");
 await expectText("确认复制到选中的目标 Agent", "distribution apply button text");
+// R34 commit 4: Distribute is now self-contained. The Registry skills table
+// lives inside the page (not borrowed from Overview's selection) and the
+// multi-target picker sits above it. Sanity-check both pieces are present
+// and that the action bar starts in an "empty selection" state.
+await expectText("Registry Skills", "distribute table title");
+await expectText("目标 Agent", "distribute target picker heading");
+const distributeRowCount = await page.locator(".distribute-table-card .skill-row").count();
+if (distributeRowCount === 0) failures.push("Distribute table is empty — Registry should expose skills");
 await screenshot("08-distribution-copy");
 
 // New: confirm-plan modal flow + load registry
@@ -107,13 +115,26 @@ if (overviewRows === 0) failures.push("Overview shows no skill rows after cleari
 // reveal the inline detail panel — no per-row checkbox, no footer counter.
 await page.locator(".skill-row").first().click();
 await page.locator(".overview-detail-panel .detail-inline").waitFor({ state: "visible", timeout: 5000 });
-// Distribute no longer requires a per-skill selection: omitting skillIds tells
-// the server to distribute the entire registry. The page should generate a
-// plan from just the default target agents.
+const overviewFocusedName = await page.locator(".overview-detail-panel .detail-head h2").innerText();
+// R34 commit 4: Distribute supplies its own selectedForDistribute set; the
+// user clicks the row to focus (DetailPanel mirrors) and the checkbox to
+// queue. Preview button stays disabled until both a target is chosen and at
+// least one skill is checked.
 await page.getByRole("button", { name: /分发管理/ }).click();
 await page.waitForTimeout(200);
-await page.getByRole("button", { name: /预览复制结果/ }).click();
+// Focus should follow the user across pages (App owns focusedSkillId now).
+const distributeFocusedName = await page.locator(".distribute-detail-panel .detail-head h2").innerText();
+if (distributeFocusedName !== overviewFocusedName) {
+  failures.push(`Focused skill did not survive page switch: overview=${overviewFocusedName}, distribute=${distributeFocusedName}`);
+}
+const previewButton = page.getByRole("button", { name: /预览复制结果/ });
+if (await previewButton.isEnabled()) failures.push("Distribute preview should be disabled before any skill is queued");
+// Queue the first row's checkbox so the action bar's selection counter > 0.
+await page.locator(".distribute-table-card .skill-row").first().locator(".skill-row-check").click();
+await previewButton.click();
 await page.waitForFunction(() => document.body.innerText.includes("复制预览"), undefined, { timeout: 10000 });
+const planItemCount = await page.locator(".distribute-action-bar .plan-item").count();
+if (planItemCount === 0) failures.push("Distribute action bar did not render any plan items after preview");
 await page.getByRole("button", { name: /^确认复制到选中的目标 Agent$/ }).click();
 await page.waitForFunction(() => document.body.innerText.includes("Plan Token"), undefined, { timeout: 10000 });
 await expectText("Plan Token", "confirm modal plan token");
@@ -122,6 +143,15 @@ await screenshot("09-confirm-plan-modal");
 await page.locator(".confirm-plan-dialog .dialog-actions button.ghost").click();
 let modalText = await page.locator("body").innerText();
 if (modalText.includes("Plan Token")) failures.push("Confirm modal did not close on cancel");
+// Switching away from Distribute and back must reset selectedForDistribute
+// (per-page operational selection). focusedSkillId is a separate concern and
+// is asserted above to survive page switches.
+await page.getByRole("button", { name: /总览/ }).click();
+await page.waitForTimeout(150);
+await page.getByRole("button", { name: /分发管理/ }).click();
+await page.waitForTimeout(150);
+const refreshedCounter = await page.locator(".distribute-action-bar .action-bar-counter strong").innerText();
+if (refreshedCounter.trim() !== "0") failures.push(`Distribute selection should reset on re-entry, got counter=${refreshedCounter}`);
 
 await page.getByRole("button", { name: /仓库管理/ }).click();
 await expectText("加载已有 Registry", "load registry panel");
