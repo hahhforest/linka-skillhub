@@ -16,12 +16,12 @@ import {
   UploadCloud,
   X
 } from "lucide-react";
-import type { AgentDefinition, DistributionPlan, DistributionTarget, SkillPackage } from "@linka-skillhub/core";
+import type { AgentDefinition, DistributionPlan, DistributionTarget, SkillPackage, SkillScope } from "@linka-skillhub/core";
 import { api, type ReviewerInfo, type Summary } from "./api.js";
 import { messages, tReason, type Language } from "./i18n.js";
 import { ConfirmPlanModal } from "./components/ConfirmPlanModal.js";
 import { useModalFocusTrap } from "./components/useModalFocusTrap.js";
-import { AgentLogo, agentTone } from "./components/skillVisuals.js";
+import { AgentLogo, agentTone, scopeLabel } from "./components/skillVisuals.js";
 import { SkillTable } from "./components/SkillTable.js";
 import { DetailPanel } from "./components/DetailPanel.js";
 import { RepoBrowser } from "./components/RepoBrowser.js";
@@ -182,12 +182,27 @@ function Overview({ skills, focusedSkillId, focusSkill, lang, totalSkillCount, a
       <button className="ghost" type="button" onClick={clearAllFilters}>{t.clearFilters}</button>
     </div>
   ) : null;
-  const byAgent = useMemo(() => {
-    const counts = new Map<string, number>();
-    // Seed every known agent at 0 so the source distribution matches the sidebar legend.
-    for (const agent of agents) counts.set(agent.kind, 0);
-    for (const skill of cardsSkills) counts.set(skill.source.agent, (counts.get(skill.source.agent) ?? 0) + 1);
-    return [...counts.entries()].sort((a, b) => b[1] - a[1]);
+  // R35-C3: replace single-agent counts with (agent, scope) buckets so the
+  // user can see "Mavis/builtin 19", "Mavis/user 7", "codex/system 5", etc.
+  // Seeded from each agent's declared sourceDirs (zero rows for empty scopes
+  // like opencode/user) so missing skills produce a visible 0 row rather than
+  // silently disappearing.
+  const bySource = useMemo(() => {
+    type Row = { readonly agent: string; readonly scope: SkillScope; count: number };
+    const counts = new Map<string, Row>();
+    const keyOf = (agent: string, scope: SkillScope) => `${agent}${scope}`;
+    for (const agent of agents) {
+      for (const source of agent.sourceDirs) {
+        counts.set(keyOf(agent.kind, source.scope), { agent: agent.kind, scope: source.scope, count: 0 });
+      }
+    }
+    for (const skill of cardsSkills) {
+      const key = keyOf(skill.source.agent, skill.source.scope);
+      const row = counts.get(key) ?? { agent: skill.source.agent, scope: skill.source.scope, count: 0 };
+      row.count += 1;
+      counts.set(key, row);
+    }
+    return [...counts.values()].sort((a, b) => b.count - a.count);
   }, [cardsSkills, agents]);
   const donutStyle = { "--ok": cardsSummary.portable, "--warn": cardsSummary.agentBound, "--bad": cardsSummary.invalid, "--all": Math.max(cardsSummary.total, 1) } as React.CSSProperties;
   // The Overview row is now single-focus: the focused skill drives the inline
@@ -234,8 +249,15 @@ function Overview({ skills, focusedSkillId, focusSkill, lang, totalSkillCount, a
       <div className="work-card source-card">
         <h3>{t.sourceDistribution}</h3>
         <div className="source-bars">
-          {byAgent.map(([agent, count]) => (
-            <div key={agent}><span><AgentLogo agent={agent} /> {agentTone[agent]?.label ?? agent}</span><strong>{count}</strong><div className="bar-track"><i style={{ width: `${cardsSummary.total ? (count / cardsSummary.total) * 100 : 0}%` }} /></div></div>
+          {bySource.map(({ agent, scope, count }) => (
+            <div key={`${agent}-${scope}`}>
+              <span>
+                <AgentLogo agent={agent} /> {agentTone[agent]?.label ?? agent}
+                <em className="scope-tag">{scopeLabel(scope, lang)}</em>
+              </span>
+              <strong>{count}</strong>
+              <div className="bar-track"><i style={{ width: `${cardsSummary.total ? (count / cardsSummary.total) * 100 : 0}%` }} /></div>
+            </div>
           ))}
         </div>
       </div>

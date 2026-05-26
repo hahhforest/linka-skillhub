@@ -176,7 +176,7 @@
             {
               "path": "./.sandbox/local-mirror/sources/mavis/builtin",
               "scope": "builtin",
-              "defaultSelected": false
+              "defaultSelected": true
             }
           ]
         },
@@ -216,7 +216,7 @@
             {
               "path": "./.sandbox/local-mirror/sources/codex/system",
               "scope": "system",
-              "defaultSelected": false
+              "defaultSelected": true
             }
           ]
         },

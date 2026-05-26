@@ -429,6 +429,17 @@ textarea:focus-visible {
   gap: var(--sp-2);
   font-size: var(--fs-sm);
 }
+/* R35-C3: scope chip next to the agent label, distinguishing "Mavis/builtin"
+   from "Mavis/user" without forcing two separate visual axes. Muted on purpose
+   so the agent name stays the primary identifier. */
+.scope-tag {
+  font-style: normal;
+  font-size: var(--fs-xs);
+  padding: 1px var(--sp-2);
+  border-radius: var(--r-pill);
+  background: var(--surface-3);
+  color: var(--muted);
+}
 .source-bars strong { text-align: right; font-variant-numeric: tabular-nums; }
 .bar-track {
   grid-column: 1 / -1;

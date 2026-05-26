@@ -159,7 +159,13 @@ export const messages = {
     errorRegistryInvalidManifest: "manifest 格式无效",
     errorRegistryMissingRepoPath: "请输入 registry 路径",
     errorUnknown: "未知错误",
-    navGroupLabel: "导航"
+    navGroupLabel: "导航",
+    scope_user: "用户",
+    scope_private: "私有",
+    scope_builtin: "内置",
+    scope_system: "系统",
+    scope_project: "项目",
+    scope_unknown: "未知"
   },
   en: {
     appTitle: "Skill Manager",
@@ -319,7 +325,13 @@ export const messages = {
     errorRegistryInvalidManifest: "Registry manifest is invalid",
     errorRegistryMissingRepoPath: "Registry path is required",
     errorUnknown: "Unknown error",
-    navGroupLabel: "Navigation"
+    navGroupLabel: "Navigation",
+    scope_user: "User",
+    scope_private: "Private",
+    scope_builtin: "Builtin",
+    scope_system: "System",
+    scope_project: "Project",
+    scope_unknown: "Unknown"
   }
 } as const;
 

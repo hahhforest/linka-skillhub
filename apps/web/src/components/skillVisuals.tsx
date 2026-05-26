@@ -1,4 +1,4 @@
-import type { SkillPackage, SkillStatus } from "@linka-skillhub/core";
+import type { SkillPackage, SkillScope, SkillStatus } from "@linka-skillhub/core";
 import { messages, type Language } from "../i18n.js";
 import { OfficialLogo } from "./agentLogos.js";
 
@@ -129,3 +129,14 @@ export const statusLabel = (lang: Language): Record<SkillStatus, string> => ({
   unsafe: messages[lang].problematic,
   unreviewed: lang === "zh" ? "未审查" : "Unreviewed"
 });
+
+// R35-C3: localised label for a skill's source scope (user / private /
+// builtin / system / project / unknown). Used by Overview's source-distribution
+// bars where each (agent, scope) pair is rendered as its own row. Kept here
+// so the bars and any future scope chip read from the same lookup.
+export const scopeLabel = (scope: SkillScope, lang: Language): string => {
+  const table = messages[lang] as Record<string, string>;
+  const key = `scope_${scope}`;
+  const value = table[key];
+  return typeof value === "string" ? value : scope;
+};
