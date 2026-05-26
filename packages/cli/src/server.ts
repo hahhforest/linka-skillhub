@@ -18,6 +18,7 @@ import {
   reviewSkillWithRules,
   scanSkills,
   setRemote,
+  summarizeSkills,
   validateRegistryPath,
   writeReviewResult,
   type AgentKind,
@@ -87,14 +88,7 @@ const serveStatic = async (request: http.IncomingMessage, response: http.ServerR
   }
 };
 
-const summarize = (skills: readonly SkillPackage[]) => ({
-  total: skills.length,
-  valid: skills.filter((skill) => skill.status.includes("valid")).length,
-  portable: skills.filter((skill) => skill.status.includes("portable") && !skill.status.includes("agent_bound") && !skill.status.includes("unsafe")).length,
-  agentBound: skills.filter((skill) => skill.status.includes("agent_bound")).length,
-  unsafe: skills.filter((skill) => skill.status.includes("unsafe")).length,
-  invalid: skills.filter((skill) => skill.status.includes("invalid")).length
-});
+const summarize = (skills: readonly SkillPackage[]) => summarizeSkills(skills);
 
 const reviewerCommand: Partial<Record<AgentKind, string>> = {
   codex: "codex",

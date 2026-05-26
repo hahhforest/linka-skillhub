@@ -1,19 +1,11 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { getDistributionTargets } from "./agents.js";
+import { ensureDir, pathExists } from "./fs-helpers.js";
 import { hashDirectory, sha256 } from "./hash.js";
 import { assertNoPathSeparators, assertPathInside, sanitizePathSegment } from "./path-safety.js";
 import { readRegistryManifest, registrySkillPath } from "./registry.js";
 import type { AgentKind, DistributionItemPlan, DistributionOptions, DistributionPlan, DistributionRun, DistributionTarget, SkillPackage } from "./types.js";
-
-const pathExists = async (target: string): Promise<boolean> => {
-  try {
-    await fs.access(target);
-    return true;
-  } catch {
-    return false;
-  }
-};
 
 const backupRoot = (options: DistributionOptions): string =>
   options.backupDir ?? path.join(options.cwd ?? process.cwd(), ".sandbox", "state", "backups");
@@ -99,9 +91,9 @@ export const applyDistributionPlan = async (registryPath: string, plan: Distribu
     assertPathInside(repoPath, sourcePath, "registry skill path");
     const targetPath = path.join(item.target.targetDir, sanitizePathSegment(item.skill.name));
     assertPathInside(item.target.targetDir, targetPath, "distribution target path");
-    await fs.mkdir(path.dirname(targetPath), { recursive: true });
+    await ensureDir(path.dirname(targetPath));
     if (item.action === "overwrite" && item.existingPath && item.backupPath) {
-      await fs.mkdir(path.dirname(item.backupPath), { recursive: true });
+      await ensureDir(path.dirname(item.backupPath));
       await fs.rm(item.backupPath, { recursive: true, force: true });
       await fs.cp(item.existingPath, item.backupPath, { recursive: true, force: true, errorOnExist: false });
       backups.push(item.backupPath);

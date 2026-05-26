@@ -1,6 +1,6 @@
-import fs from "node:fs/promises";
 import path from "node:path";
 import { spawn } from "node:child_process";
+import { ensureDir, pathExists } from "./fs-helpers.js";
 
 export interface CommandResult {
   readonly stdout: string;
@@ -28,22 +28,9 @@ const run = (bin: string, args: readonly string[], options: { readonly cwd?: str
     child.stdin.end(options.input ?? "");
   });
 
-const ensureDir = async (dir: string): Promise<void> => {
-  await fs.mkdir(dir, { recursive: true });
-};
-
-const exists = async (target: string): Promise<boolean> => {
-  try {
-    await fs.access(target);
-    return true;
-  } catch {
-    return false;
-  }
-};
-
 export const ensureGitRepository = async (repoPath: string): Promise<void> => {
   await ensureDir(repoPath);
-  if (!(await exists(path.join(repoPath, ".git")))) await run("git", ["init"], { cwd: repoPath });
+  if (!(await pathExists(path.join(repoPath, ".git")))) await run("git", ["init"], { cwd: repoPath });
 };
 
 export const gitStatus = async (repoPath: string): Promise<string> => (await run("git", ["status", "--short", "--branch"], { cwd: repoPath })).stdout;

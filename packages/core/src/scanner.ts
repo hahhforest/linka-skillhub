@@ -1,19 +1,11 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { discoverSources } from "./agents.js";
+import { pathExists } from "./fs-helpers.js";
 import { asNonEmptyString, parseSkillMarkdown } from "./frontmatter.js";
 import { hashDirectory, makeVariantId, sha256 } from "./hash.js";
 import { findAgentBoundEvidence, findSafetyIssues, isKebabName } from "./safety.js";
 import type { ParseIssue, ScanOptions, SkillPackage, SkillSource, SkillStatus } from "./types.js";
-
-const pathExists = async (target: string): Promise<boolean> => {
-  try {
-    await fs.access(target);
-    return true;
-  } catch {
-    return false;
-  }
-};
 
 const withExists = async (source: SkillSource): Promise<SkillSource> => ({
   ...source,

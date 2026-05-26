@@ -1,6 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { expandHome } from "./agents.js";
+import { pathExists } from "./fs-helpers.js";
 import type { ResolvedSkillHubConfig, SkillHubConfig, SkillHubProfile } from "./types.js";
 
 const defaultConfig = (cwd: string): SkillHubConfig => ({
@@ -13,15 +14,6 @@ const defaultConfig = (cwd: string): SkillHubConfig => ({
     }
   }
 });
-
-const pathExists = async (target: string): Promise<boolean> => {
-  try {
-    await fs.access(target);
-    return true;
-  } catch {
-    return false;
-  }
-};
 
 export const findConfigPath = async (cwd = process.cwd(), explicitPath?: string): Promise<string | undefined> => {
   if (explicitPath) return expandHome(explicitPath, cwd);

@@ -19,7 +19,7 @@ import {
 } from "lucide-react";
 import type { AgentDefinition, DistributionPlan, DistributionTarget, SkillPackage, SkillStatus } from "@linka-skillhub/core";
 import { api, type ReviewerInfo, type Summary } from "./api.js";
-import { messages, type Language } from "./i18n.js";
+import { messages, tReason, type Language } from "./i18n.js";
 import { ConfirmPlanModal } from "./components/ConfirmPlanModal.js";
 import { LoadRegistryPanel } from "./components/LoadRegistryPanel.js";
 import { useModalFocusTrap } from "./components/useModalFocusTrap.js";
@@ -71,13 +71,21 @@ const bucketLabel = (skill: SkillPackage, lang: Language): string => {
   }
 };
 
+// Mirrors @linka-skillhub/core's summarizeSkills semantics (kept local because
+// the core barrel imports node:* modules that don't survive a browser bundle).
+// CLI and server both go through core's summarizeSkills; this stays in lockstep.
 const summarizeSkills = (skills: readonly SkillPackage[]): Summary => ({
   total: skills.length,
   valid: skills.filter((skill) => skill.status.includes("valid")).length,
-  portable: skills.filter((skill) => bucket(skill) === "shareable").length,
-  agentBound: skills.filter((skill) => bucket(skill) === "agentBound").length,
+  portable: skills.filter(
+    (skill) =>
+      skill.status.includes("portable") &&
+      !skill.status.includes("agent_bound") &&
+      !skill.status.includes("unsafe")
+  ).length,
+  agentBound: skills.filter((skill) => skill.status.includes("agent_bound")).length,
   unsafe: skills.filter((skill) => skill.status.includes("unsafe")).length,
-  invalid: skills.filter((skill) => bucket(skill) === "problem").length
+  invalid: skills.filter((skill) => skill.status.includes("invalid")).length
 });
 
 function AgentLogo({ agent }: { readonly agent: string }) {
@@ -139,10 +147,7 @@ function actionLabel(action: string, lang: Language): string {
 }
 
 function localizedPlanReason(item: DistributionPlan["items"][number], lang: Language): string {
-  const t = messages[lang] as Record<string, string>;
-  if (!item.reasonCode) return item.reason;
-  const key = `reason_${item.reasonCode}`;
-  return typeof t[key] === "string" ? t[key] : item.reason;
+  return tReason(lang, item.reasonCode, item.reason);
 }
 
 function localizedReviewerReason(reviewer: ReviewerInfo, lang: Language): string {

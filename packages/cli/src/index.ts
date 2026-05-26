@@ -17,6 +17,7 @@ import {
   reviewSkillWithRules,
   scanSkills,
   setRemote,
+  summarizeSkills,
   writeRegistryManifest,
   writeReviewResult,
   type AgentKind,
@@ -160,12 +161,7 @@ const filterKnownSkillIds = (
 };
 
 const summarize = (skills: Awaited<ReturnType<typeof scanSkills>>): Record<string, number> => ({
-  total: skills.length,
-  valid: skills.filter((skill) => skill.status.includes("valid")).length,
-  portable: skills.filter((skill) => skill.status.includes("portable") && !skill.status.includes("agent_bound") && !skill.status.includes("unsafe")).length,
-  agentBound: skills.filter((skill) => skill.status.includes("agent_bound")).length,
-  unsafe: skills.filter((skill) => skill.status.includes("unsafe")).length,
-  invalid: skills.filter((skill) => skill.status.includes("invalid")).length
+  ...summarizeSkills(skills)
 });
 
 const byAgentCounts = (skills: Awaited<ReturnType<typeof scanSkills>>): Record<string, number> => {

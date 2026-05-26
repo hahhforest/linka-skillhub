@@ -292,3 +292,13 @@ export const messages = {
     filterGroupLabel: "Filter by source"
   }
 } as const;
+
+// Look up a dynamic i18n key (e.g. reason_${reasonCode}) and fall back to the
+// caller-provided string when the key is not registered. Keeps callers free of
+// `as Record<string, string>` casts.
+export const tReason = (lang: Language, reasonCode: string | undefined, fallback: string): string => {
+  if (!reasonCode) return fallback;
+  const table = messages[lang] as Record<string, string>;
+  const value = table[`reason_${reasonCode}`];
+  return typeof value === "string" ? value : fallback;
+};

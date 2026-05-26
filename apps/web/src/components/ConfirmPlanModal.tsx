@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
 import { Check, X } from "lucide-react";
 import type { DistributionPlan } from "@linka-skillhub/core";
-import { messages, type Language } from "../i18n.js";
+import { messages, tReason, type Language } from "../i18n.js";
 import { useModalFocusTrap } from "./useModalFocusTrap.js";
 
 export interface ConfirmPlanModalProps {
@@ -11,13 +11,6 @@ export interface ConfirmPlanModalProps {
   readonly busy: boolean;
   readonly onConfirm: () => void;
   readonly onCancel: () => void;
-}
-
-function resolveReason(item: DistributionPlan["items"][number], lang: Language): string {
-  const t = messages[lang] as Record<string, string>;
-  if (!item.reasonCode) return item.reason;
-  const key = `reason_${item.reasonCode}`;
-  return typeof t[key] === "string" ? t[key] : item.reason;
 }
 
 export function ConfirmPlanModal({ plan, confirmToken, lang, busy, onConfirm, onCancel }: ConfirmPlanModalProps): JSX.Element {
@@ -57,7 +50,7 @@ export function ConfirmPlanModal({ plan, confirmToken, lang, busy, onConfirm, on
             <div key={`${item.target.agent}-${item.skill.id}`} className={`confirm-plan-item action-${item.action}`}>
               <strong>{item.action === "copy" ? t.confirmCopy : item.action === "overwrite" ? t.confirmOverwrite : t.confirmSkip}</strong>
               <span>{item.skill.name} → {item.target.label}</span>
-              <small>{resolveReason(item, lang)}</small>
+              <small>{tReason(lang, item.reasonCode, item.reason)}</small>
               {item.existingPath ? <code>{item.existingPath}</code> : null}
               {item.backupPath ? <code className="backup-hint">backup {item.backupPath}</code> : null}
             </div>

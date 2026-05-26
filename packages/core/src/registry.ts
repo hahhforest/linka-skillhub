@@ -1,6 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { scanSkills } from "./scanner.js";
+import { ensureDir } from "./fs-helpers.js";
 import { assertNoPathSeparators, assertPathInside, sanitizePathSegment } from "./path-safety.js";
 import type { ImportOptions, ImportResult, RegistryManifest, SkillPackage } from "./types.js";
 
@@ -11,10 +12,6 @@ export interface ValidateRegistryResult {
   readonly skillCount?: number;
   readonly reason?: "missing_manifest" | "outside_profile_root" | "not_a_directory" | "invalid_manifest";
 }
-
-const ensureDir = async (dir: string): Promise<void> => {
-  await fs.mkdir(dir, { recursive: true });
-};
 
 const copyPackage = async (skill: SkillPackage, repoPath: string): Promise<void> => {
   assertNoPathSeparators(skill.name, "skill.name");
