@@ -262,6 +262,11 @@ function Overview({ skills, summary, selected, toggleSkill, lang, selectedAgent,
   }, [skills]);
   const donutStyle = { "--ok": cardsSummary.portable, "--warn": cardsSummary.agentBound, "--bad": cardsSummary.invalid, "--all": Math.max(cardsSummary.total, 1) } as React.CSSProperties;
   const selectedSkillsAll = useMemo(() => allSkills.filter((skill) => selected.has(skill.id)), [allSkills, selected]);
+  // visibleSelected = intersection of `selected` with what the current filter
+  // shows in the table. Used so multi-summary doesn't claim "已选择 3 个" when
+  // the table only renders 1 of them after a search.
+  const visibleSelected = useMemo(() => skills.filter((skill) => selected.has(skill.id)), [skills, selected]);
+  const hiddenSelectedCount = selectedSkillsAll.length - visibleSelected.length;
   const inlineSelected = selectedSkillsAll.length === 1 ? selectedSkillsAll[0] : undefined;
 
   if (totalSkillCount === 0) {
@@ -314,14 +319,23 @@ function Overview({ skills, summary, selected, toggleSkill, lang, selectedAgent,
           {selectedSkillsAll.length === 1 && inlineSelected && (
             <Detail skill={inlineSelected} lang={lang} />
           )}
-          {selectedSkillsAll.length > 1 && (
+          {selectedSkillsAll.length > 1 && visibleSelected.length === 0 && (
             <section className="work-card detail-multi">
               <PackageCheck size={20} />
-              <h3>{t.multipleSelectedSummary.replace("{n}", String(selectedSkillsAll.length))}</h3>
+              <h3>{t.noVisibleSelected.replace("{n}", String(selectedSkillsAll.length))}</h3>
+            </section>
+          )}
+          {selectedSkillsAll.length > 1 && visibleSelected.length > 0 && (
+            <section className="work-card detail-multi">
+              <PackageCheck size={20} />
+              <h3>{t.multipleSelectedSummary.replace("{n}", String(visibleSelected.length))}</h3>
               <div className="selected-chip-list">
-                {selectedSkillsAll.slice(0, 8).map((skill) => <span key={skill.id}>{skill.name}</span>)}
-                {selectedSkillsAll.length > 8 && <span className="muted-copy">+{selectedSkillsAll.length - 8}</span>}
+                {visibleSelected.slice(0, 8).map((skill) => <span key={skill.id}>{skill.name}</span>)}
+                {visibleSelected.length > 8 && <span className="muted-copy">+{visibleSelected.length - 8}</span>}
               </div>
+              {hiddenSelectedCount > 0 && (
+                <p className="muted-copy">{t.multipleSelectedHidden.replace("{n}", String(hiddenSelectedCount))}</p>
+              )}
             </section>
           )}
         </div>
@@ -404,6 +418,12 @@ export function App() {
   useEffect(() => { setCommitMessage(messages[lang].commitMessageDefault); }, [lang]);
 
   useEffect(() => { void loadShell().catch((error) => setMessage(humanizeError(error, lang))); }, []);
+
+  // Clear transient footer/log message when the user switches views so a
+  // distribute-page preview line (e.g. "复制预览: 4") doesn't bleed into the
+  // repo page footer. loadShell sets its own message on mount and after
+  // import/load, so this only nukes the in-page transient strings.
+  useEffect(() => { setMessage(""); }, [view]);
 
   const agentFilteredSkills = useMemo(
     () => skills.filter((skill) => !selectedAgent || skill.source.agent === selectedAgent),
