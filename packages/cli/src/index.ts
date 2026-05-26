@@ -614,16 +614,95 @@ copy
     printJson({ from, to, plan: compactPlan(plan), run });
   });
 
+interface ParsedGitStatus {
+  readonly branch: string;
+  readonly upstream?: string;
+  readonly clean: boolean;
+  readonly modified: readonly string[];
+  readonly untracked: readonly string[];
+  readonly deleted: readonly string[];
+}
+
+const parseGitStatus = (raw: string): ParsedGitStatus => {
+  const lines = raw.split("\n").filter((line) => line.length > 0);
+  if (lines.length === 0) {
+    return { branch: "", upstream: undefined, clean: true, modified: [], untracked: [], deleted: [] };
+  }
+  const [branchLine, ...fileLines] = lines;
+  const noCommitsMatch = branchLine!.match(/^## No commits yet on (\S+)/);
+  const detachedMatch = branchLine!.match(/^## HEAD \(no branch\)/);
+  const branchMatch = branchLine!.match(/^## ([^\s.]+)(?:\.\.\.(\S+?))?(?: \[.*\])?$/);
+  let branch: string;
+  let upstream: string | undefined;
+  if (noCommitsMatch) {
+    branch = `${noCommitsMatch[1]} (no commits yet)`;
+  } else if (detachedMatch) {
+    branch = "(detached HEAD)";
+  } else {
+    branch = branchMatch?.[1] ?? "?";
+    upstream = branchMatch?.[2];
+  }
+  const modified: string[] = [];
+  const untracked: string[] = [];
+  const deleted: string[] = [];
+  for (const line of fileLines) {
+    const code = line.slice(0, 2);
+    const name = line.slice(3);
+    if (code === "??") untracked.push(name);
+    else if (code.includes("D")) deleted.push(name);
+    else modified.push(name);
+  }
+  return { branch, upstream, clean: fileLines.length === 0, modified, untracked, deleted };
+};
+
+const formatRepoStatusHuman = (repoPath: string, raw: string): string => {
+  const parsed = parseGitStatus(raw);
+  const lines: string[] = [];
+  lines.push(`Registry ${repoPath}`);
+  const branchText = parsed.branch ? (parsed.upstream ? `${parsed.branch} -> ${parsed.upstream}` : parsed.branch) : "(unknown)";
+  lines.push(`Branch:    ${branchText}`);
+  if (parsed.clean) {
+    lines.push("");
+    lines.push("Working tree clean.");
+    return `${lines.join("\n")}\n`;
+  }
+  const summary: string[] = [];
+  if (parsed.modified.length > 0) summary.push(`${parsed.modified.length} modified`);
+  if (parsed.untracked.length > 0) summary.push(`${parsed.untracked.length} untracked`);
+  if (parsed.deleted.length > 0) summary.push(`${parsed.deleted.length} deleted`);
+  lines.push(`Changes:   ${summary.join(", ") || "(none)"}`);
+  const renderGroup = (label: string, items: readonly string[], prefix: string): void => {
+    if (items.length === 0) return;
+    lines.push("");
+    lines.push(`${label}:`);
+    for (const name of items.slice(0, 30)) lines.push(`  ${prefix} ${name}`);
+    if (items.length > 30) lines.push(`  ... ${items.length - 30} more`);
+  };
+  renderGroup("Modified", parsed.modified, "M ");
+  renderGroup("Untracked", parsed.untracked, "??");
+  renderGroup("Deleted", parsed.deleted, "D ");
+  return `${lines.join("\n")}\n`;
+};
+
 const repo = program.command("repo").description("Manage the registry Git repository.");
 repo
   .command("status")
+  .description("Show working tree state of the registry repository.")
   .option("--repo <path>", "Registry path; defaults to profile registryRepo.")
-  .action(async (options: { repo?: string }) => {
+  .option("--json", "Print raw git output as a JSON object instead of the human view.")
+  .action(async (options: { repo?: string; json?: boolean }) => {
     const runtime = await loadRuntimeConfig();
-    process.stdout.write(`${await gitStatus(resolveRepoOption(options.repo, runtime.profile.registryRepo))}\n`);
+    const repoPath = resolveRepoOption(options.repo, runtime.profile.registryRepo);
+    const status = await gitStatus(repoPath);
+    if (options.json) {
+      printJson({ status, repoPath });
+      return;
+    }
+    process.stdout.write(formatRepoStatusHuman(repoPath, status));
   });
 repo
   .command("connect")
+  .description("Set the GitHub remote URL for the registry repository.")
   .option("--repo <path>", "Registry path; defaults to profile registryRepo.")
   .requiredOption("--remote <url>", "GitHub repository URL")
   .action(async (options: { repo?: string; remote: string }) => {
@@ -634,6 +713,7 @@ repo
   });
 repo
   .command("pull")
+  .description("Pull updates from the remote registry repository.")
   .option("--repo <path>", "Registry path; defaults to profile registryRepo.")
   .action(async (options: { repo?: string }) => {
     const runtime = await loadRuntimeConfig();
@@ -641,6 +721,7 @@ repo
   });
 repo
   .command("push")
+  .description("Commit local changes and push to the registry remote.")
   .option("--repo <path>", "Registry path; defaults to profile registryRepo.")
   .option("--message <message>", "commit message", "Update skill registry")
   .option("--yes", "Skip confirmation prompt (REQUIRED in non-interactive shells).")
