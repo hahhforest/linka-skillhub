@@ -27,6 +27,42 @@ import {
 import { defaultRepoPath, startServer } from "./server.js";
 import { assertInteractiveOrYes, summarizeCopyForPrompt, summarizePlanForPrompt } from "./prompts.js";
 
+// ANSI color helpers. Honor https://no-color.org/ and stdout TTY by default;
+// FORCE_COLOR=1 opts in when stdout is piped (tests / wrappers). Re-evaluated
+// every call so env changes mid-process and isTTY take immediate effect.
+// JSON output never flows through these helpers (see printJson).
+const useColors = (): boolean => {
+  if (process.env.NO_COLOR) return false;
+  if (process.env.FORCE_COLOR) return true;
+  return Boolean(process.stdout.isTTY);
+};
+const colorize = (text: string, code: string): string => (useColors() ? `\x1b[${code}m${text}\x1b[0m` : text);
+const c = {
+  red: (s: string) => colorize(s, "31"),
+  green: (s: string) => colorize(s, "32"),
+  yellow: (s: string) => colorize(s, "33"),
+  blue: (s: string) => colorize(s, "34"),
+  cyan: (s: string) => colorize(s, "36"),
+  gray: (s: string) => colorize(s, "90"),
+  bold: (s: string) => colorize(s, "1"),
+  dim: (s: string) => colorize(s, "2")
+};
+const colorStatusToken = (token: string): string => {
+  if (token === "valid" || token === "portable") return c.green(token);
+  if (token === "agent_bound") return c.yellow(token);
+  if (token === "invalid" || token === "unsafe") return c.red(token);
+  return token;
+};
+const colorStatusList = (tokens: readonly string[], sep: string): string => tokens.map(colorStatusToken).join(sep);
+const colorActionPadded = (action: string, padded: string): string => {
+  if (action === "copy") return c.green(padded);
+  if (action === "overwrite") return c.yellow(padded);
+  if (action === "skip") return c.gray(padded);
+  return padded;
+};
+const errorPrefix = (): string => c.bold(c.red("error:"));
+const warningPrefix = (): string => c.yellow("warning:");
+
 const program = new Command();
 const invocationCwd = process.env.INIT_CWD ?? process.cwd();
 
@@ -61,7 +97,7 @@ const KNOWN_LANGUAGES: readonly ReviewLanguage[] = ["zh", "en"];
 type KnownReviewer = (typeof KNOWN_REVIEWERS)[number];
 
 const reportInvalidFlag = (fieldLabel: string, value: string, allowed: readonly string[]): void => {
-  process.stderr.write(`error: unknown ${fieldLabel} '${value}' (allowed: ${allowed.join(", ")})\n`);
+  process.stderr.write(`${errorPrefix()} unknown ${fieldLabel} '${value}' (allowed: ${allowed.join(", ")})\n`);
   process.exitCode = 2;
 };
 
@@ -118,10 +154,10 @@ const filterKnownSkillIds = (
     else unknown.push(id);
   }
   for (const id of unknown) {
-    process.stderr.write(`warning: unknown skill id: ${id}\n`);
+    process.stderr.write(`${warningPrefix()} unknown skill id: ${id}\n`);
   }
   if (known.length === 0) {
-    process.stderr.write(`error: no valid skill ids resolved\n`);
+    process.stderr.write(`${errorPrefix()} no valid skill ids resolved\n`);
     process.exitCode = 2;
     return null;
   }
@@ -155,7 +191,7 @@ const compactPlan = (plan: Awaited<ReturnType<typeof createDistributionPlan>>) =
 });
 
 const warnDeprecated = (from: string, to: string): void => {
-  process.stderr.write(`[linka-skillhub] '${from}' is deprecated; use '${to}' instead.\n`);
+  process.stderr.write(`${c.gray("[linka-skillhub]")} '${from}' is deprecated; use '${to}' instead.\n`);
 };
 
 const truncate = (value: string, max: number): string =>
@@ -169,45 +205,46 @@ const formatRegistryListHuman = (repoPath: string, skills: readonly SkillPackage
     byAgent.set(skill.source.agent, (byAgent.get(skill.source.agent) ?? 0) + 1);
   }
   const lines: string[] = [];
-  lines.push(`Registry ${repoPath}: ${total} skills (auto_fixed: ${autoFixed})`);
+  lines.push(`${c.bold("Registry")} ${c.cyan(repoPath)}: ${c.bold(`${total} skills`)} (auto_fixed: ${autoFixed})`);
   lines.push(`By agent: ${KNOWN_AGENTS.map((agent) => `${agent} ${byAgent.get(agent) ?? 0}`).join("  ")}`);
   lines.push("");
   if (total === 0) {
-    lines.push("(no skills imported; run 'lsh registry import' to populate this registry)");
+    lines.push(c.dim("(no skills imported; run 'lsh registry import' to populate this registry)"));
     return `${lines.join("\n")}\n`;
   }
   const W_ID = 18;
   const W_NAME = 24;
   const W_AGENT = 20;
-  lines.push(`${"ID".padEnd(W_ID)}${"NAME".padEnd(W_NAME)}${"AGENT/SCOPE".padEnd(W_AGENT)}STATUS`);
+  const headerRaw = `${"ID".padEnd(W_ID)}${"NAME".padEnd(W_NAME)}${"AGENT/SCOPE".padEnd(W_AGENT)}STATUS`;
+  lines.push(c.bold(c.gray(headerRaw)));
   for (const skill of skills.slice(0, 30)) {
     const id = truncate(skill.id, W_ID - 1).padEnd(W_ID);
     const name = truncate(skill.name, W_NAME - 2).padEnd(W_NAME);
     const agentScope = truncate(`${skill.source.agent}/${skill.source.scope}`, W_AGENT - 2).padEnd(W_AGENT);
-    const status = skill.status.join(",");
+    const status = colorStatusList(skill.status, ",");
     lines.push(`${id}${name}${agentScope}${status}`);
   }
-  if (total > 30) lines.push(`... ${total - 30} more. Use --json for full output.`);
+  if (total > 30) lines.push(c.dim(`... ${total - 30} more. Use --json for full output.`));
   return `${lines.join("\n")}\n`;
 };
 
 const formatRegistryShowHuman = (skill: SkillPackage): string => {
   const lines: string[] = [];
-  lines.push(skill.name);
+  lines.push(c.bold(skill.name));
   if (skill.description) lines.push(skill.description);
   lines.push("");
-  lines.push(`Status:  ${skill.status.join(", ")}`);
-  lines.push(`Source:  ${skill.source.agent}/${skill.source.scope}`);
-  lines.push(`Path:    ${skill.skillDir}`);
-  lines.push(`Hash:    ${skill.hash.slice(0, 16)}`);
-  lines.push(`Variant: ${skill.variantId}`);
-  lines.push(`Updated: ${skill.updatedAt}`);
-  if (skill.auto_fixed === true) lines.push(`Auto-fixed: yes`);
+  lines.push(`${c.cyan("Status:")}  ${colorStatusList(skill.status, ", ")}`);
+  lines.push(`${c.cyan("Source:")}  ${skill.source.agent}/${skill.source.scope}`);
+  lines.push(`${c.cyan("Path:")}    ${c.dim(c.gray(skill.skillDir))}`);
+  lines.push(`${c.cyan("Hash:")}    ${c.dim(c.gray(skill.hash.slice(0, 16)))}`);
+  lines.push(`${c.cyan("Variant:")} ${skill.variantId}`);
+  lines.push(`${c.cyan("Updated:")} ${skill.updatedAt}`);
+  if (skill.auto_fixed === true) lines.push(`${c.cyan("Auto-fixed:")} yes`);
   const issuesText =
     skill.issues.length === 0
       ? "(none)"
-      : skill.issues.map((issue) => `${issue.code}: ${issue.message}`).join("; ");
-  lines.push(`Issues:  ${issuesText}`);
+      : skill.issues.map((issue) => c.red(`${issue.code}: ${issue.message}`)).join("; ");
+  lines.push(`${c.cyan("Issues:")}  ${issuesText}`);
   return `${lines.join("\n")}\n`;
 };
 
@@ -223,22 +260,22 @@ const formatReviewSummaryHuman = (
   const agentBound = reviews.filter((r) => r.recommendation === "keep-private").length;
   const problematic = reviews.filter((r) => r.recommendation === "fix" || r.recommendation === "reject").length;
   const unreviewed = reviews.filter((r) => r.statuses.length === 0 || r.statuses.includes("unreviewed")).length;
-  lines.push(`Reviewed ${reviews.length} skills with ${reviewer} (language: ${language})`);
-  lines.push(`- shareable: ${shareable}`);
-  lines.push(`- agent-bound: ${agentBound}`);
-  lines.push(`- problematic: ${problematic}`);
+  lines.push(c.bold(`Reviewed ${reviews.length} skills with ${reviewer} (language: ${language})`));
+  lines.push(`- ${c.green(`shareable: ${shareable}`)}`);
+  lines.push(`- ${c.yellow(`agent-bound: ${agentBound}`)}`);
+  lines.push(`- ${c.red(`problematic: ${problematic}`)}`);
   lines.push(`- unreviewed: ${unreviewed}`);
   lines.push("");
-  lines.push(`Wrote ${reviews.length} review records to ${reviewsDir}`);
+  lines.push(`Wrote ${reviews.length} review records to ${c.dim(c.gray(reviewsDir))}`);
   const issues = reviews.filter((r) => r.recommendation === "fix" || r.recommendation === "reject").slice(0, 5);
   if (issues.length > 0) {
     lines.push("");
-    lines.push("Top issues:");
+    lines.push(c.bold("Top issues:"));
     for (const review of issues) {
       const name = skillNamesById.get(review.skillId) ?? review.skillId;
       const statusText = review.statuses.length > 0 ? review.statuses.join(",") : review.recommendation;
       const evidenceText = review.evidence.length > 0 ? ` - ${review.evidence.slice(0, 5).join(", ")}` : "";
-      lines.push(`  ${name} (${review.skillId}): ${statusText}${evidenceText}`);
+      lines.push(`  ${c.bold(name)} (${review.skillId}): ${c.red(statusText)}${evidenceText}`);
     }
   }
   return `${lines.join("\n")}\n`;
@@ -260,22 +297,22 @@ const formatCopyPreviewHuman = (
 ): string => {
   const lines: string[] = [];
   const total = plan.items.length;
-  lines.push(`Plan: copy ${from} -> ${to} (${total} items)`);
+  lines.push(c.bold(`Plan: copy ${from} -> ${to} (${total} items)`));
   const W_ACTION = 11;
   const W_NAME = 24;
   for (const item of plan.items.slice(0, 30)) {
-    const action = item.action.padEnd(W_ACTION);
+    const action = colorActionPadded(item.action, item.action.padEnd(W_ACTION));
     const name = truncate(item.skill.name, W_NAME - 2).padEnd(W_NAME);
     const reason = shortReason(item.action, item.reason);
     lines.push(`- ${action}${name}${reason}`);
   }
-  if (total > 30) lines.push(`... ${total - 30} more items. Use --json for full plan.`);
+  if (total > 30) lines.push(c.dim(`... ${total - 30} more items. Use --json for full plan.`));
   lines.push("");
-  lines.push(`Plan id: ${plan.id}`);
+  lines.push(`${c.cyan("Plan id:")} ${plan.id}`);
   if (plan.warnings.length > 0) {
     lines.push("");
-    lines.push(`Warnings: ${plan.warnings.length}`);
-    for (const warning of plan.warnings.slice(0, 5)) lines.push(`- ${warning}`);
+    lines.push(c.yellow(`Warnings: ${plan.warnings.length}`));
+    for (const warning of plan.warnings.slice(0, 5)) lines.push(`- ${c.yellow(warning)}`);
   }
   lines.push("");
   lines.push(
@@ -290,24 +327,24 @@ const formatDistributePreviewHuman = (
 ): string => {
   const lines: string[] = [];
   const total = plan.items.length;
-  lines.push(`Plan: distribute to ${targetAgents.join(", ")} (${total} items)`);
+  lines.push(c.bold(`Plan: distribute to ${targetAgents.join(", ")} (${total} items)`));
   const W_ACTION = 11;
   const W_NAME = 24;
   const W_TARGET = 10;
   for (const item of plan.items.slice(0, 30)) {
-    const action = item.action.padEnd(W_ACTION);
+    const action = colorActionPadded(item.action, item.action.padEnd(W_ACTION));
     const name = truncate(item.skill.name, W_NAME - 2).padEnd(W_NAME);
     const target = truncate(item.target.agent, W_TARGET - 1).padEnd(W_TARGET);
     const reason = shortReason(item.action, item.reason);
     lines.push(`- ${action}${name}-> ${target}${reason}`);
   }
-  if (total > 30) lines.push(`... ${total - 30} more items. Use --json for full plan.`);
+  if (total > 30) lines.push(c.dim(`... ${total - 30} more items. Use --json for full plan.`));
   lines.push("");
-  lines.push(`Plan id: ${plan.id}`);
+  lines.push(`${c.cyan("Plan id:")} ${plan.id}`);
   if (plan.warnings.length > 0) {
     lines.push("");
-    lines.push(`Warnings: ${plan.warnings.length}`);
-    for (const warning of plan.warnings.slice(0, 5)) lines.push(`- ${warning}`);
+    lines.push(c.yellow(`Warnings: ${plan.warnings.length}`));
+    for (const warning of plan.warnings.slice(0, 5)) lines.push(`- ${c.yellow(warning)}`);
   }
   lines.push("");
   lines.push(
@@ -321,7 +358,7 @@ const handleConfirmationFailure = async (promise: Promise<void>): Promise<boolea
     await promise;
     return true;
   } catch (error) {
-    process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
+    process.stderr.write(`${errorPrefix()} ${error instanceof Error ? error.message : String(error)}\n`);
     process.exitCode = 2;
     return false;
   }
@@ -355,11 +392,13 @@ program
     if (options.json) printJson({ summary: summarize(skills), skills });
     else {
       const summary = summarize(skills);
-      process.stdout.write(`Profile ${runtime.profileName}. Scanned ${summary.total} skills: ${summary.valid} valid, ${summary.portable} portable, ${summary.agentBound} agent-bound, ${summary.unsafe} unsafe, ${summary.invalid} invalid.\n`);
+      process.stdout.write(
+        `${c.cyan(`Profile ${runtime.profileName}.`)} Scanned ${c.bold(String(summary.total))} skills: ${c.green(`${summary.valid} valid`)}, ${c.green(`${summary.portable} portable`)}, ${c.yellow(`${summary.agentBound} agent-bound`)}, ${c.red(`${summary.unsafe} unsafe`)}, ${c.red(`${summary.invalid} invalid`)}.\n`
+      );
       for (const skill of skills.slice(0, 30)) {
-        process.stdout.write(`${skill.id}  ${skill.name}  ${skill.source.agent}/${skill.source.scope}  ${skill.status.join(",")}\n`);
+        process.stdout.write(`${skill.id}  ${skill.name}  ${skill.source.agent}/${skill.source.scope}  ${colorStatusList(skill.status, ",")}\n`);
       }
-      if (skills.length > 30) process.stdout.write(`... ${skills.length - 30} more. Use --json for full output.\n`);
+      if (skills.length > 30) process.stdout.write(c.dim(`... ${skills.length - 30} more. Use --json for full output.\n`));
     }
   });
 
@@ -383,19 +422,19 @@ registry
       }
     );
     if (repoStat.exists && !repoStat.isDir) {
-      process.stderr.write(`error: --repo path exists but is not a directory: ${repoPath}\n`);
+      process.stderr.write(`${errorPrefix()} --repo path exists but is not a directory: ${c.cyan(repoPath)}\n`);
       process.exitCode = 2;
       return;
     }
     if (!repoStat.exists && !options.create) {
       process.stderr.write(
-        `error: --repo path does not exist: ${repoPath}\n       Pass --create to initialize a new registry directory there.\n`
+        `${errorPrefix()} --repo path does not exist: ${c.cyan(repoPath)}\n       Pass --create to initialize a new registry directory there.\n`
       );
       process.exitCode = 2;
       return;
     }
     if (!repoStat.exists && options.create) {
-      process.stderr.write(`Created new registry directory at ${repoPath}\n`);
+      process.stderr.write(`Created new registry directory at ${c.cyan(repoPath)}\n`);
     }
     const skills = await scanSkills({ cwd: invocationCwd, config: runtime.raw, profileName: runtime.profileName, includeDefaultExcluded: options.all ?? false });
     await handleConfirmationFailure(
@@ -437,7 +476,7 @@ registry
     const manifest = await readRegistryManifest(repoPath);
     const skill = manifest.skills.find((entry) => entry.id === id);
     if (!skill) {
-      process.stderr.write(`Skill not found in registry: ${id}\n`);
+      process.stderr.write(`${errorPrefix()} skill not found in registry: ${id}\n`);
       process.exitCode = 2;
       return;
     }
@@ -561,7 +600,7 @@ distribute
     });
     if (options.plan && options.plan !== plan.id) {
       process.stderr.write(
-        `error: --plan id mismatch (expected: ${options.plan}, got: ${plan.id})\n` +
+        `${errorPrefix()} --plan id mismatch (expected: ${options.plan}, got: ${plan.id})\n` +
           `       The registry or target may have changed since 'distribute preview'. Re-run 'distribute preview' and pass the new plan id.\n`
       );
       process.exitCode = 2;
@@ -579,7 +618,7 @@ distribute
     );
     const run = await applyDistributionPlan(repoPath, plan);
     if (!options.plan) {
-      process.stdout.write(`Plan id: ${plan.id}\n`);
+      process.stdout.write(`${c.cyan("Plan id:")} ${plan.id}\n`);
     }
     printJson({ plan: compactPlan(plan), run });
   });
@@ -657,7 +696,7 @@ copy
     });
     if (options.plan && options.plan !== plan.id) {
       process.stderr.write(
-        `error: --plan id mismatch (expected: ${options.plan}, got: ${plan.id})\n` +
+        `${errorPrefix()} --plan id mismatch (expected: ${options.plan}, got: ${plan.id})\n` +
           `       The registry or target may have changed since 'copy preview'. Re-run 'copy preview' and pass the new plan id.\n`
       );
       process.exitCode = 2;
@@ -675,7 +714,7 @@ copy
     );
     const run = await applyDistributionPlan(repoPath, plan);
     if (!options.plan) {
-      process.stdout.write(`Plan id: ${plan.id}\n`);
+      process.stdout.write(`${c.cyan("Plan id:")} ${plan.id}\n`);
     }
     printJson({ from, to, plan: compactPlan(plan), run });
   });
@@ -724,25 +763,27 @@ const parseGitStatus = (raw: string): ParsedGitStatus => {
 const formatRepoStatusHuman = (repoPath: string, raw: string): string => {
   const parsed = parseGitStatus(raw);
   const lines: string[] = [];
-  lines.push(`Registry ${repoPath}`);
-  const branchText = parsed.branch ? (parsed.upstream ? `${parsed.branch} -> ${parsed.upstream}` : parsed.branch) : "(unknown)";
+  lines.push(`${c.bold("Registry")} ${c.cyan(repoPath)}`);
+  const branchText = parsed.branch
+    ? (parsed.upstream ? `${c.green(parsed.branch)} -> ${c.gray(parsed.upstream)}` : c.green(parsed.branch))
+    : c.gray("(unknown)");
   lines.push(`Branch:    ${branchText}`);
   if (parsed.clean) {
     lines.push("");
-    lines.push("Working tree clean.");
+    lines.push(c.green("Working tree clean."));
     return `${lines.join("\n")}\n`;
   }
   const summary: string[] = [];
-  if (parsed.modified.length > 0) summary.push(`${parsed.modified.length} modified`);
-  if (parsed.untracked.length > 0) summary.push(`${parsed.untracked.length} untracked`);
-  if (parsed.deleted.length > 0) summary.push(`${parsed.deleted.length} deleted`);
+  if (parsed.modified.length > 0) summary.push(c.yellow(`${parsed.modified.length} modified`));
+  if (parsed.untracked.length > 0) summary.push(c.cyan(`${parsed.untracked.length} untracked`));
+  if (parsed.deleted.length > 0) summary.push(c.red(`${parsed.deleted.length} deleted`));
   lines.push(`Changes:   ${summary.join(", ") || "(none)"}`);
   const renderGroup = (label: string, items: readonly string[], prefix: string): void => {
     if (items.length === 0) return;
     lines.push("");
-    lines.push(`${label}:`);
+    lines.push(c.bold(`${label}:`));
     for (const name of items.slice(0, 30)) lines.push(`  ${prefix} ${name}`);
-    if (items.length > 30) lines.push(`  ... ${items.length - 30} more`);
+    if (items.length > 30) lines.push(c.dim(`  ... ${items.length - 30} more`));
   };
   renderGroup("Modified", parsed.modified, "M ");
   renderGroup("Untracked", parsed.untracked, "??");
@@ -849,7 +890,7 @@ fix
     const manifest = await readRegistryManifest(repoPath);
     const skill = manifest.skills.find((entry) => entry.id === id);
     if (!skill) {
-      process.stderr.write(`Skill not found in registry: ${id}\n`);
+      process.stderr.write(`${errorPrefix()} skill not found in registry: ${id}\n`);
       process.exitCode = 2;
       return;
     }
@@ -920,16 +961,17 @@ const argv = process.argv[2] === "--" ? [process.argv[0]!, process.argv[1]!, ...
 
 const friendlyMessage = (error: unknown): string => {
   const raw = error instanceof Error ? error.message : String(error);
+  const e = errorPrefix();
   const profileMatch = raw.match(/Profile not found in linka-skillhub config:\s*(\S+)/);
-  if (profileMatch) return `error: profile '${profileMatch[1]}' not found in linka-skillhub.config.json`;
+  if (profileMatch) return `${e} profile '${profileMatch[1]}' not found in linka-skillhub.config.json`;
   if (raw.includes("ENOENT") && /spawn (?:git|.* git)\b/.test(raw)) {
-    return "error: git command failed; directory may not exist or is not a git repo";
+    return `${e} git command failed; directory may not exist or is not a git repo`;
   }
   const enoentPath = raw.match(/ENOENT[^']*'([^']+)'/) ?? raw.match(/ENOENT[^"]*"([^"]+)"/);
-  if (enoentPath) return `error: path not found: ${enoentPath[1]}`;
-  if (raw.includes("ENOENT")) return "error: path not found";
+  if (enoentPath) return `${e} path not found: ${enoentPath[1]}`;
+  if (raw.includes("ENOENT")) return `${e} path not found`;
   const firstLine = raw.split("\n", 1)[0]?.trim() ?? raw;
-  return `error: ${firstLine}`;
+  return `${e} ${firstLine}`;
 };
 
 try {
