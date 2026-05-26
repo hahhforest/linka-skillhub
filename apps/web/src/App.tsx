@@ -138,7 +138,7 @@ function Sidebar({ view, setView, lang }: {
   );
 }
 
-function Overview({ skills, focusedSkillId, focusSkill, lang, totalSkillCount, allSkills, query, onClearQuery, agents, overviewAgentFilter, setOverviewAgentFilter, onOpenAddSource }: {
+function Overview({ skills, focusedSkillId, focusSkill, lang, totalSkillCount, allSkills, query, agents, overviewAgentFilter, setOverviewAgentFilter, onOpenAddSource }: {
   readonly skills: SkillPackage[];
   readonly focusedSkillId: string | null;
   readonly focusSkill: (id: string) => void;
@@ -146,7 +146,6 @@ function Overview({ skills, focusedSkillId, focusSkill, lang, totalSkillCount, a
   readonly totalSkillCount: number;
   readonly allSkills: SkillPackage[];
   readonly query: string;
-  readonly onClearQuery: () => void;
   readonly agents: AgentDefinition[];
   readonly overviewAgentFilter: string;
   readonly setOverviewAgentFilter: (value: string) => void;
@@ -186,31 +185,14 @@ function Overview({ skills, focusedSkillId, focusSkill, lang, totalSkillCount, a
   const cardsSkills = (!tableEmpty || selectedSourceKey) ? displayedSkills : agentOnlySkills;
   const cardsSummary = (!tableEmpty || selectedSourceKey) ? summary : agentOnlySummary;
   const isAgentFiltered = overviewAgentFilter !== "all";
-  const isSourceFiltered = selectedSourceKey !== null;
-  const isFiltered = query.trim().length > 0 || isAgentFiltered || isSourceFiltered;
-  const clearAllFilters = () => { onClearQuery(); setOverviewAgentFilter("all"); setSelectedSourceKey(null); };
   const sourceLabel = isAgentFiltered ? (agentTone[overviewAgentFilter]?.label ?? overviewAgentFilter) : t.allSources;
-  const selectedSourceLabel = (() => {
-    if (!selectedSourceKey) return "";
-    const [agent, scope] = selectedSourceKey.split("::") as [string, SkillScope];
-    const label = agentTone[agent]?.label ?? agent;
-    return `${label} · ${scopeLabel(scope, lang)}`;
-  })();
-  const filteredBannerText = (() => {
-    const head = t.filteredHint
-      .replace("{visible}", String(displayedSkills.length))
-      .replace("{total}", String(totalSkillCount));
-    const querySuffix = query.trim() ? t.filteredQuerySuffix.replace("{query}", query.trim()) : "";
-    const agentSuffix = isAgentFiltered ? t.filteredAgentSuffix.replace("{agent}", sourceLabel) : "";
-    const sourceSuffix = isSourceFiltered ? t.filteredSourceSuffix.replace("{source}", selectedSourceLabel) : "";
-    return `${head}${querySuffix}${agentSuffix}${sourceSuffix}`;
-  })();
-  const filteredBanner = isFiltered && totalSkillCount > 0 ? (
-    <div className="filtered-banner span-all">
-      <span>{filteredBannerText}</span>
-      <button className="ghost" type="button" onClick={clearAllFilters}>{t.clearFilters}</button>
-    </div>
-  ) : null;
+  // R35-C8: the "已筛选 X / Y · 来源 X · 分布 Y · 清除筛选" banner was deleted.
+  // Every piece of info it surfaced is already visible on the page after R35-C5
+  // + R35-C7: the selected source-bar carries `.selected` styling, the donut
+  // card grows a path strip naming the (agent, scope) bucket, the stat cards
+  // numbers already reflect the narrow, and the agent dropdown shows its own
+  // value. "Clear" works by clicking the same bar again or resetting the
+  // dropdown. One info channel is enough.
   // R35-C3: replace single-agent counts with (agent, scope) buckets so the
   // user can see "Mavis/builtin 19", "Mavis/user 7", "codex/system 5", etc.
   // Seeded from each agent's declared sourceDirs (zero rows for empty scopes
@@ -274,7 +256,6 @@ function Overview({ skills, focusedSkillId, focusSkill, lang, totalSkillCount, a
     return (
       <section className="panel-grid overview-grid">
         <div className="section-head span-all"><div><h2>{t.overview}</h2><p>{t.currentScope}: {sourceLabel}</p></div><button className="ghost overview-add-source" type="button" onClick={onOpenAddSource}><FolderPlus size={16} /> {t.addSourceButton}</button></div>
-        {filteredBanner}
         <section className="work-card empty-state span-all"><Info size={24} /><h2>{t.noMatchTitle}</h2><p>{t.noMatchBody}</p></section>
       </section>
     );
@@ -283,7 +264,6 @@ function Overview({ skills, focusedSkillId, focusSkill, lang, totalSkillCount, a
   return (
     <section className="panel-grid overview-grid">
       <div className="section-head span-all"><div><h2>{t.overview}</h2><p>{t.currentScope}: {sourceLabel}</p></div><button className="ghost overview-add-source" type="button" onClick={onOpenAddSource}><FolderPlus size={16} /> {t.addSourceButton}</button></div>
-      {filteredBanner}
       <StatCard tone="neutral" title={t.totalSkills} value={cardsSummary.total} sub={`${cardsSummary.valid} ${t.valid}`} icon={<PackageCheck size={18} />} />
       <StatCard tone="success" title={t.shareable} value={cardsSummary.portable} sub={t.defaultDistributionScope} icon={<Check size={18} />} />
       <StatCard tone="warning" title={t.agentBound} value={cardsSummary.agentBound} sub={t.needsConfirmation} icon={<AlertTriangle size={18} />} />
@@ -472,11 +452,6 @@ export function App() {
   // Single-focus toggle: clicking the row that is already focused clears it
   // (so the detail panel returns to the empty state), otherwise replace.
   const focusSkill = (id: string) => setFocusedSkillId(id === focusedSkillId ? null : id);
-  // The global clear only owns the search query. The Overview's agent
-  // dropdown is local state — Overview combines this clear with its own
-  // setter when the filtered banner's clear button fires.
-  const clearQuery = () => { setQuery(""); };
-
   const runScan = async () => { setBusy(true); try { const scan = await api.scan(includeBuiltin); setSkills(scan.skills); setMessage(`${t.scan}: ${scan.summary.total}`); setDialog(null); } catch (error) { setMessage(humanizeError(error, lang)); } finally { setBusy(false); } };
   const importRepo = async () => { setBusy(true); try { const result = await api.import(); setMessage(`${t.imported} ${result.imported} skills → ${result.repoPath}`); await loadShell(); } catch (error) { setMessage(humanizeError(error, lang)); } finally { setBusy(false); } };
   const runReview = async () => {
@@ -567,7 +542,7 @@ export function App() {
       <div className="workspace">
         <Sidebar view={view} setView={setView} lang={lang} />
         <div className="content">
-          {view === "overview" && <Overview skills={visibleSkills} focusedSkillId={focusedSkillId} focusSkill={focusSkill} lang={lang} totalSkillCount={skills.length} allSkills={skills} query={query} onClearQuery={clearQuery} agents={agents} overviewAgentFilter={overviewAgentFilter} setOverviewAgentFilter={setOverviewAgentFilter} onOpenAddSource={() => setDialog("addSource")} />}
+          {view === "overview" && <Overview skills={visibleSkills} focusedSkillId={focusedSkillId} focusSkill={focusSkill} lang={lang} totalSkillCount={skills.length} allSkills={skills} query={query} agents={agents} overviewAgentFilter={overviewAgentFilter} setOverviewAgentFilter={setOverviewAgentFilter} onOpenAddSource={() => setDialog("addSource")} />}
           {view === "repo" && (
             <RepoBrowser
               skills={visibleSkills}
