@@ -1,6 +1,6 @@
 import type { SkillPackage, SkillScope, SkillStatus } from "@linka-skillhub/core";
 import { messages, type Language } from "../i18n.js";
-import { OfficialLogo } from "./agentLogos.js";
+import { OfficialLogo, OfficialLogoImage } from "./agentLogos.js";
 
 // Stable display metadata per agent (label only — color/SVG live elsewhere).
 // SkillTable rows, DetailPanel header, Sidebar legend, Intersect select labels
@@ -65,6 +65,16 @@ export const agentColor = (label: string): { background: string; foreground: str
 export function AgentLogo({ agent }: { readonly agent: string }): JSX.Element {
   const tone = agentTone[agent];
   const label = tone?.label ?? agent;
+  // Resolution order: image asset (e.g. mavis's app icon PNG) first, then
+  // any inline SVG mark, then deterministic random-color avatar.
+  const imageUrl = OfficialLogoImage[agent];
+  if (imageUrl) {
+    return (
+      <span className="agent-logo agent-official agent-image" title={label} aria-label={label}>
+        <img src={imageUrl} alt="" />
+      </span>
+    );
+  }
   const OfficialMark = OfficialLogo[agent];
   if (OfficialMark) {
     return (

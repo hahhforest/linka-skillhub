@@ -661,6 +661,21 @@ textarea:focus-visible {
   color: #fff;
   text-transform: uppercase;
 }
+/* Image-backed official logo (e.g. mavis renders the user's own desktop-app
+   icon PNG). Outer chip has no tint; the img fills the chip while staying
+   inside the rounded corners. */
+.agent-logo.agent-image {
+  background: transparent;
+  box-shadow: none;
+  padding: 0;
+  overflow: hidden;
+}
+.agent-logo.agent-image img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
 
 .intersect-layout {
   display: grid;
