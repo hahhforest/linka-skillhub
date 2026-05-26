@@ -1,22 +1,93 @@
 import type { SkillPackage, SkillStatus } from "@linka-skillhub/core";
 import { messages, type Language } from "../i18n.js";
+import { OfficialLogo } from "./agentLogos.js";
 
-// Stable visual identity per agent (mark + tint class) used everywhere a skill
-// or agent gets surfaced — SkillTable rows, DetailPanel header, Sidebar legend,
-// Intersect select labels. Centralising it here avoids per-component drift if
-// we ever rebrand an agent or add a new one. Unknown agents fall back to a
-// neutral chip via the `agent-generic` className.
-export const agentTone: Record<string, { label: string; mark: string; className: string }> = {
-  mavis: { label: "Mavis", mark: "M", className: "agent-mavis" },
-  opencode: { label: "OpenCode", mark: "O", className: "agent-opencode" },
-  claude: { label: "Claude Code", mark: "C", className: "agent-claude" },
-  codex: { label: "Codex", mark: "X", className: "agent-codex" },
-  shared: { label: ".agents/skills", mark: "S", className: "agent-shared" }
+// Stable display metadata per agent (label only — color/SVG live elsewhere).
+// SkillTable rows, DetailPanel header, Sidebar legend, Intersect select labels
+// and the Distribute target grid all read `label` from here. Unknown agents
+// fall back to the raw `agent` string so user-added directories (R35-C4) and
+// future agents added via config still surface a readable name.
+//
+// R35-C2: the per-agent `mark` / `className` fields are gone; rendering now
+// goes through OfficialLogo (inline SVG) or agentColor (random-color avatar).
+export const agentTone: Record<string, { label: string }> = {
+  mavis: { label: "Mavis" },
+  opencode: { label: "OpenCode" },
+  claude: { label: "Claude Code" },
+  codex: { label: "Codex" },
+  shared: { label: ".agents/skills" }
+};
+
+// Fixed palette of high-contrast tints for the random-color fallback. Picked
+// to be visually distinguishable from each other AND from the four official
+// brand colors (Anthropic orange, OpenAI near-black, SST cyan, Mavis blue)
+// so a user-added agent never accidentally mimics an official one. White text
+// stays legible on every background here (all are sat ≥45% / lum ≤55%).
+const FALLBACK_PALETTE: readonly { background: string; foreground: string }[] = [
+  { background: "#7c3aed", foreground: "#ffffff" }, // violet
+  { background: "#db2777", foreground: "#ffffff" }, // pink
+  { background: "#059669", foreground: "#ffffff" }, // emerald
+  { background: "#dc2626", foreground: "#ffffff" }, // red
+  { background: "#ca8a04", foreground: "#ffffff" }, // amber
+  { background: "#0891b2", foreground: "#ffffff" }, // teal-cyan (distinct from SST)
+  { background: "#65a30d", foreground: "#ffffff" }, // lime
+  { background: "#9333ea", foreground: "#ffffff" }, // purple
+  { background: "#475569", foreground: "#ffffff" }, // slate
+  { background: "#b91c1c", foreground: "#ffffff" }  // brick
+];
+
+// DJB2 hash — small, fast, deterministic. We only need a uniform-ish
+// distribution across 10 buckets, not a cryptographic property. The unsigned
+// >>> 0 normalises so negative ints don't reverse the modulo result. Pure
+// function (no clock, no Math.random) so the same label always picks the
+// same palette entry across reloads — that's what the unit test pins.
+const djb2 = (input: string): number => {
+  let hash = 5381;
+  for (let index = 0; index < input.length; index += 1) {
+    hash = (hash * 33) ^ input.charCodeAt(index);
+  }
+  return hash >>> 0;
+};
+
+// agentColor: pure helper for the random-color fallback. Same input always
+// returns the same { background, foreground }. Exported so the colocated
+// vitest can assert determinism and the official-vs-fallback split without
+// having to render React.
+export const agentColor = (label: string): { background: string; foreground: string } => {
+  const key = label.length > 0 ? label : "?";
+  const index = djb2(key) % FALLBACK_PALETTE.length;
+  // noUncheckedIndexedAccess guards us — FALLBACK_PALETTE is non-empty so
+  // this lookup is always defined, but TS still wants the fallback.
+  return FALLBACK_PALETTE[index] ?? FALLBACK_PALETTE[0]!;
 };
 
 export function AgentLogo({ agent }: { readonly agent: string }): JSX.Element {
-  const tone = agentTone[agent] ?? { label: agent, mark: agent.slice(0, 1).toUpperCase(), className: "agent-generic" };
-  return <span className={`agent-logo ${tone.className}`} title={tone.label}>{tone.mark}</span>;
+  const tone = agentTone[agent];
+  const label = tone?.label ?? agent;
+  const OfficialMark = OfficialLogo[agent];
+  if (OfficialMark) {
+    return (
+      <span className="agent-logo agent-official" title={label} aria-label={label}>
+        <OfficialMark />
+      </span>
+    );
+  }
+  // Fallback: user-added or unknown agent. Deterministic color tint + first
+  // letter (uppercased) on top. Inline style keeps the random color out of
+  // the static CSS file — there's no need for a per-agent rule because the
+  // tone is computed from the label string itself.
+  const { background, foreground } = agentColor(label);
+  const initial = (label || agent || "?").slice(0, 1).toUpperCase();
+  return (
+    <span
+      className="agent-logo agent-custom"
+      title={label}
+      aria-label={label}
+      style={{ background, color: foreground }}
+    >
+      {initial}
+    </span>
+  );
 }
 
 // statusClass / bucketLabel are kept in lockstep so the row pill colour and the

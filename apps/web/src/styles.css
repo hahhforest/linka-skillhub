@@ -580,24 +580,45 @@ textarea:focus-visible {
 .status-danger { color: #b91c1c; background: #fee2e2; }
 .status-muted { color: var(--text-2); background: #e2e8f0; }
 
+/* R35-C2: agent identity is now rendered two ways. Official agents (claude,
+   codex, opencode, mavis) draw an inline SVG mark via OfficialLogo; unknown
+   agents (user-added directories, future agents added via config) draw a
+   first-letter initial on top of a deterministic random tint computed from
+   the label hash. Both variants share the outer wrapper sizing here so the
+   row alignment with skill names stays identical no matter which renders. */
 .agent-logo {
-  width: 20px;
-  height: 20px;
+  width: 22px;
+  height: 22px;
   flex: 0 0 auto;
-  display: inline-grid;
-  place-items: center;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   border-radius: var(--r-sm);
-  color: #fff;
   font-size: 11px;
   font-weight: 800;
   letter-spacing: 0;
+  line-height: 1;
 }
-.agent-mavis { background: var(--primary); }
-.agent-opencode { background: var(--accent); }
-.agent-claude { background: #f97316; }
-.agent-codex { background: #111827; }
-.agent-shared { background: #64748b; }
-.agent-generic { background: #64748b; }
+.agent-logo svg {
+  width: 16px;
+  height: 16px;
+  display: block;
+}
+/* Official agents render their own colored SVG mark, so the outer chip stays
+   transparent — no background tint is required. A thin neutral ring keeps the
+   chip visible against the surface even when the SVG strokes are thin. */
+.agent-logo.agent-official {
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: inset 0 0 0 1px var(--border);
+}
+/* Random-color fallback — the background and foreground come from the inline
+   style set by AgentLogo; this rule only fixes the typography for the initial
+   letter so the look stays consistent across user-added agents. */
+.agent-logo.agent-custom {
+  color: #fff;
+  text-transform: uppercase;
+}
 
 .intersect-layout {
   display: grid;
