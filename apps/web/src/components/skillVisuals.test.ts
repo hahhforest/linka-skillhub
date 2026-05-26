@@ -2,11 +2,9 @@ import { describe, expect, it } from "vitest";
 import { agentColor } from "./skillVisuals.js";
 import { OFFICIAL_AGENT_KINDS, OfficialLogo, OfficialLogoImage } from "./agentLogos.js";
 
-// AgentLogo renders project-owned official agents via OfficialLogoImage (PNG
-// assets — e.g. the user's own desktop app icon) or OfficialLogo (inline SVG
-// marks the project itself owns). Anything else flows into the deterministic
-// color avatar in agentColor. These tests pin that split without rendering
-// React — agentColor is pure and the two registries are plain maps.
+// AgentLogo resolution order: OfficialLogoImage (PNG asset) → OfficialLogo
+// (inline SVG) → deterministic-color avatar via agentColor. These tests pin
+// each tier without rendering React.
 
 describe("agentColor", () => {
   it("returns the same color for the same input across calls", () => {
@@ -25,10 +23,6 @@ describe("agentColor", () => {
   });
 
   it("returns different colors for two distinct non-official agent labels", () => {
-    // The palette has 10 entries, so two arbitrary distinct labels will MOST
-    // of the time map to different buckets. The pair below was checked by
-    // hand against the DJB2 modulo to land in different buckets — if anyone
-    // changes the palette size or hash, this assertion is the early warning.
     const left = agentColor("alpha-agent");
     const right = agentColor("zeta-agent");
     expect(left.background).not.toBe(right.background);
@@ -36,26 +30,22 @@ describe("agentColor", () => {
 });
 
 describe("official logo registries", () => {
-  it("mavis is an image-backed official agent (user's own app icon)", () => {
-    expect(OfficialLogoImage["mavis"], "OfficialLogoImage should expose 'mavis'").toBeTypeOf("string");
-    expect(OfficialLogoImage["mavis"]?.length ?? 0, "mavis image URL should be non-empty").toBeGreaterThan(0);
-    expect(OFFICIAL_AGENT_KINDS).toContain("mavis");
+  it("every supported agent ships an image asset", () => {
+    const expected = ["claude", "codex", "cursor", "mavis", "openclaw", "opencode"];
+    for (const kind of expected) {
+      expect(OfficialLogoImage[kind], `OfficialLogoImage should expose '${kind}'`).toBeTypeOf("string");
+      expect(OfficialLogoImage[kind]?.length ?? 0, `${kind} image URL should be non-empty`).toBeGreaterThan(0);
+      expect(OFFICIAL_AGENT_KINDS).toContain(kind);
+    }
   });
 
-  it("OfficialLogo SVG map is empty — third-party brand marks are NOT shipped inline", () => {
-    // Project-owned inline SVGs only. Substituted brand glyphs for Claude /
-    // Codex / OpenCode / Cursor go through the random-color avatar instead.
+  it("OfficialLogo SVG map is empty — the project does not ship hand-drawn marks", () => {
     expect(Object.keys(OfficialLogo)).toEqual([]);
   });
 
-  it("does not register a fallback for unknown or third-party agents", () => {
-    expect(OfficialLogo["shared"]).toBeUndefined();
-    expect(OfficialLogo["claude"]).toBeUndefined();
-    expect(OfficialLogo["codex"]).toBeUndefined();
-    expect(OfficialLogo["opencode"]).toBeUndefined();
-    expect(OfficialLogo["cursor"]).toBeUndefined();
-    expect(OfficialLogo["some-user-added-agent"]).toBeUndefined();
-    expect(OfficialLogoImage["claude"]).toBeUndefined();
+  it("does not register a fallback for unknown agents", () => {
+    expect(OfficialLogoImage["shared"]).toBeUndefined();
     expect(OfficialLogoImage["some-user-added-agent"]).toBeUndefined();
+    expect(OfficialLogo["some-user-added-agent"]).toBeUndefined();
   });
 });
