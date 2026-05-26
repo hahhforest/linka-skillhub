@@ -504,7 +504,8 @@ export function App() {
         <div className="content">
           {view === "overview" && <Overview skills={visibleSkills} summary={summary} selected={selected} toggleSkill={toggleSkill} lang={lang} selectedAgent={selectedAgent} totalSkillCount={skills.length} fallbackSkills={agentFilteredSkills} fallbackSummary={fallbackSummary} allSkills={skills} query={query} onClearFilters={clearFilters} agents={agents} />}
           {view === "repo" && <RepoView onImport={importRepo} onReview={() => void openReviewDialog("rules")} onAgentReview={() => void openReviewDialog("codex")} onRefreshGit={refreshGit} onPull={pullRegistry} onPush={pushRegistry} gitStatus={gitStatusText} commitMessage={commitMessage} setCommitMessage={setCommitMessage} busy={busy} message={message} lang={lang} registryRepo={registryRepo} onRegistryLoaded={(result) => { setRegistryRepo(result.repoPath); if (result.skills) setSkills(result.skills); setMessage(`${messages[lang].loadRegistrySuccess}: ${result.repoPath} (${result.skillCount ?? result.skills?.length ?? 0})`); }} />}
-          {view !== "overview" && view !== "repo" && <Placeholder view={view} lang={lang} skills={visibleSkills} targets={targets} selected={selected} toggleSkill={toggleSkill} plan={plan} onPlan={planDistribution} onApply={applyDistribution} />}
+          {view === "intersect" && <Intersect skills={visibleSkills} targets={targets} selected={selected} toggleSkill={toggleSkill} lang={lang} plan={plan} onPlan={planDistribution} onApply={applyDistribution} agents={agents} />}
+          {view === "distribute" && <Distribute targets={targets} selected={selected} onPlan={planDistribution} onApply={applyDistribution} plan={plan} busy={busy} lang={lang} />}
           <footer className="status-footer"><span>{agents.length} agents</span><span>{selected.size} {t.selectedCount}</span><span className="status-message" title={message}>{message}</span></footer>
         </div>
       </div>
@@ -524,16 +525,11 @@ export function App() {
   );
 }
 
-function Placeholder(props: { readonly view: View; readonly lang: Language; readonly skills: SkillPackage[]; readonly targets: DistributionTarget[]; readonly selected: Set<string>; readonly toggleSkill: (id: string) => void; readonly plan?: DistributionPlan; readonly onPlan: (agents: string[], skillIds?: string[]) => void; readonly onApply: (agents: string[], skillIds?: string[]) => void }) {
-  if (props.view === "distribute") return <Distribute targets={props.targets} selected={props.selected} onPlan={props.onPlan} onApply={props.onApply} plan={props.plan} busy={false} lang={props.lang} />;
-  return <Intersect skills={props.skills} targets={props.targets} selected={props.selected} toggleSkill={props.toggleSkill} lang={props.lang} plan={props.plan} onPlan={props.onPlan} onApply={props.onApply} />;
-}
-
-function Intersect({ skills, targets, selected, toggleSkill, lang, plan, onPlan, onApply }: { readonly skills: SkillPackage[]; readonly targets: DistributionTarget[]; readonly selected: Set<string>; readonly toggleSkill: (id: string) => void; readonly lang: Language; readonly plan?: DistributionPlan; readonly onPlan: (agents: string[], skillIds?: string[]) => void; readonly onApply: (agents: string[], skillIds?: string[]) => void }) {
+function Intersect({ skills, targets, selected, toggleSkill, lang, plan, onPlan, onApply, agents: agentDefs }: { readonly skills: SkillPackage[]; readonly targets: DistributionTarget[]; readonly selected: Set<string>; readonly toggleSkill: (id: string) => void; readonly lang: Language; readonly plan?: DistributionPlan; readonly onPlan: (agents: string[], skillIds?: string[]) => void; readonly onApply: (agents: string[], skillIds?: string[]) => void; readonly agents: AgentDefinition[] }) {
   const t = messages[lang];
   const [from, setFrom] = useState("mavis");
   const [to, setTo] = useState("claude");
-  const agents = Object.keys(agentTone);
+  const agents = agentDefs.map((agent) => agent.kind);
   const handleFromChange = (newFrom: string) => {
     setFrom(newFrom);
     if (newFrom === to) {

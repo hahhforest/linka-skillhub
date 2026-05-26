@@ -36,7 +36,7 @@ export function ConfirmPlanModal({ plan, confirmToken, lang, busy, onConfirm, on
       onClick={(event) => { if (event.target === event.currentTarget) onCancel(); }}
     >
       <div ref={dialogRef} tabIndex={-1} className="dialog confirm-plan-dialog" onClick={(event) => event.stopPropagation()}>
-        <button className="dialog-close" onClick={onCancel} aria-label={t.confirmCancel}><X size={16} /></button>
+        <button className="dialog-close" onClick={onCancel} aria-label={t.cancel}><X size={16} /></button>
         <h2 id="confirm-plan-title">{t.confirmTitle}</h2>
         <p className="muted-copy">{t.confirmBody}</p>
         <div className="confirm-plan-meta">
@@ -58,7 +58,7 @@ export function ConfirmPlanModal({ plan, confirmToken, lang, busy, onConfirm, on
         </div>
         <p className="confirm-token-line">{t.confirmTokenLabel}: <code>{confirmToken}</code></p>
         <div className="dialog-actions">
-          <button className="ghost" onClick={onCancel} disabled={busy}>{t.confirmCancel}</button>
+          <button className="ghost" onClick={onCancel} disabled={busy}>{t.cancel}</button>
           <button className="primary" onClick={onConfirm} disabled={busy}><Check size={16} /> {t.confirmApply}</button>
         </div>
       </div>
