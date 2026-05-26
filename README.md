@@ -4,6 +4,8 @@
 
 主命令 `lsh`（兼容别名 `linka-skillhub`）。如果本机已有同名 `lsh`（如 openssh-lpk/lsh-utils），用 `pnpm lsh` 或 `npx lsh` 替代。
 
+`pnpm lsh ...` 直接跑已构建的 `packages/cli/dist/index.js`，单次 invoke 约 100ms，不会重新 build。**首次 clone 仓库或刚清掉 dist 时，请先 `pnpm build`。** 如果需要源代码热运行（自动 build core + tsx 跑 TS），用开发模式 `pnpm lsh:dev ...`，但每次会多花 1-2 秒 build。
+
 ## 当前能力
 
 - 扫描本机四类 agent 的 skill 目录，并识别 user/private/builtin/system/project 来源。

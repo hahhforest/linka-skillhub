@@ -18,7 +18,8 @@
     "mirror:local": "node scripts/mirror-local-skills.mjs",
     "smoke:ui": "node scripts/ui-smoke.mjs",
     "scan": "pnpm --filter @linka-skillhub/cli start -- scan",
-    "lsh": "pnpm --filter @linka-skillhub/cli start --",
+    "lsh": "node packages/cli/dist/index.js",
+    "lsh:dev": "pnpm --filter @linka-skillhub/cli start --",
     "review:smoke": "node scripts/reviewer-smoke.mjs --yes",
     "check:invalid": "node scripts/check-invalid.mjs",
     "format": "prettier --check ."
