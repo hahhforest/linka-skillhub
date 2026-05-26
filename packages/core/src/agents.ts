@@ -59,6 +59,16 @@ export const DEFAULT_AGENTS: Record<AgentKind, AgentDefinition> = {
       { path: "~/.codex/skills/.system", scope: "system", defaultSelected: false, note: "Codex system skills are managed by Codex and excluded by default." }
     ]
   },
+  cursor: {
+    kind: "cursor",
+    label: "Cursor",
+    command: "cursor",
+    color: "#6366f1",
+    defaultTargetDir: "~/.cursor/skills-cursor",
+    sourceDirs: [
+      { path: "~/.cursor/skills-cursor", scope: "user", defaultSelected: true }
+    ]
+  },
   shared: {
     kind: "shared",
     label: ".agents/skills",

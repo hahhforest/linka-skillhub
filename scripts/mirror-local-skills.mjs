@@ -17,7 +17,8 @@ const sources = [
   { label: "shared agents", source: "~/.agents/skills", dest: "sources/shared-agents/skills", mode: "direct" },
   { label: "mavis user", source: "~/.mavis/skills", dest: "sources/mavis/skills", mode: "direct" },
   { label: "mavis builtin", source: "~/.mavis/.builtin-skills", dest: "sources/mavis/builtin", mode: "direct" },
-  { label: "mavis agent-private", source: "~/.mavis/agents", dest: "sources/mavis/agent-private", mode: "nested-skills" }
+  { label: "mavis agent-private", source: "~/.mavis/agents", dest: "sources/mavis/agent-private", mode: "nested-skills" },
+  { label: "cursor user", source: "~/.cursor/skills-cursor", dest: "sources/cursor/skills", mode: "direct" }
 ];
 
 const targets = [
@@ -25,7 +26,8 @@ const targets = [
   { label: "claude target", source: "~/.claude/skills", dest: "targets/claude/skills", mode: "direct" },
   { label: "opencode target", source: "~/.config/opencode/skills", dest: "targets/opencode/skills", mode: "direct" },
   { label: "mavis target", source: "~/.mavis/skills", dest: "targets/mavis/skills", mode: "direct" },
-  { label: "shared-agents target", source: "~/.agents/skills", dest: "targets/shared-agents/skills", mode: "direct" }
+  { label: "shared-agents target", source: "~/.agents/skills", dest: "targets/shared-agents/skills", mode: "direct" },
+  { label: "cursor target", source: "~/.cursor/skills-cursor", dest: "targets/cursor/skills", mode: "direct" }
 ];
 
 const exists = async (target) => {

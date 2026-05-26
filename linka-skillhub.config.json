@@ -152,6 +152,16 @@
               "defaultSelected": false
             }
           ]
+        },
+        "cursor": {
+          "targetDir": "~/.cursor/skills-cursor",
+          "sourceDirs": [
+            {
+              "path": "~/.cursor/skills-cursor",
+              "scope": "user",
+              "defaultSelected": true
+            }
+          ]
         }
       }
     },
@@ -225,6 +235,16 @@
           "sourceDirs": [
             {
               "path": "./.sandbox/local-mirror/sources/shared-agents/skills",
+              "scope": "user",
+              "defaultSelected": true
+            }
+          ]
+        },
+        "cursor": {
+          "targetDir": "./.sandbox/local-mirror/targets/cursor/skills",
+          "sourceDirs": [
+            {
+              "path": "./.sandbox/local-mirror/sources/cursor/skills",
               "scope": "user",
               "defaultSelected": true
             }

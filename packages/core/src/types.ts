@@ -1,4 +1,4 @@
-export type AgentKind = "mavis" | "opencode" | "claude" | "codex" | "shared";
+export type AgentKind = "mavis" | "opencode" | "claude" | "codex" | "cursor" | "shared";
 
 export type SkillScope = "user" | "private" | "builtin" | "system" | "project" | "unknown";
 

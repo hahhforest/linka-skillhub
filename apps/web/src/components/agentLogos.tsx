@@ -72,6 +72,24 @@ function PaeczMark(): JSX.Element {
   );
 }
 
+// Cursor (the editor) — stylized arrow / pointer mark. Cursor's own brand
+// leans into a literal mouse-pointer silhouette; here we draw a single
+// triangular pointer (the upper-left arrow) plus a small "click" dot to
+// reinforce the click-cursor metaphor without copying their exact glyph.
+// Indigo (#6366f1) is a close visual match for Cursor's dark blue-purple
+// brand tint and is distinct from the four existing official agent colors
+// (Anthropic orange, OpenAI near-black, SST cyan, Mavis blue) — see the
+// FALLBACK_PALETTE comment in skillVisuals.tsx for the same "stay distinct"
+// rule applied to the random-color avatar buckets.
+function CursorMark(): JSX.Element {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="#6366f1" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M5 4l10 6.5-4.5 1.2 2.6 6-2 .8-2.6-6L5 16z" />
+      <circle cx="18" cy="18" r="1.2" fill="#6366f1" stroke="none" />
+    </svg>
+  );
+}
+
 // Registry of officially supported agents. AgentLogo checks for membership
 // here before falling back to the random-color avatar. The key is the agent
 // `kind` (matches @linka-skillhub/core's AgentKind).
@@ -79,7 +97,8 @@ export const OfficialLogo: Record<string, () => JSX.Element> = {
   claude: ClaudeMark,
   codex: CodexMark,
   opencode: OpenCodeMark,
-  mavis: PaeczMark
+  mavis: PaeczMark,
+  cursor: CursorMark
 };
 
 // Set of agent kinds with an official logo. Exported separately so tests

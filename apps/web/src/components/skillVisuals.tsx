@@ -15,6 +15,7 @@ export const agentTone: Record<string, { label: string }> = {
   opencode: { label: "OpenCode" },
   claude: { label: "Claude Code" },
   codex: { label: "Codex" },
+  cursor: { label: "Cursor" },
   shared: { label: ".agents/skills" }
 };
 
