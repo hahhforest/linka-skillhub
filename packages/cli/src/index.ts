@@ -94,6 +94,40 @@ const parseAgentsStrict = (input: string, fieldLabel: string): AgentKind[] | und
   return result;
 };
 
+const parseSkillIds = (input: string | undefined): string[] | undefined => {
+  if (!input) return undefined;
+  const ids = input.split(",").map((s) => s.trim()).filter(Boolean);
+  return ids.length === 0 ? undefined : ids;
+};
+
+// Filter user-supplied --skill ids against the active registry manifest.
+// Returns:
+//   - undefined when no ids were requested ("all" — preserve default behavior)
+//   - string[] of known ids (warns to stderr for any unknown ids in the request)
+//   - null when every requested id is unknown (sets exitCode=2; caller must abort)
+const filterKnownSkillIds = (
+  requested: string[] | undefined,
+  manifest: { readonly skills: readonly { readonly id: string }[] }
+): string[] | null | undefined => {
+  if (!requested || requested.length === 0) return undefined;
+  const validIds = new Set(manifest.skills.map((skill) => skill.id));
+  const known: string[] = [];
+  const unknown: string[] = [];
+  for (const id of requested) {
+    if (validIds.has(id)) known.push(id);
+    else unknown.push(id);
+  }
+  for (const id of unknown) {
+    process.stderr.write(`warning: unknown skill id: ${id}\n`);
+  }
+  if (known.length === 0) {
+    process.stderr.write(`error: no valid skill ids resolved\n`);
+    process.exitCode = 2;
+    return null;
+  }
+  return known;
+};
+
 const summarize = (skills: Awaited<ReturnType<typeof scanSkills>>): Record<string, number> => ({
   total: skills.length,
   valid: skills.filter((skill) => skill.status.includes("valid")).length,
@@ -430,7 +464,10 @@ program
     const runtime = await loadRuntimeConfig();
     const repoPath = resolveRepoOption(options.repo, runtime.profile.registryRepo);
     const manifest = await readRegistryManifest(repoPath);
-    const selected = options.skill ? new Set(options.skill.split(",").map((item) => item.trim())) : undefined;
+    const requestedIds = parseSkillIds(options.skill);
+    const filteredIds = filterKnownSkillIds(requestedIds, manifest);
+    if (filteredIds === null) return;
+    const selected = filteredIds ? new Set(filteredIds) : undefined;
     const reviews = [];
     for (const skill of manifest.skills) {
       if (selected && !selected.has(skill.id)) continue;
@@ -462,6 +499,14 @@ distribute
     if (!targetAgents) return;
     const runtime = await loadRuntimeConfig();
     const repoPath = resolveRepoOption(options.repo, runtime.profile.registryRepo);
+    const requestedIds = parseSkillIds(options.skill);
+    let skillIds: string[] | undefined;
+    if (requestedIds) {
+      const manifest = await readRegistryManifest(repoPath);
+      const filteredIds = filterKnownSkillIds(requestedIds, manifest);
+      if (filteredIds === null) return;
+      skillIds = filteredIds;
+    }
     const plan = await createDistributionPlan({
       registryPath: repoPath,
       cwd: invocationCwd,
@@ -469,7 +514,7 @@ distribute
       profileName: runtime.profileName,
       backupDir: path.join(runtime.profile.stateDir, "backups"),
       targetAgents,
-      skillIds: options.skill ? options.skill.split(",").map((item) => item.trim()) : undefined,
+      skillIds,
       includeUnsafe: options.includeUnsafe ?? false,
       includeAgentBound: options.includeAgentBound ?? false
     });
@@ -495,6 +540,14 @@ distribute
     if (!targetAgents) return;
     const runtime = await loadRuntimeConfig();
     const repoPath = resolveRepoOption(options.repo, runtime.profile.registryRepo);
+    const requestedIds = parseSkillIds(options.skill);
+    let skillIds: string[] | undefined;
+    if (requestedIds) {
+      const manifest = await readRegistryManifest(repoPath);
+      const filteredIds = filterKnownSkillIds(requestedIds, manifest);
+      if (filteredIds === null) return;
+      skillIds = filteredIds;
+    }
     const plan = await createDistributionPlan({
       registryPath: repoPath,
       cwd: invocationCwd,
@@ -502,7 +555,7 @@ distribute
       profileName: runtime.profileName,
       backupDir: path.join(runtime.profile.stateDir, "backups"),
       targetAgents,
-      skillIds: options.skill ? options.skill.split(",").map((item) => item.trim()) : undefined,
+      skillIds,
       includeUnsafe: options.includeUnsafe ?? false,
       includeAgentBound: options.includeAgentBound ?? false
     });
@@ -549,6 +602,9 @@ copy
     const repoPath = resolveRepoOption(options.repo, runtime.profile.registryRepo);
     const manifest = await readRegistryManifest(repoPath);
     const filtered = manifest.skills.filter((skill) => skill.source.agent === from);
+    const requestedIds = parseSkillIds(options.skill);
+    const filteredIds = filterKnownSkillIds(requestedIds, manifest);
+    if (filteredIds === null) return;
     const plan = await createDistributionPlan({
       registryPath: repoPath,
       cwd: invocationCwd,
@@ -556,7 +612,7 @@ copy
       profileName: runtime.profileName,
       backupDir: path.join(runtime.profile.stateDir, "backups"),
       targetAgents: [to],
-      skillIds: options.skill ? options.skill.split(",").map((item) => item.trim()) : filtered.map((skill) => skill.id),
+      skillIds: filteredIds ?? filtered.map((skill) => skill.id),
       includeUnsafe: false,
       includeAgentBound: false
     });
@@ -585,6 +641,9 @@ copy
     const repoPath = resolveRepoOption(options.repo, runtime.profile.registryRepo);
     const manifest = await readRegistryManifest(repoPath);
     const filtered = manifest.skills.filter((skill) => skill.source.agent === from);
+    const requestedIds = parseSkillIds(options.skill);
+    const filteredIds = filterKnownSkillIds(requestedIds, manifest);
+    if (filteredIds === null) return;
     const plan = await createDistributionPlan({
       registryPath: repoPath,
       cwd: invocationCwd,
@@ -592,7 +651,7 @@ copy
       profileName: runtime.profileName,
       backupDir: path.join(runtime.profile.stateDir, "backups"),
       targetAgents: [to],
-      skillIds: options.skill ? options.skill.split(",").map((item) => item.trim()) : filtered.map((skill) => skill.id),
+      skillIds: filteredIds ?? filtered.map((skill) => skill.id),
       includeUnsafe: false,
       includeAgentBound: false
     });
