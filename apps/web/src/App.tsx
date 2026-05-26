@@ -157,7 +157,21 @@ function Overview({ skills, focusedSkillId, focusSkill, lang, totalSkillCount, a
   // Overview reads/writes it — Intersect / Distribute / Repo each manage
   // their own scope and never see this value.
   const agentMatches = (skill: SkillPackage) => overviewAgentFilter === "all" || skill.source.agent === overviewAgentFilter;
-  const displayedSkills = useMemo(() => skills.filter(agentMatches), [skills, overviewAgentFilter]);
+  // R35-C5: source-bar selection — a click on a (agent, scope) row narrows
+  // the stat cards + donut + table to only skills coming from that source.
+  // Clicking the same row again clears the narrow. The state is local to
+  // Overview because no other page consumes it; reset on agent-filter change
+  // so the user does not end up with a "selected Mavis/user" pin that
+  // suddenly contradicts a "claude only" dropdown choice.
+  const [selectedSourceKey, setSelectedSourceKey] = useState<string | null>(null);
+  const sourceKeyOf = (agent: string, scope: SkillScope) => `${agent}::${scope}`;
+  const sourceMatches = (skill: SkillPackage) =>
+    !selectedSourceKey || sourceKeyOf(skill.source.agent, skill.source.scope) === selectedSourceKey;
+  useEffect(() => { setSelectedSourceKey(null); }, [overviewAgentFilter]);
+  const displayedSkills = useMemo(
+    () => skills.filter((skill) => agentMatches(skill) && sourceMatches(skill)),
+    [skills, overviewAgentFilter, selectedSourceKey]
+  );
   const summary = useMemo(() => summarizeSkills(displayedSkills), [displayedSkills]);
   // When the combined filter empties the table, fall back to the agent-only
   // scope for the stat cards / charts so the page does not collapse to one
@@ -165,19 +179,30 @@ function Overview({ skills, focusedSkillId, focusSkill, lang, totalSkillCount, a
   const agentOnlySkills = useMemo(() => allSkills.filter(agentMatches), [allSkills, overviewAgentFilter]);
   const agentOnlySummary = useMemo(() => summarizeSkills(agentOnlySkills), [agentOnlySkills]);
   const tableEmpty = summary.total === 0;
-  const cardsSkills = tableEmpty ? agentOnlySkills : displayedSkills;
-  const cardsSummary = tableEmpty ? agentOnlySummary : summary;
+  // R35-C5: when the user has explicitly selected a source bar, honor that
+  // even if the result is empty — otherwise the cards would silently jump
+  // back to the wider agent scope and lie about what they're showing.
+  const cardsSkills = (!tableEmpty || selectedSourceKey) ? displayedSkills : agentOnlySkills;
+  const cardsSummary = (!tableEmpty || selectedSourceKey) ? summary : agentOnlySummary;
   const isAgentFiltered = overviewAgentFilter !== "all";
-  const isFiltered = query.trim().length > 0 || isAgentFiltered;
-  const clearAllFilters = () => { onClearQuery(); setOverviewAgentFilter("all"); };
+  const isSourceFiltered = selectedSourceKey !== null;
+  const isFiltered = query.trim().length > 0 || isAgentFiltered || isSourceFiltered;
+  const clearAllFilters = () => { onClearQuery(); setOverviewAgentFilter("all"); setSelectedSourceKey(null); };
   const sourceLabel = isAgentFiltered ? (agentTone[overviewAgentFilter]?.label ?? overviewAgentFilter) : t.allSources;
+  const selectedSourceLabel = (() => {
+    if (!selectedSourceKey) return "";
+    const [agent, scope] = selectedSourceKey.split("::") as [string, SkillScope];
+    const label = agentTone[agent]?.label ?? agent;
+    return `${label} · ${scopeLabel(scope, lang)}`;
+  })();
   const filteredBannerText = (() => {
     const head = t.filteredHint
       .replace("{visible}", String(displayedSkills.length))
       .replace("{total}", String(totalSkillCount));
     const querySuffix = query.trim() ? t.filteredQuerySuffix.replace("{query}", query.trim()) : "";
     const agentSuffix = isAgentFiltered ? t.filteredAgentSuffix.replace("{agent}", sourceLabel) : "";
-    return `${head}${querySuffix}${agentSuffix}`;
+    const sourceSuffix = isSourceFiltered ? t.filteredSourceSuffix.replace("{source}", selectedSourceLabel) : "";
+    return `${head}${querySuffix}${agentSuffix}${sourceSuffix}`;
   })();
   const filteredBanner = isFiltered && totalSkillCount > 0 ? (
     <div className="filtered-banner span-all">
@@ -199,14 +224,23 @@ function Overview({ skills, focusedSkillId, focusSkill, lang, totalSkillCount, a
         counts.set(keyOf(agent.kind, source.scope), { agent: agent.kind, scope: source.scope, count: 0 });
       }
     }
-    for (const skill of cardsSkills) {
+    for (const skill of agentOnlySkills) {
       const key = keyOf(skill.source.agent, skill.source.scope);
       const row = counts.get(key) ?? { agent: skill.source.agent, scope: skill.source.scope, count: 0 };
       row.count += 1;
       counts.set(key, row);
     }
     return [...counts.values()].sort((a, b) => b.count - a.count);
-  }, [cardsSkills, agents]);
+  }, [agentOnlySkills, agents]);
+  // R35-C5: bar fill widths use the largest single-bucket count as 100%, NOT
+  // cardsSummary.total. When a small bucket is selected cardsSummary.total
+  // drops to that bucket's count, which would visually rescale every bar to
+  // 100% width and make the chart look like the data changed.
+  const sourceBarMax = bySource.reduce((max, row) => Math.max(max, row.count), 0);
+  const toggleSourceSelection = (agent: string, scope: SkillScope) => {
+    const key = sourceKeyOf(agent, scope);
+    setSelectedSourceKey((prev) => (prev === key ? null : key));
+  };
   const donutStyle = { "--ok": cardsSummary.portable, "--warn": cardsSummary.agentBound, "--bad": cardsSummary.invalid, "--all": Math.max(cardsSummary.total, 1) } as React.CSSProperties;
   // The Overview row is now single-focus: the focused skill drives the inline
   // detail panel below. Focus survives changes to the agent filter so the user
@@ -256,17 +290,27 @@ function Overview({ skills, focusedSkillId, focusSkill, lang, totalSkillCount, a
 
       <div className="work-card source-card">
         <h3>{t.sourceDistribution}</h3>
+        <p className="source-bars-hint muted-copy">{t.sourceBarFilterHint}</p>
         <div className="source-bars">
-          {bySource.map(({ agent, scope, count }) => (
-            <div key={`${agent}-${scope}`}>
-              <span>
-                <AgentLogo agent={agent} /> {agentTone[agent]?.label ?? agent}
-                <em className="scope-tag">{scopeLabel(scope, lang)}</em>
-              </span>
-              <strong>{count}</strong>
-              <div className="bar-track"><i style={{ width: `${cardsSummary.total ? (count / cardsSummary.total) * 100 : 0}%` }} /></div>
-            </div>
-          ))}
+          {bySource.map(({ agent, scope, count }) => {
+            const isSelected = selectedSourceKey === sourceKeyOf(agent, scope);
+            return (
+              <button
+                key={`${agent}-${scope}`}
+                type="button"
+                className={`source-bar-row${isSelected ? " selected" : ""}`}
+                onClick={() => toggleSourceSelection(agent, scope)}
+                aria-pressed={isSelected}
+              >
+                <span>
+                  <AgentLogo agent={agent} /> {agentTone[agent]?.label ?? agent}
+                  <em className="scope-tag">{scopeLabel(scope, lang)}</em>
+                </span>
+                <strong>{count}</strong>
+                <div className="bar-track"><i style={{ width: `${sourceBarMax ? (count / sourceBarMax) * 100 : 0}%` }} /></div>
+              </button>
+            );
+          })}
         </div>
       </div>
       <div className="work-card donut-card">

@@ -417,11 +417,42 @@ textarea:focus-visible {
 }
 
 .source-bars { display: grid; gap: var(--sp-3); }
-.source-bars > div {
+.source-bars > .source-bar-row {
   display: grid;
   grid-template-columns: 1fr 48px;
   gap: var(--sp-2);
   align-items: center;
+  /* R35-C5: each bar is a real button (toggles a source filter). Reset all
+     native button styling so the bar visually matches the old div-based
+     layout — only hover/focus/selected state gets new visual treatment. */
+  width: 100%;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--r-sm);
+  padding: var(--sp-1) var(--sp-2);
+  margin: 0;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  transition: background var(--t-fast), border-color var(--t-fast);
+}
+.source-bars > .source-bar-row:hover {
+  background: var(--surface-2);
+  border-color: var(--border);
+}
+.source-bars > .source-bar-row.selected {
+  background: var(--primary-soft);
+  border-color: var(--primary);
+}
+.source-bars > .source-bar-row:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+.source-bars-hint {
+  margin: calc(-1 * var(--sp-2)) 0 var(--sp-2);
+  color: var(--muted);
+  font-size: var(--fs-xs);
 }
 .source-bars span:not(.agent-logo) {
   display: flex;

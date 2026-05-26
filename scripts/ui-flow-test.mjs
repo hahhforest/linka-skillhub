@@ -210,7 +210,7 @@ await fs.writeFile(
 );
 await page.getByRole("button", { name: /总览/ }).click();
 await page.waitForTimeout(150);
-const initiallyPresent = await page.locator(".source-bars > div span").filter({ hasText: "my-custom-agent" }).count();
+const initiallyPresent = await page.locator(".source-bars .source-bar-row span").filter({ hasText: "my-custom-agent" }).count();
 await page.getByRole("button", { name: /添加自定义目录/ }).click();
 await expectText("添加自定义来源目录", "add source dialog title");
 // Empty path → primary button should be disabled (form-level validation).
@@ -259,10 +259,10 @@ if (dialogStillOpen > 0) {
 // the source-bars chart regardless, since that's the user-visible outcome
 // that matters.
 await page.waitForFunction(() => {
-  const rows = Array.from(document.querySelectorAll(".source-bars > div span"));
+  const rows = Array.from(document.querySelectorAll(".source-bars .source-bar-row span"));
   return rows.some((span) => span.textContent && span.textContent.includes("my-custom-agent"));
 }, undefined, { timeout: 5000 });
-const finallyPresent = await page.locator(".source-bars > div span").filter({ hasText: "my-custom-agent" }).count();
+const finallyPresent = await page.locator(".source-bars .source-bar-row span").filter({ hasText: "my-custom-agent" }).count();
 if (finallyPresent === 0) {
   failures.push("Add Source should leave at least one my-custom-agent row in source-bars");
 }
@@ -270,6 +270,37 @@ if (initiallyPresent === 0 && finallyPresent === 0) {
   failures.push("Add Source should add a my-custom-agent row when none existed before");
 }
 await screenshot("12-add-source-after");
+
+// R35-C5: source-bar click narrows the donut + stat cards to that
+// (agent, scope) bucket; clicking the same row again clears the narrow.
+// Capture the totalSkills stat before, click the largest bar, verify the
+// stat drops AND the bar gets the `.selected` class, then click again and
+// verify the stat snaps back.
+const totalBefore = Number(await page.locator(".stat-card strong").first().innerText());
+const firstBar = page.locator(".source-bars .source-bar-row").first();
+const firstBarLabel = (await firstBar.locator("span").first().innerText()).replace(/\s+/g, " ").trim();
+await firstBar.click();
+await page.waitForTimeout(150);
+const totalAfterClick = Number(await page.locator(".stat-card strong").first().innerText());
+if (!(totalAfterClick < totalBefore)) {
+  failures.push(`Source-bar click should narrow stat cards; before=${totalBefore} after=${totalAfterClick} (clicked "${firstBarLabel}")`);
+}
+const selectedCount = await page.locator(".source-bars .source-bar-row.selected").count();
+if (selectedCount !== 1) {
+  failures.push(`Exactly one source-bar should carry .selected after click; got ${selectedCount}`);
+}
+await screenshot("13-source-bar-selected");
+// Click again to deselect.
+await firstBar.click();
+await page.waitForTimeout(150);
+const totalAfterDeselect = Number(await page.locator(".stat-card strong").first().innerText());
+if (totalAfterDeselect !== totalBefore) {
+  failures.push(`Source-bar second click should clear the narrow; before=${totalBefore} after=${totalAfterDeselect}`);
+}
+const selectedAfter = await page.locator(".source-bars .source-bar-row.selected").count();
+if (selectedAfter !== 0) {
+  failures.push(`No source-bar should carry .selected after deselect; got ${selectedAfter}`);
+}
 
 // Cleanup: read linka-skillhub.config.json, drop the my-custom-agent entry,
 // write atomically so the next run starts from a clean state. We do this
