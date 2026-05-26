@@ -92,9 +92,14 @@ export const api = {
   skills: () => request<ScanResponse>("/api/skills"),
   reviewers: () => request<{ reviewers: ReviewerInfo[] }>("/api/reviewers"),
   review: (skillIds: string[], reviewer: string, language: "zh" | "en") => request<{ reviews: ReviewResult[] }>("/api/reviews/run", { method: "POST", body: JSON.stringify({ skillIds, reviewer, language }) }),
-  distributionPlan: (targetAgents: string[], skillIds: string[]) =>
+  // skillIds is intentionally optional: an undefined value omits the key in the
+  // JSON body, and the server treats a missing skillIds as "include every
+  // skill in the registry". Callers that want "all registry skills" must pass
+  // undefined rather than an empty array (an empty Set on the server filters
+  // out every skill).
+  distributionPlan: (targetAgents: string[], skillIds?: string[]) =>
     request<{ plan: DistributionPlan; confirmToken: string; ttlMs: number }>("/api/distributions/plan", { method: "POST", body: JSON.stringify({ targetAgents, skillIds }) }),
-  distributionApply: (targetAgents: string[], skillIds: string[], confirmToken: string, plan?: DistributionPlan) =>
+  distributionApply: (targetAgents: string[], skillIds: string[] | undefined, confirmToken: string, plan?: DistributionPlan) =>
     request<DistributionRun & { planId: string }>("/api/distributions/apply", { method: "POST", body: JSON.stringify({ targetAgents, skillIds, confirmToken, plan }) }),
   validateRegistry: (repoPath: string) =>
     request<RegistryValidation>("/api/registry/validate", { method: "POST", body: JSON.stringify({ repoPath }) }),

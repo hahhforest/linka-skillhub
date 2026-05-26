@@ -83,14 +83,13 @@ await page.getByRole("button", { name: /总览/ }).click();
 await page.waitForTimeout(200);
 const overviewRows = await page.locator(".skill-row").count();
 if (overviewRows === 0) failures.push("Overview shows no skill rows after clearing filter");
-// Ensure we end up with at least one selection by toggling row 0 + row 1 if needed.
-const ensureSelected = async () => {
-  const counter = await page.locator(".status-footer").innerText();
-  const match = counter.match(/(\d+)\s*已选择/);
-  if (match && Number(match[1]) > 0) return;
-  await page.locator(".skill-row").nth(1).click();
-};
-await ensureSelected();
+// R34 commit 1: Overview is single-focus. Clicking a row should focus it and
+// reveal the inline detail panel — no per-row checkbox, no footer counter.
+await page.locator(".skill-row").first().click();
+await page.locator(".overview-detail-panel .detail-inline").waitFor({ state: "visible", timeout: 5000 });
+// Distribute no longer requires a per-skill selection: omitting skillIds tells
+// the server to distribute the entire registry. The page should generate a
+// plan from just the default target agents.
 await page.getByRole("button", { name: /分发管理/ }).click();
 await page.waitForTimeout(200);
 await page.getByRole("button", { name: /预览复制结果/ }).click();

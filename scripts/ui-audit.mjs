@@ -64,7 +64,7 @@ await auditNoMarketingCopy("overview");
 
 const overviewText = await visibleText();
 if (overviewText.includes("Profile: mirror") || overviewText.includes("profile mirror")) issues.push({ severity: "medium", area: "overview", text: "profile 以英文技术名展示，用户不懂 mirror 是什么" });
-if (!overviewText.includes("selected") && !overviewText.includes("已选择")) issues.push({ severity: "low", area: "overview", text: "未显示选择状态" });
+if (!overviewText.includes("focused") && !overviewText.includes("已查看")) issues.push({ severity: "low", area: "overview", text: "未显示已查看 (focus) 状态" });
 
 const navButtons = ["交汇中心", "分发管理", "仓库管理"];
 for (const label of navButtons) {

@@ -218,11 +218,11 @@ function Sidebar({ view, setView, agents, selectedAgent, setSelectedAgent, lang 
   );
 }
 
-function Overview({ skills, summary, selected, toggleSkill, lang, selectedAgent, totalSkillCount, fallbackSkills, fallbackSummary, allSkills, query, onClearFilters, agents }: {
+function Overview({ skills, summary, focusedSkillId, focusSkill, lang, selectedAgent, totalSkillCount, fallbackSkills, fallbackSummary, allSkills, query, onClearFilters, agents }: {
   readonly skills: SkillPackage[];
   readonly summary: Summary;
-  readonly selected: Set<string>;
-  readonly toggleSkill: (id: string) => void;
+  readonly focusedSkillId: string | null;
+  readonly focusSkill: (id: string) => void;
   readonly lang: Language;
   readonly selectedAgent: string | null;
   readonly totalSkillCount: number;
@@ -266,13 +266,15 @@ function Overview({ skills, summary, selected, toggleSkill, lang, selectedAgent,
     return dups;
   }, [skills]);
   const donutStyle = { "--ok": cardsSummary.portable, "--warn": cardsSummary.agentBound, "--bad": cardsSummary.invalid, "--all": Math.max(cardsSummary.total, 1) } as React.CSSProperties;
-  const selectedSkillsAll = useMemo(() => allSkills.filter((skill) => selected.has(skill.id)), [allSkills, selected]);
-  // visibleSelected = intersection of `selected` with what the current filter
-  // shows in the table. Used so multi-summary doesn't claim "已选择 3 个" when
-  // the table only renders 1 of them after a search.
-  const visibleSelected = useMemo(() => skills.filter((skill) => selected.has(skill.id)), [skills, selected]);
-  const hiddenSelectedCount = selectedSkillsAll.length - visibleSelected.length;
-  const inlineSelected = selectedSkillsAll.length === 1 ? selectedSkillsAll[0] : undefined;
+  // The Overview row is now single-focus: the focused skill drives the inline
+  // detail panel below. multi-select (selectedSkillsAll / visibleSelected /
+  // multi-summary branches) is dead in R34 commit 1 but kept around until the
+  // next commit unifies the SkillTable component.
+  const focusedSkill = useMemo(
+    () => (focusedSkillId ? allSkills.find((skill) => skill.id === focusedSkillId) ?? null : null),
+    [focusedSkillId, allSkills]
+  );
+  const focusedHidden = focusedSkill ? !skills.some((skill) => skill.id === focusedSkill.id) : false;
 
   if (totalSkillCount === 0) {
     return <section className="work-card empty-state span-all"><Info size={24} /><h2>{t.noScanTitle}</h2><p>{t.noScanBody}</p></section>;
@@ -310,38 +312,22 @@ function Overview({ skills, summary, selected, toggleSkill, lang, selectedAgent,
       </div>
       <div className="overview-results-row span-all">
         <div className="work-card table-card">
-          <div className="card-head"><div><h3>{t.scanResults}<span className="title-count">{skills.length === totalSkillCount ? totalSkillCount : `${skills.length} / ${totalSkillCount}`}</span></h3><p>{t.selectionHint}</p></div><span>{selected.size} {t.selectedCount}</span></div>
+          <div className="card-head"><div><h3>{t.scanResults}<span className="title-count">{skills.length === totalSkillCount ? totalSkillCount : `${skills.length} / ${totalSkillCount}`}</span></h3><p>{t.selectionHint}</p></div><span>{focusedSkillId ? 1 : 0} {t.focusedCount}</span></div>
           {tableEmpty ? (
             <div className="empty-state table-empty"><Info size={20} /><h2>{t.noMatchTitle}</h2><p>{t.noMatchBody}</p></div>
           ) : (
-            <div className="skill-table scrollable-list">{skills.map((skill) => <SkillRow key={skill.id} skill={skill} selected={selected.has(skill.id)} onToggle={toggleSkill} lang={lang} showAgent={duplicateNames.has(skill.name)} />)}</div>
+            <div className="skill-table scrollable-list">{skills.map((skill) => <SkillRow key={skill.id} skill={skill} selected={skill.id === focusedSkillId} onToggle={focusSkill} lang={lang} showAgent={duplicateNames.has(skill.name)} />)}</div>
           )}
         </div>
         <div className="overview-detail-panel">
-          {selectedSkillsAll.length === 0 && (
+          {!focusedSkill && (
             <section className="work-card detail-empty"><PackageCheck size={24} /><h2>{t.selectSkillToInspect}</h2></section>
           )}
-          {selectedSkillsAll.length === 1 && inlineSelected && (
-            <Detail skill={inlineSelected} lang={lang} />
+          {focusedSkill && (
+            <Detail skill={focusedSkill} lang={lang} />
           )}
-          {selectedSkillsAll.length > 1 && visibleSelected.length === 0 && (
-            <section className="work-card detail-multi">
-              <PackageCheck size={20} />
-              <h3>{t.noVisibleSelected.replace("{n}", String(selectedSkillsAll.length))}</h3>
-            </section>
-          )}
-          {selectedSkillsAll.length > 1 && visibleSelected.length > 0 && (
-            <section className="work-card detail-multi">
-              <PackageCheck size={20} />
-              <h3>{t.multipleSelectedSummary.replace("{n}", String(visibleSelected.length))}</h3>
-              <div className="selected-chip-list">
-                {visibleSelected.slice(0, 8).map((skill) => <span key={skill.id} title={skill.name}>{skill.name}</span>)}
-                {visibleSelected.length > 8 && <span className="muted-copy">+{visibleSelected.length - 8}</span>}
-              </div>
-              {hiddenSelectedCount > 0 && (
-                <p className="muted-copy">{t.multipleSelectedHidden.replace("{n}", String(hiddenSelectedCount))}</p>
-              )}
-            </section>
+          {focusedSkill && focusedHidden && (
+            <p className="muted-copy">{t.focusedHidden}</p>
           )}
         </div>
       </div>
@@ -401,7 +387,11 @@ export function App() {
   const [profile, setProfile] = useState("unknown");
   const [registryRepo, setRegistryRepo] = useState("");
   const [selectedAgent, setSelectedAgent] = useState<string | null>(null);
-  const [selected, setSelected] = useState<Set<string>>(new Set());
+  // focusedSkillId is the "browse" semantic: which single skill is currently
+  // open in the Overview detail panel. It is no longer used to drive
+  // multi-select operations -- Intersect and Distribute each manage their own
+  // per-page selection sets internally. R34 commit 1 splits these.
+  const [focusedSkillId, setFocusedSkillId] = useState<string | null>(null);
   const [plan, setPlan] = useState<DistributionPlan | undefined>();
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
@@ -412,7 +402,7 @@ export function App() {
   const [reviewers, setReviewers] = useState<ReviewerInfo[]>([]);
   const [gitStatusText, setGitStatusText] = useState("");
   const [commitMessage, setCommitMessage] = useState<string>(t.commitMessageDefault);
-  const [pendingPlan, setPendingPlan] = useState<{ plan: DistributionPlan; confirmToken: string; targetAgents: string[]; skillIds: string[] } | null>(null);
+  const [pendingPlan, setPendingPlan] = useState<{ plan: DistributionPlan; confirmToken: string; targetAgents: string[]; skillIds: string[] | undefined } | null>(null);
 
   const loadShell = async () => {
     const [agentData, registry] = await Promise.all([api.agents(), api.skills()]);
@@ -442,12 +432,31 @@ export function App() {
   const summary = useMemo(() => summarizeSkills(visibleSkills), [visibleSkills]);
   const fallbackSummary = useMemo(() => summarizeSkills(agentFilteredSkills), [agentFilteredSkills]);
 
-  const toggleSkill = (id: string) => { const next = new Set(selected); next.has(id) ? next.delete(id) : next.add(id); setSelected(next); };
+  // Single-focus toggle: clicking the row that is already focused clears it
+  // (so the detail panel returns to the empty state), otherwise replace.
+  const focusSkill = (id: string) => setFocusedSkillId(id === focusedSkillId ? null : id);
   const clearFilters = () => { setQuery(""); setSelectedAgent(null); };
 
   const runScan = async () => { setBusy(true); try { const scan = await api.scan(includeBuiltin); setSkills(scan.skills); setMessage(`${t.scan}: ${scan.summary.total}`); setDialog(null); } catch (error) { setMessage(humanizeError(error, lang)); } finally { setBusy(false); } };
   const importRepo = async () => { setBusy(true); try { const result = await api.import(); setMessage(`${t.imported} ${result.imported} skills → ${result.repoPath}`); await loadShell(); } catch (error) { setMessage(humanizeError(error, lang)); } finally { setBusy(false); } };
-  const runReview = async () => { setBusy(true); try { const ids = selected.size ? [...selected] : visibleSkills.map((skill) => skill.id); const result = await api.review(ids, reviewer, lang); setMessage(`${t.reviewed} ${result.reviews.length} skills`); setDialog(null); } catch (error) { setMessage(humanizeError(error, lang)); } finally { setBusy(false); } };
+  const runReview = async () => {
+    setBusy(true);
+    try {
+      // Review run defaults to every skill in the registry. The previous
+      // implementation borrowed the global `selected` set as a default, which
+      // tied the Repo page action to the Overview's browsing state. After R34
+      // commit 1 each page owns its selection; reviews now run against the
+      // full registry unless a future commit wires per-row checkboxes here.
+      const ids = skills.map((skill) => skill.id);
+      const result = await api.review(ids, reviewer, lang);
+      setMessage(`${t.reviewed} ${result.reviews.length} skills`);
+      setDialog(null);
+    } catch (error) {
+      setMessage(humanizeError(error, lang));
+    } finally {
+      setBusy(false);
+    }
+  };
   const openReviewDialog = async (preferred = "rules") => {
     setReviewer(preferred);
     setDialog("review");
@@ -458,14 +467,28 @@ export function App() {
       setMessage(humanizeError(error, lang));
     }
   };
-  const planDistribution = async (targetAgents: string[], skillIds?: string[]) => { setBusy(true); try { const result = await api.distributionPlan(targetAgents, skillIds ?? [...selected]); setPlan(result.plan); setMessage(`${t.planSummary}: ${result.plan.items.length}`); } catch (error) { setMessage(humanizeError(error, lang)); } finally { setBusy(false); } };
-  const applyDistribution = async (targetAgents: string[], skillIds?: string[]) => {
-    const ids = skillIds ?? [...selected];
+  // skillIds is passed through verbatim: undefined means "all registry skills"
+  // (the server omits the filter). Intersect supplies an explicit list from
+  // its local selectedForCopy; Distribute currently omits it during the R34
+  // commit 1 transition until the new SkillTable wiring lands.
+  const planDistribution = async (targetAgents: string[], skillIds?: string[]) => {
     setBusy(true);
     try {
-      const result = await api.distributionPlan(targetAgents, ids);
+      const result = await api.distributionPlan(targetAgents, skillIds);
       setPlan(result.plan);
-      setPendingPlan({ plan: result.plan, confirmToken: result.confirmToken, targetAgents, skillIds: ids });
+      setMessage(`${t.planSummary}: ${result.plan.items.length}`);
+    } catch (error) {
+      setMessage(humanizeError(error, lang));
+    } finally {
+      setBusy(false);
+    }
+  };
+  const applyDistribution = async (targetAgents: string[], skillIds?: string[]) => {
+    setBusy(true);
+    try {
+      const result = await api.distributionPlan(targetAgents, skillIds);
+      setPlan(result.plan);
+      setPendingPlan({ plan: result.plan, confirmToken: result.confirmToken, targetAgents, skillIds });
       setDialog("confirmPlan");
       setMessage(`${t.planSummary}: ${result.plan.items.length}`);
     } catch (error) {
@@ -502,15 +525,15 @@ export function App() {
       <div className="workspace">
         <Sidebar view={view} setView={setView} agents={agents} selectedAgent={selectedAgent} setSelectedAgent={setSelectedAgent} lang={lang} />
         <div className="content">
-          {view === "overview" && <Overview skills={visibleSkills} summary={summary} selected={selected} toggleSkill={toggleSkill} lang={lang} selectedAgent={selectedAgent} totalSkillCount={skills.length} fallbackSkills={agentFilteredSkills} fallbackSummary={fallbackSummary} allSkills={skills} query={query} onClearFilters={clearFilters} agents={agents} />}
+          {view === "overview" && <Overview skills={visibleSkills} summary={summary} focusedSkillId={focusedSkillId} focusSkill={focusSkill} lang={lang} selectedAgent={selectedAgent} totalSkillCount={skills.length} fallbackSkills={agentFilteredSkills} fallbackSummary={fallbackSummary} allSkills={skills} query={query} onClearFilters={clearFilters} agents={agents} />}
           {view === "repo" && <RepoView onImport={importRepo} onReview={() => void openReviewDialog("rules")} onAgentReview={() => void openReviewDialog("codex")} onRefreshGit={refreshGit} onPull={pullRegistry} onPush={pushRegistry} gitStatus={gitStatusText} commitMessage={commitMessage} setCommitMessage={setCommitMessage} busy={busy} message={message} lang={lang} registryRepo={registryRepo} onRegistryLoaded={(result) => { setRegistryRepo(result.repoPath); if (result.skills) setSkills(result.skills); setMessage(`${messages[lang].loadRegistrySuccess}: ${result.repoPath} (${result.skillCount ?? result.skills?.length ?? 0})`); }} />}
-          {view === "intersect" && <Intersect skills={visibleSkills} targets={targets} selected={selected} toggleSkill={toggleSkill} lang={lang} plan={plan} onPlan={planDistribution} onApply={applyDistribution} agents={agents} />}
-          {view === "distribute" && <Distribute targets={targets} selected={selected} onPlan={planDistribution} onApply={applyDistribution} plan={plan} busy={busy} lang={lang} />}
-          <footer className="status-footer"><span>{agents.length} agents</span><span>{selected.size} {t.selectedCount}</span><span className="status-message" title={message}>{message}</span></footer>
+          {view === "intersect" && <Intersect skills={visibleSkills} targets={targets} lang={lang} plan={plan} onPlan={planDistribution} onApply={applyDistribution} agents={agents} />}
+          {view === "distribute" && <Distribute targets={targets} onPlan={planDistribution} onApply={applyDistribution} plan={plan} busy={busy} lang={lang} />}
+          <footer className="status-footer"><span>{agents.length} agents</span><span>{focusedSkillId ? 1 : 0} {t.focusedCount}</span><span className="status-message" title={message}>{message}</span></footer>
         </div>
       </div>
       {dialog === "scan" && <DialogFrame title={t.scanDialogTitle} onClose={() => setDialog(null)} closeLabel={t.cancel}><p>{t.scanDialogBody}</p><label className="checkbox-line"><input type="checkbox" checked={includeBuiltin} onChange={(event) => setIncludeBuiltin(event.target.checked)} /> {t.includeBuiltin}</label><div className="dialog-actions"><button className="ghost" onClick={() => setDialog(null)}>{t.cancel}</button><button className="primary" onClick={runScan} disabled={busy}>{t.confirmScan}</button></div></DialogFrame>}
-      {dialog === "review" && <DialogFrame title={t.reviewDialogTitle} onClose={() => setDialog(null)} closeLabel={t.cancel}><p>{t.reviewDialogBody}</p><div className="review-meta"><span>{t.reviewScope}: {selected.size ? `${selected.size} ${t.selectedCount}` : `${visibleSkills.length} visible`}</span><span>{t.reviewOutputLanguage}: {lang === "zh" ? "中文" : "English"}</span><span>{t.reviewWriteTarget}: registry/reviews/*.json</span></div><div className="reviewer-list">{reviewers.map((item) => <label key={item.kind} className={`reviewer-option ${reviewer === item.kind ? "active" : ""} ${!item.available ? "disabled" : ""}`}><input type="radio" name="reviewer" value={item.kind} checked={reviewer === item.kind} disabled={!item.available} onChange={() => setReviewer(item.kind)} /><strong>{item.kind === "rules" ? t.reviewerRules : item.label}</strong><span>{item.available ? t.reviewerAvailable : t.reviewerUnavailable}</span><small>{localizedReviewerReason(item, lang)}</small></label>)}</div><p className="muted-copy">{t.agentUnavailable}</p><div className="dialog-actions"><button className="ghost" onClick={() => setDialog(null)}>{t.cancel}</button><button className="primary" onClick={runReview} disabled={busy || !reviewers.find((item) => item.kind === reviewer)?.available}>{t.startReview}</button></div></DialogFrame>}
+      {dialog === "review" && <DialogFrame title={t.reviewDialogTitle} onClose={() => setDialog(null)} closeLabel={t.cancel}><p>{t.reviewDialogBody}</p><div className="review-meta"><span>{t.reviewScope}: {t.reviewScopeRegistry.replace("{n}", String(skills.length))}</span><span>{t.reviewOutputLanguage}: {lang === "zh" ? "中文" : "English"}</span><span>{t.reviewWriteTarget}: registry/reviews/*.json</span></div><div className="reviewer-list">{reviewers.map((item) => <label key={item.kind} className={`reviewer-option ${reviewer === item.kind ? "active" : ""} ${!item.available ? "disabled" : ""}`}><input type="radio" name="reviewer" value={item.kind} checked={reviewer === item.kind} disabled={!item.available} onChange={() => setReviewer(item.kind)} /><strong>{item.kind === "rules" ? t.reviewerRules : item.label}</strong><span>{item.available ? t.reviewerAvailable : t.reviewerUnavailable}</span><small>{localizedReviewerReason(item, lang)}</small></label>)}</div><p className="muted-copy">{t.agentUnavailable}</p><div className="dialog-actions"><button className="ghost" onClick={() => setDialog(null)}>{t.cancel}</button><button className="primary" onClick={runReview} disabled={busy || !reviewers.find((item) => item.kind === reviewer)?.available}>{t.startReview}</button></div></DialogFrame>}
       {dialog === "confirmPlan" && pendingPlan && (
         <ConfirmPlanModal
           plan={pendingPlan.plan}
@@ -525,10 +548,22 @@ export function App() {
   );
 }
 
-function Intersect({ skills, targets, selected, toggleSkill, lang, plan, onPlan, onApply, agents: agentDefs }: { readonly skills: SkillPackage[]; readonly targets: DistributionTarget[]; readonly selected: Set<string>; readonly toggleSkill: (id: string) => void; readonly lang: Language; readonly plan?: DistributionPlan; readonly onPlan: (agents: string[], skillIds?: string[]) => void; readonly onApply: (agents: string[], skillIds?: string[]) => void; readonly agents: AgentDefinition[] }) {
+function Intersect({ skills, targets, lang, plan, onPlan, onApply, agents: agentDefs }: { readonly skills: SkillPackage[]; readonly targets: DistributionTarget[]; readonly lang: Language; readonly plan?: DistributionPlan; readonly onPlan: (agents: string[], skillIds?: string[]) => void; readonly onApply: (agents: string[], skillIds?: string[]) => void; readonly agents: AgentDefinition[] }) {
   const t = messages[lang];
   const [from, setFrom] = useState("mavis");
   const [to, setTo] = useState("claude");
+  // Per-page selection for "which source skills do I want to copy to the
+  // target agent". This used to live in App's global `selected`, sharing
+  // state with Overview's focus and Distribute's selection. R34 commit 1
+  // localises it so other pages can't pollute the copy plan.
+  const [selectedForCopy, setSelectedForCopy] = useState<Set<string>>(new Set());
+  const toggleSelectForCopy = (id: string) => {
+    setSelectedForCopy((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
   const agents = agentDefs.map((agent) => agent.kind);
   const handleFromChange = (newFrom: string) => {
     setFrom(newFrom);
@@ -540,7 +575,10 @@ function Intersect({ skills, targets, selected, toggleSkill, lang, plan, onPlan,
   const sameSourceTarget = from === to;
   const left = skills.filter((skill) => skill.source.agent === from).slice(0, 40);
   const right = skills.filter((skill) => skill.source.agent === to).slice(0, 40);
-  const selectedSkills = skills.filter((skill) => selected.has(skill.id) && skill.source.agent === from);
+  // selectedSkills filters local selectedForCopy by the current `from` agent.
+  // Switching `from` therefore yields a fresh-feeling lane even if the user
+  // checked rows under a different `from` earlier in the same Intersect visit.
+  const selectedSkills = skills.filter((skill) => selectedForCopy.has(skill.id) && skill.source.agent === from);
   const selectedIds = selectedSkills.map((skill) => skill.id);
   const sourcePath = left[0]?.source.rootPath ?? "-";
   const targetPath = targets.find((target) => target.agent === to)?.targetDir ?? "-";
@@ -557,7 +595,7 @@ function Intersect({ skills, targets, selected, toggleSkill, lang, plan, onPlan,
       <div className="work-card lane-card">
         <h3><AgentLogo agent={from} /> {t.sourceSkills}</h3>
         <div className="path-note"><strong>{t.sourcePath}</strong><code title={sourcePath}>{sourcePath}</code></div>
-        <div className="skill-list compact scrollable-list">{left.map((skill) => <SkillRow key={skill.id} skill={skill} selected={selected.has(skill.id)} onToggle={toggleSkill} lang={lang} />)}</div>
+        <div className="skill-list compact scrollable-list">{left.map((skill) => <SkillRow key={skill.id} skill={skill} selected={selectedForCopy.has(skill.id)} onToggle={toggleSelectForCopy} lang={lang} />)}</div>
       </div>
       <div className="work-card intersection-actions">
         {sameSourceTarget && <p className="warning-line" role="alert">{t.sameSourceTargetWarning}</p>}
@@ -572,17 +610,22 @@ function Intersect({ skills, targets, selected, toggleSkill, lang, plan, onPlan,
       <div className="work-card lane-card">
         <h3><AgentLogo agent={to} /> {t.targetExisting}</h3>
         <div className="path-note"><strong>{t.targetPath}</strong><code title={targetPath}>{targetPath}</code></div>
-        <div className="skill-list compact scrollable-list">{right.map((skill) => <SkillRow key={skill.id} skill={skill} selected={selected.has(skill.id)} onToggle={toggleSkill} lang={lang} />)}</div>
+        <div className="skill-list compact scrollable-list">{right.map((skill) => <SkillRow key={skill.id} skill={skill} selected={false} onToggle={() => undefined} lang={lang} />)}</div>
       </div>
     </section>
   );
 }
 
-function Distribute({ targets, selected, onPlan, onApply, plan, busy, lang }: { readonly targets: DistributionTarget[]; readonly selected: Set<string>; readonly onPlan: (agents: string[], skillIds?: string[]) => void; readonly onApply: (agents: string[], skillIds?: string[]) => void; readonly plan?: DistributionPlan; readonly busy: boolean; readonly lang: Language }) {
+function Distribute({ targets, onPlan, onApply, plan, busy, lang }: { readonly targets: DistributionTarget[]; readonly onPlan: (agents: string[], skillIds?: string[]) => void; readonly onApply: (agents: string[], skillIds?: string[]) => void; readonly plan?: DistributionPlan; readonly busy: boolean; readonly lang: Language }) {
   const t = messages[lang];
+  // chosen = which target agents to distribute to. selectedForDistribute (the
+  // per-skill checkbox state) is intentionally absent during R34 commit 1: we
+  // omit skillIds entirely so the server distributes the full registry, the
+  // server-side default. The next commit reintroduces a SkillTable and a
+  // local selectedForDistribute set when the layout work lands.
   const [chosen, setChosen] = useState<Set<string>>(new Set(["codex", "claude"]));
   const toggle = (agent: string) => { const next = new Set(chosen); next.has(agent) ? next.delete(agent) : next.add(agent); setChosen(next); };
-  return <section className="panel-grid distribute-grid"><div className="section-head span-all"><div><h2>{t.navDistribute}</h2><p>{t.distributeDesc}</p></div><button className="primary" disabled={busy || selected.size === 0 || chosen.size === 0} onClick={() => onPlan([...chosen])}><UploadCloud size={16} /> {t.generatePlan}</button></div><div className="work-card target-card"><h3>{t.targets}</h3><div className="target-grid">{targets.map((target) => <button key={target.agent} className={chosen.has(target.agent) ? "target selected" : "target"} onClick={() => toggle(target.agent)}><AgentLogo agent={target.agent} /><span>{target.label}<small title={target.targetDir}>{target.targetDir}</small></span>{chosen.has(target.agent) && <Check size={16} />}</button>)}</div></div><div className="work-card plan-card"><h3>{t.planSummary}</h3>{plan ? <div className="plan-list"><strong>{plan.items.filter((item) => item.action !== "skip").length} {t.toCopyOrOverwrite}</strong><PlanItems plan={plan} lang={lang} /><button className="primary plan-apply-btn" disabled={busy || chosen.size === 0 || selected.size === 0} onClick={() => onApply([...chosen])}><Check size={16} /> {t.applyDistribution}</button></div> : <div className="empty-state"><Info size={18} />{t.waitingPlan}<button className="primary" disabled><Check size={16} /> {t.applyDistribution}</button></div>}</div></section>;
+  return <section className="panel-grid distribute-grid"><div className="section-head span-all"><div><h2>{t.navDistribute}</h2><p>{t.distributeDesc}</p></div><button className="primary" disabled={busy || chosen.size === 0} onClick={() => onPlan([...chosen])}><UploadCloud size={16} /> {t.generatePlan}</button></div><div className="work-card target-card"><h3>{t.targets}</h3><div className="target-grid">{targets.map((target) => <button key={target.agent} className={chosen.has(target.agent) ? "target selected" : "target"} onClick={() => toggle(target.agent)}><AgentLogo agent={target.agent} /><span>{target.label}<small title={target.targetDir}>{target.targetDir}</small></span>{chosen.has(target.agent) && <Check size={16} />}</button>)}</div></div><div className="work-card plan-card"><h3>{t.planSummary}</h3>{plan ? <div className="plan-list"><strong>{plan.items.filter((item) => item.action !== "skip").length} {t.toCopyOrOverwrite}</strong><PlanItems plan={plan} lang={lang} /><button className="primary plan-apply-btn" disabled={busy || chosen.size === 0} onClick={() => onApply([...chosen])}><Check size={16} /> {t.applyDistribution}</button></div> : <div className="empty-state"><Info size={18} />{t.waitingPlan}<button className="primary" disabled><Check size={16} /> {t.applyDistribution}</button></div>}</div></section>;
 }
 
 function Detail({ skill, lang }: { readonly skill?: SkillPackage; readonly lang: Language }) {
