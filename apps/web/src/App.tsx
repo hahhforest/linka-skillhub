@@ -568,7 +568,6 @@ export function App() {
               setCommitMessage={setCommitMessage}
               onImport={importRepo}
               onReview={(ids) => void openReviewDialog("rules", ids)}
-              onAgentReview={(ids) => void openReviewDialog("codex", ids)}
               onRefreshGit={refreshGit}
               onPull={pullRegistry}
               onPush={pushRegistry}

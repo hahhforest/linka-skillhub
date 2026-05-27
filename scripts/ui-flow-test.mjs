@@ -59,7 +59,10 @@ await page.getByRole("button", { name: /仓库管理/ }).click();
 // inline action bar (buttons now visible without scrolling), and that the
 // Registry SkillTable renders. Old card-style action layout is gone.
 await expectText("导入到 Registry", "import action");
-await expectText("运行确定性规则审查", "rule review action");
+// R35-C12: merged "运行确定性规则审查" + "使用 Code Agent 审查" into one
+// "审查" button. The reviewer choice now happens inside the dialog, not at
+// the button level.
+await expectText("审查", "review skills action");
 await expectText("Registry Skills", "registry browser title");
 await expectText("切换 Registry", "switch registry button");
 await expectText("刷新 Git 状态", "refresh git status button");
@@ -86,7 +89,7 @@ await page.locator(".dialog .dialog-close").click();
 let switchDialogText = await page.locator("body").innerText();
 if (switchDialogText.includes("加载已有 Registry")) failures.push("Switch Registry dialog did not close on dialog-close");
 
-await page.getByRole("button", { name: /^运行确定性规则审查$/ }).click();
+await page.getByRole("button", { name: /^审查$/ }).click();
 await expectText("选择审查方式", "review dialog");
 await expectText("规则审查", "reviewer choice");
 await expectText("审查范围", "review scope");

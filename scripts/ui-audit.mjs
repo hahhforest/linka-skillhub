@@ -84,7 +84,7 @@ for (const unclear of ["汇总到仓库", "Ready"]) {
 // action bar; the "不调用 LLM" line lived on a now-removed action card. The
 // per-action description still surfaces via button title (tooltip), so we
 // only require the action labels themselves to be present.
-for (const required of ["导入到 Registry", "运行确定性规则审查", "使用 Code Agent 审查", "Registry Skills", "切换 Registry"]) {
+for (const required of ["导入到 Registry", "审查", "Registry Skills", "切换 Registry"]) {
   if (!repoText.includes(required)) issues.push({ severity: "high", area: "repo", text: `仓库管理缺少必要解释：${required}` });
 }
 

@@ -39,7 +39,6 @@ export interface RepoBrowserProps {
   // know which subset to run against. Distribute uses an explicit set for the
   // same reason — keeping every page's selection local to that page.
   readonly onReview: (ids: string[]) => void;
-  readonly onAgentReview: (ids: string[]) => void;
   readonly onRefreshGit: () => void;
   readonly onPull: () => void;
   readonly onPush: () => void;
@@ -86,7 +85,6 @@ export function RepoBrowser({
   setCommitMessage,
   onImport,
   onReview,
-  onAgentReview,
   onRefreshGit,
   onPull,
   onPush,
@@ -169,11 +167,13 @@ export function RepoBrowser({
           <button className="primary" onClick={handleImportClick} disabled={busy} title={t.importToRegistryDesc}>
             {busy ? <Loader2 className="spin" size={14} /> : <Database size={14} />} {t.importToRegistry}
           </button>
-          <button className="ghost" onClick={() => onReview(reviewIds)} disabled={busy || isEmpty} title={t.runRuleReviewDesc}>
-            <Sparkles size={14} /> {t.runRuleReview}
-          </button>
-          <button className="ghost" onClick={() => onAgentReview(reviewIds)} disabled={busy || isEmpty} title={t.runAgentReviewDesc}>
-            <Sparkles size={14} /> {t.runAgentReview}
+          {/* R35-C12: a single "Review Skills" entry point — the previous two
+              buttons (deterministic rules vs. code-agent) only differed in which
+              radio was preselected inside the same dialog, so they collapsed
+              into pure UI noise (same icon, same handler shape, same disabled
+              rules). The dialog still lets the user pick any available reviewer. */}
+          <button className="ghost" onClick={() => onReview(reviewIds)} disabled={busy || isEmpty} title={t.reviewSkillsDesc}>
+            <Sparkles size={14} /> {t.reviewSkills}
           </button>
           <span className="repo-action-spacer" />
           <button className="ghost" onClick={onRefreshGit} disabled={busy}>
