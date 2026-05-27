@@ -375,11 +375,32 @@ textarea:focus-visible {
 .source-card { grid-column: span 2; }
 .donut-card {
   grid-column: span 2;
-  display: grid;
-  grid-template-columns: 140px 1fr;
-  align-items: center;
-  gap: var(--sp-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  justify-content: flex-start;
 }
+/* R36-C16: donut + legend share a row centered horizontally + flex-start
+   vertically so the row sits right under the title rather than floating in
+   the card's vertical middle. The card itself can stretch (grid row), but
+   we'd rather have any blank at the bottom of the card than between the
+   title and chart. */
+.donut-card .donut-body {
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  gap: var(--sp-5);
+}
+.donut-card .donut-body .donut {
+  width: 180px;
+  flex-shrink: 0;
+}
+.donut-card .donut-body .donut::after { inset: 38px; }
+.donut-card .donut-body .status-list {
+  gap: var(--sp-3);
+  font-size: var(--fs-md);
+}
+.donut-card .donut-body .status-list .dot { width: 11px; height: 11px; }
 /* R35-C7: when a source bar is selected, the donut-card grows a top strip
    that lists the configured directory paths for that (agent, scope) bucket.
    The strip spans both grid columns so the title + path list reads as a
@@ -1187,7 +1208,9 @@ textarea:focus-visible {
     grid-template-columns: 1fr;
   }
   .source-card, .donut-card { grid-column: auto; }
-  .donut-card { grid-template-columns: 120px 1fr; }
+  /* R36-C16: at narrow viewports keep the flex column but tighten the donut. */
+  .donut-card .donut-body .donut { width: 140px; }
+  .donut-card .donut-body .donut::after { inset: 30px; }
 }
 
 @media (max-width: 620px) {
@@ -1200,7 +1223,8 @@ textarea:focus-visible {
   .skill-table.with-check .skill-row { grid-template-columns: 22px 24px minmax(0, 1fr); }
   .skill-row .status-pill { grid-column: 2; justify-self: start; }
   .skill-table.with-check .skill-row .status-pill { grid-column: 3; }
-  .donut-card { grid-template-columns: 1fr; justify-items: start; }
+  /* R36-C16: at very narrow viewports stack the donut + legend vertically. */
+  .donut-card .donut-body { flex-direction: column; gap: var(--sp-3); }
 }
 
 .card-head p {

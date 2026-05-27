@@ -342,15 +342,26 @@ function Overview({ skills, focusedSkillId, focusSkill, lang, totalSkillCount, a
             </div>
           );
         })()}
-        <h3>{t.statusDistribution}</h3><div className="donut" style={donutStyle} />
-        {/* R35-C15: the donut already paints a trailing grey wedge for any
-            skills that don't fall into portable / agent_bound / invalid (i.e.
-            valid+unreviewed only). The legend used to skip that wedge, so a
-            user who filtered to a tiny scope like openclaw (1 unreviewed
-            skill) would see "可共享 0 · Agent 限定 0 · 存在问题 0" with no
-            hint of where the 1 skill went. The fourth row makes that bucket
-            explicit and matches the bucketLabel("other") wording elsewhere. */}
-        <div className="status-list"><span><i className="dot ok" />{t.shareable} {cardsSummary.portable}</span><span><i className="dot warn" />{t.agentBound} {cardsSummary.agentBound}</span><span><i className="dot bad" />{t.problematic} {cardsSummary.invalid}</span><span><i className="dot other" />{t.unreviewedBucket} {Math.max(0, cardsSummary.total - cardsSummary.portable - cardsSummary.agentBound - cardsSummary.invalid)}</span></div>
+        <h3>{t.statusDistribution}</h3>
+        {/* R36-C16: donut + legend laid out side-by-side inside a wrapper.
+            Previously the donut-card's 2-column grid put h3 in col-1 and
+            donut in col-2 of row 1, then legend in col-1 of row 2 with
+            col-2 empty — that wasted ~half the card's vertical space when
+            sitting next to the dense source-bars card on the left. Now the
+            h3 is full-width on top and the body row uses flex so donut and
+            legend share the remaining height without one stretching past
+            the other. */}
+        <div className="donut-body">
+          <div className="donut" style={donutStyle} />
+          {/* R35-C15: the donut already paints a trailing grey wedge for any
+              skills that don't fall into portable / agent_bound / invalid (i.e.
+              valid+unreviewed only). The legend used to skip that wedge, so a
+              user who filtered to a tiny scope like openclaw (1 unreviewed
+              skill) would see "可共享 0 · Agent 限定 0 · 存在问题 0" with no
+              hint of where the 1 skill went. The fourth row makes that bucket
+              explicit and matches the bucketLabel("other") wording elsewhere. */}
+          <div className="status-list"><span><i className="dot ok" />{t.shareable} {cardsSummary.portable}</span><span><i className="dot warn" />{t.agentBound} {cardsSummary.agentBound}</span><span><i className="dot bad" />{t.problematic} {cardsSummary.invalid}</span><span><i className="dot other" />{t.unreviewedBucket} {Math.max(0, cardsSummary.total - cardsSummary.portable - cardsSummary.agentBound - cardsSummary.invalid)}</span></div>
+        </div>
       </div>
       <div className="overview-results-row span-all">
         <div className="work-card table-card">
