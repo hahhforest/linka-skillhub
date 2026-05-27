@@ -9,6 +9,13 @@ describe("parseCommitSubject", () => {
     });
   });
 
+  it("recognises a restored-import subject without leaking the qualifier into the agent slot", () => {
+    expect(parseCommitSubject("import lark-mail (origin: mavis, restored)")).toEqual({
+      action: "import",
+      agents: ["mavis"]
+    });
+  });
+
   it("recognises a pull subject", () => {
     expect(parseCommitSubject("pull lark-mail (from claude)")).toEqual({
       action: "pull",

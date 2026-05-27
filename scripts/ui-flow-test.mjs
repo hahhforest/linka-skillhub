@@ -200,6 +200,42 @@ await page.waitForFunction(() => document.body.innerText.includes("已切换到 
 await expectText("已切换到 Registry", "load registry success message");
 await screenshot("10-load-registry");
 
+// R36-C21: sync subsystem UI. After loading the sandbox registry the Repo
+// table is populated; focusing a row should reveal the DetailPanel's
+// "本机实例" section listing the realPaths each canonical materialises at.
+// Imported sandbox skills start in-sync, so we expect at least one
+// instance row but NO Pull/Push/Fork buttons (those gate on drifted/missing).
+//
+// focusSkill is a toggle — clicking the currently-focused row unfocuses it.
+// Click the row, then if the detail panel ended up in the empty state, click
+// again to land in the populated state regardless of pre-existing focus.
+const repoFirstRow = page.locator(".repo-table-card .skill-row").first();
+await repoFirstRow.click();
+await page.waitForTimeout(150);
+const emptyDetailCount = await page.locator(".repo-detail-panel .detail-empty").count();
+if (emptyDetailCount > 0) {
+  await repoFirstRow.click();
+  await page.waitForTimeout(150);
+}
+await page.locator(".repo-detail-panel .detail-inline").waitFor({ state: "visible", timeout: 5000 });
+await page.locator(".repo-detail-panel .instances-card").waitFor({ state: "visible", timeout: 5000 });
+const instanceCount = await page.locator(".repo-detail-panel .instances-card .instance-row").count();
+if (instanceCount === 0) {
+  failures.push("Repo DetailPanel instances card should list at least one instance for the focused skill");
+}
+const inSyncBadgeCount = await page.locator(".repo-detail-panel .instances-card .instance-badge-in-sync").count();
+if (inSyncBadgeCount === 0) {
+  failures.push("Sandbox registry instances should report in-sync status after a fresh load");
+}
+// Pull / Push / Fork buttons only render for drifted or missing instances,
+// so a fresh in-sync load should expose zero action buttons. If this
+// regression fires, the action-gating logic is leaking through.
+const syncActionCount = await page.locator(".repo-detail-panel .instances-card .instance-action").count();
+if (syncActionCount > 0) {
+  failures.push(`Sync action buttons should be hidden when all instances are in-sync (got ${syncActionCount})`);
+}
+await screenshot("10b-sync-instances");
+
 // R35-C4: Add Source Directory flow. Verify the modal opens from Overview,
 // keeps the submit button disabled while the form is invalid, rejects a path
 // that doesn't exist on disk (server-side invalid_path), then submits a real

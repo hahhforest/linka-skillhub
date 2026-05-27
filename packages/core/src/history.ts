@@ -53,12 +53,15 @@ const runGitLog = (repoPath: string, relativePath: string): Promise<RawCommit[]>
 // Parse one git subject line into a structured action. Subjects follow the
 // conventions established in R36-C19 / C21 / C22:
 //   import <name> (origin: <agent>)
+//   import <name> (origin: <agent>, restored)   ← C21 re-seed after canonical wipe
 //   pull   <name> (from <agent>)
 //   merge  <name> (<a1> + <a2>[ + ...])
 //   fork   <new>  (from <old>, via <agent>)
-// Anything that doesn't match one of these falls back to action="other" with
-// the raw subject so the user still sees SOMETHING even if a future commit
-// (or a manual git commit) used a free-form message.
+// Agent tokens are matched with [^,)]+ (no commas, no parens) so trailing
+// qualifiers like ", restored" don't get pulled into the agent slot. Anything
+// that doesn't match falls back to action="other" with the raw subject so the
+// user still sees SOMETHING even if a future commit (or a manual git commit)
+// used a free-form message.
 const SUBJECT_PATTERNS: ReadonlyArray<{
   readonly action: SkillHistoryAction;
   readonly regex: RegExp;
@@ -66,12 +69,12 @@ const SUBJECT_PATTERNS: ReadonlyArray<{
 }> = [
   {
     action: "import",
-    regex: /^import\s+(\S+)\s+\(origin:\s+([^)]+)\)$/,
+    regex: /^import\s+(\S+)\s+\(origin:\s+([^,)]+)(?:,\s*restored)?\)$/,
     extract: (m) => ({ name: m[1], agents: [(m[2] ?? "").trim() as AgentKind] })
   },
   {
     action: "pull",
-    regex: /^pull\s+(\S+)\s+\(from\s+([^)]+)\)$/,
+    regex: /^pull\s+(\S+)\s+\(from\s+([^,)]+)\)$/,
     extract: (m) => ({ name: m[1], agents: [(m[2] ?? "").trim() as AgentKind] })
   },
   {
@@ -84,7 +87,7 @@ const SUBJECT_PATTERNS: ReadonlyArray<{
   },
   {
     action: "fork",
-    regex: /^fork\s+(\S+)\s+\(from\s+(\S+),\s+via\s+([^)]+)\)$/,
+    regex: /^fork\s+(\S+)\s+\(from\s+(\S+),\s+via\s+([^,)]+)\)$/,
     extract: (m) => ({ name: m[1], agents: [(m[3] ?? "").trim() as AgentKind] })
   }
 ];

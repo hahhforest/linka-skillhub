@@ -1,4 +1,4 @@
-import type { AgentDefinition, DistributionPlan, DistributionRun, DistributionTarget, RegistryManifest, ReviewResult, SkillHistoryEntry, SkillPackage, SkillScope, SkillSource } from "@linka-skillhub/core";
+import type { AgentDefinition, CanonicalSyncStatus, DistributionPlan, DistributionRun, DistributionTarget, RegistryManifest, ReviewResult, SkillHistoryEntry, SkillPackage, SkillScope, SkillSource, SyncForkResult, SyncPullResult, SyncPushResult } from "@linka-skillhub/core";
 
 export interface ScanResponse {
   readonly skills: SkillPackage[];
@@ -131,5 +131,18 @@ export const api = {
     request<RegistryLoadResponse>("/api/registry/load", { method: "POST", body: JSON.stringify({ repoPath }) }),
   repoStatus: () => request<{ status: string }>("/api/repo/status"),
   repoPush: (message: string) => request<{ commit: string; output: string }>("/api/repo/push", { method: "POST", body: JSON.stringify({ message }) }),
-  repoPull: () => request<{ output: string }>("/api/repo/pull", { method: "POST", body: JSON.stringify({}) })
+  repoPull: () => request<{ output: string }>("/api/repo/pull", { method: "POST", body: JSON.stringify({}) }),
+  // R36-C21: sync subsystem. status reads instances.json + manifest and
+  // returns drift state per canonical; pull/push/fork wrap core/sync.ts.
+  syncStatus: () => request<{ statuses: CanonicalSyncStatus[]; missingRegistry?: boolean }>("/api/sync/status"),
+  syncStatusFor: (name: string) =>
+    request<{ name: string; status: CanonicalSyncStatus | null; missingRegistry?: boolean }>(`/api/skills/${encodeURIComponent(name)}/sync`),
+  syncPull: (name: string, fromAgent: string) =>
+    request<SyncPullResult>("/api/sync/pull", { method: "POST", body: JSON.stringify({ name, fromAgent }) }),
+  syncPush: (name: string, toAgent: string) =>
+    request<SyncPushResult>("/api/sync/push", { method: "POST", body: JSON.stringify({ name, toAgent }) }),
+  syncPushAll: (name: string) =>
+    request<{ name: string; results: SyncPushResult[] }>("/api/sync/push-all", { method: "POST", body: JSON.stringify({ name }) }),
+  syncFork: (name: string, viaAgent: string, newName: string) =>
+    request<SyncForkResult>("/api/sync/fork", { method: "POST", body: JSON.stringify({ name, viaAgent, newName }) })
 };

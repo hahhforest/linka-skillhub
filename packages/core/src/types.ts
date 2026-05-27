@@ -128,6 +128,43 @@ export interface RegistryInstancesIndex {
   readonly byName: Record<string, readonly RegistryInstance[]>;
 }
 
+// R36-C21: aggregated sync state per canonical, computed from the manifest
+// + instances.json on demand. UI / CLI render this; internal sync actions
+// produce it as a side-effect of operations like pull / push.
+export interface CanonicalSyncStatus {
+  readonly name: string;
+  readonly canonicalHash: string;
+  readonly instances: readonly RegistryInstance[];
+  readonly hasDrift: boolean;        // at least one instance hash != canonical
+  readonly hasMissing: boolean;      // at least one instance realPath disappeared
+  readonly isOrphan: boolean;        // zero live instances surfaced this scan
+}
+
+export interface SyncPullResult {
+  readonly name: string;
+  readonly fromAgent: AgentKind;
+  readonly fromRealPath: string;
+  readonly oldHash: string;
+  readonly newHash: string;
+  readonly shortSha: string;          // git commit short sha
+  readonly otherDrifted: readonly string[]; // realPaths now diverging from updated canonical
+}
+
+export interface SyncPushResult {
+  readonly name: string;
+  readonly realPath: string;
+  readonly viaAgents: readonly AgentKind[];
+  readonly newHash: string;
+}
+
+export interface SyncForkResult {
+  readonly newName: string;
+  readonly fromName: string;
+  readonly viaAgent: AgentKind;
+  readonly canonicalDir: string;
+  readonly shortSha: string;
+}
+
 // R36-C20: structured projection of a canonical's git history. Action is
 // derived from the commit subject pattern that registry.ts / sync.ts /
 // merge.ts use; "other" catches anything that doesn't match (e.g. a manual

@@ -12,4 +12,5 @@ export * from "./review.js";
 export * from "./safety.js";
 export * from "./scanner.js";
 export * from "./summary.js";
+export * from "./sync.js";
 export * from "./types.js";

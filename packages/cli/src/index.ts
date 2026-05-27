@@ -5,13 +5,16 @@ import { Command, CommanderError } from "commander";
 import {
   applyDistributionPlan,
   applyFrontmatterFix,
+  computeSyncStatus,
   createDistributionPlan,
   gitCommitAll,
+  gitCommitPaths,
   gitPull,
   gitPush,
   gitStatus,
   importSkillsToRepository,
   loadSkillHubConfig,
+  readInstancesIndex,
   readRegistryManifest,
   readSkillHistory,
   reviewSkillWithAgent,
@@ -19,9 +22,14 @@ import {
   scanSkills,
   setRemote,
   summarizeSkills,
+  syncForkInstance,
+  syncPullFromInstance,
+  syncPushToAllInstances,
+  syncPushToInstance,
   writeRegistryManifest,
   writeReviewResult,
   type AgentKind,
+  type CanonicalSyncStatus,
   type FrontmatterFixResult,
   type ReviewLanguage,
   type ReviewResult,
@@ -939,6 +947,155 @@ const formatRepoStatusHuman = (repoPath: string, raw: string): string => {
   return `${lines.join("\n")}\n`;
 };
 
+// R36-C21: `lsh sync ...` command group. Operates on canonical-per-name +
+// per-realPath instances established in C19. Each canonical-mutating action
+// emits its own git commit so the C20 history view picks it up automatically.
+const formatSyncStatusHuman = (entries: readonly CanonicalSyncStatus[]): string => {
+  if (entries.length === 0) return `${c.dim("Registry is empty — nothing to sync.")}\n`;
+  // Only show canonicals that need attention. An all-in-sync registry would
+  // otherwise be a wall of green checkmarks; we surface drift/missing/orphan
+  // and end with a one-line summary.
+  const interesting = entries.filter((entry) => entry.hasDrift || entry.hasMissing || entry.isOrphan);
+  if (interesting.length === 0) {
+    return `${c.green("All ")}${c.bold(String(entries.length))}${c.green(" canonicals are in sync with their live instances.")}\n`;
+  }
+  const lines: string[] = [];
+  lines.push(`${c.bold("Sync status")} (${interesting.length} of ${entries.length} canonicals need attention)`);
+  lines.push("");
+  for (const entry of interesting) {
+    const tags: string[] = [];
+    if (entry.hasDrift) tags.push(c.yellow("drift"));
+    if (entry.hasMissing) tags.push(c.red("missing"));
+    if (entry.isOrphan) tags.push(c.red("orphan"));
+    lines.push(`${c.bold(entry.name)} ${tags.join(" ")}`);
+    if (entry.instances.length === 0) {
+      lines.push(`  ${c.dim("no live instances")}`);
+    } else {
+      for (const instance of entry.instances) {
+        const statusColor = instance.status === "in-sync" ? c.green : instance.status === "drifted" ? c.yellow : c.red;
+        const agents = instance.viaAgents.join("+");
+        lines.push(`  ${statusColor(instance.status.padEnd(8))} ${c.cyan(agents)} ${c.dim(instance.realPath)}`);
+      }
+    }
+    lines.push("");
+  }
+  lines.push(c.dim(`Run \`lsh sync pull <name> --from <agent>\` to pick an instance's edits as the new canonical,`));
+  lines.push(c.dim(`or \`lsh sync push-all <name>\` to push the canonical out to every drifted instance.`));
+  return `${lines.join("\n")}\n`;
+};
+
+const sync = program.command("sync").description("Inspect and reconcile drift between canonical registry skills and their live instances.");
+sync
+  .command("status")
+  .description("Show which canonicals are drifted, missing, or orphaned across their registered instances.")
+  .option("--repo <path>", "Registry path; defaults to profile registryRepo.")
+  .option("--json", "Print full JSON output instead of the human summary.")
+  .action(async (options: { repo?: string; json?: boolean }) => {
+    const runtime = await loadRuntimeConfig();
+    const repoPath = resolveRepoOption(options.repo, runtime.profile.registryRepo);
+    const manifest = await readRegistryManifest(repoPath);
+    const instances = await readInstancesIndex(repoPath);
+    const statuses = computeSyncStatus(manifest, instances);
+    if (options.json) {
+      printJson({ repoPath, statuses });
+      return;
+    }
+    process.stdout.write(formatSyncStatusHuman(statuses));
+  });
+
+sync
+  .command("pull <name>")
+  .description("Adopt one drifted instance's edits as the new canonical (commits the change to the registry git repo).")
+  .requiredOption("--from <agent>", "agent whose instance to pull from")
+  .option("--repo <path>", "Registry path; defaults to profile registryRepo.")
+  .option("--json", "Print full JSON output instead of the human summary.")
+  .action(async (name: string, options: { from: string; repo?: string; json?: boolean }) => {
+    const runtime = await loadRuntimeConfig();
+    const repoPath = resolveRepoOption(options.repo, runtime.profile.registryRepo);
+    const agent = assertKnownAgent(options.from, "--from");
+    if (!agent) return;
+    const result = await syncPullFromInstance(repoPath, name, agent);
+    if (options.json) {
+      printJson(result);
+      return;
+    }
+    if (result.oldHash === result.newHash) {
+      process.stdout.write(`${c.green("✓")} ${c.bold(name)} is already in sync with ${c.cyan(agent)} — nothing to pull.\n`);
+      return;
+    }
+    process.stdout.write(`${c.green("✓")} Pulled ${c.bold(name)} from ${c.cyan(agent)}\n`);
+    process.stdout.write(`  canonical hash: ${c.dim(result.oldHash.slice(0, 12))} -> ${c.dim(result.newHash.slice(0, 12))}\n`);
+    if (result.shortSha) process.stdout.write(`  commit: ${c.dim(result.shortSha)}\n`);
+    if (result.otherDrifted.length > 0) {
+      process.stdout.write(`\n  ${c.yellow(String(result.otherDrifted.length))} other instance${result.otherDrifted.length === 1 ? "" : "s"} now drift from this canonical.\n`);
+      process.stdout.write(`  Run ${c.cyan(`lsh sync push-all ${name}`)} to fan it out.\n`);
+    }
+  });
+
+sync
+  .command("push <name>")
+  .description("Overwrite a single drifted instance with the current canonical content.")
+  .requiredOption("--to <agent>", "agent whose instance to overwrite")
+  .option("--repo <path>", "Registry path; defaults to profile registryRepo.")
+  .option("--json", "Print full JSON output instead of the human summary.")
+  .action(async (name: string, options: { to: string; repo?: string; json?: boolean }) => {
+    const runtime = await loadRuntimeConfig();
+    const repoPath = resolveRepoOption(options.repo, runtime.profile.registryRepo);
+    const agent = assertKnownAgent(options.to, "--to");
+    if (!agent) return;
+    const result = await syncPushToInstance(repoPath, name, agent);
+    if (options.json) {
+      printJson(result);
+      return;
+    }
+    process.stdout.write(`${c.green("✓")} Pushed ${c.bold(name)} canonical to ${c.cyan(agent)} (${c.dim(result.realPath)})\n`);
+  });
+
+sync
+  .command("push-all <name>")
+  .description("Overwrite every drifted instance with the current canonical content.")
+  .option("--repo <path>", "Registry path; defaults to profile registryRepo.")
+  .option("--json", "Print full JSON output instead of the human summary.")
+  .action(async (name: string, options: { repo?: string; json?: boolean }) => {
+    const runtime = await loadRuntimeConfig();
+    const repoPath = resolveRepoOption(options.repo, runtime.profile.registryRepo);
+    const results = await syncPushToAllInstances(repoPath, name);
+    if (options.json) {
+      printJson({ name, results });
+      return;
+    }
+    if (results.length === 0) {
+      process.stdout.write(`${c.green("✓")} No drifted instances of ${c.bold(name)} to push.\n`);
+      return;
+    }
+    process.stdout.write(`${c.green("✓")} Pushed ${c.bold(name)} canonical to ${c.bold(String(results.length))} instance${results.length === 1 ? "" : "s"}:\n`);
+    for (const result of results) {
+      process.stdout.write(`  ${c.cyan(result.viaAgents.join("+"))} ${c.dim(result.realPath)}\n`);
+    }
+  });
+
+sync
+  .command("fork <name>")
+  .description("Create a new canonical from a drifted instance under a fresh name. The original canonical stays untouched.")
+  .requiredOption("--from-instance <agent>", "agent whose instance to fork from")
+  .requiredOption("--as <new-name>", "new canonical name (matches ^[a-z][a-z0-9-]*$)")
+  .option("--repo <path>", "Registry path; defaults to profile registryRepo.")
+  .option("--json", "Print full JSON output instead of the human summary.")
+  .action(async (name: string, options: { fromInstance: string; as: string; repo?: string; json?: boolean }) => {
+    const runtime = await loadRuntimeConfig();
+    const repoPath = resolveRepoOption(options.repo, runtime.profile.registryRepo);
+    const agent = assertKnownAgent(options.fromInstance, "--from-instance");
+    if (!agent) return;
+    const result = await syncForkInstance(repoPath, name, options.as, agent);
+    if (options.json) {
+      printJson(result);
+      return;
+    }
+    process.stdout.write(`${c.green("✓")} Forked ${c.bold(result.newName)} from ${c.bold(result.fromName)} via ${c.cyan(result.viaAgent)}\n`);
+    process.stdout.write(`  canonical dir: ${c.dim(result.canonicalDir)}\n`);
+    if (result.shortSha) process.stdout.write(`  commit: ${c.dim(result.shortSha)}\n`);
+  });
+
 const repo = program.command("repo").description("Manage the registry Git repository.");
 repo
   .command("status")
@@ -1083,6 +1240,21 @@ fix
       );
       const nextManifest = { ...manifest, skills: updatedSkills, generatedAt: new Date().toISOString() };
       await writeRegistryManifest(repoPath, nextManifest);
+      // R36-C21 (C19 TODO #6): applyFrontmatterFix wrote bytes into
+      // registry/skills/<name>/ in addition to mutating the manifest. Commit
+      // both atomically so `lsh history <name>` shows the autofix as its
+      // own entry instead of the canonical drifting from git silently.
+      try {
+        const canonicalRel = path.relative(repoPath, skill.skillDir);
+        await gitCommitPaths(
+          repoPath,
+          [canonicalRel, path.join("registry", "skills.json")],
+          `pull ${skill.name} (from rules-autofix)`
+        );
+      } catch {
+        // Commit failure (e.g. fix ran outside the registry repo) shouldn't
+        // mask the successful fix. The user's manifest is still correct.
+      }
     }
     if (options.json) {
       printJson({ id, ...fixResult });

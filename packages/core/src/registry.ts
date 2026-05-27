@@ -224,30 +224,33 @@ export const importSkillsToRepository = async (options: ImportOptions): Promise<
     let originScannedAt: string;
     let didCommit = false;
 
-    if (!existing) {
-      // First-time canonical: copy seed's content into the registry tree, git
-      // commit it. Per-skill commit gives `git log -- skills/<name>/` a clean
-      // history line. We only bump the imported counter when the commit
-      // actually happened — a bit-identical recreation hits gitCommitPaths's
-      // empty-status path and returns "", which we treat as a no-op.
+    // R36-C21 (TODO from C19 review): the canonical dir on disk and the
+    // manifest entry can drift apart if a tool wiped registry/skills/<name>/
+    // without removing the manifest record. Treat that as "first-time again":
+    // re-seed from a live scan instance rather than carrying a stale
+    // existing.hash. Origin is preserved from the manifest so we don't lose
+    // the lineage just because someone deleted the directory.
+    const canonicalMissing = existing != null && !(await pathExists(canonicalDir));
+
+    if (!existing || canonicalMissing) {
+      // First-time canonical (or canonical dir was nuked and we're reviving):
+      // copy seed's content, hash it, per-skill git commit.
       await copyCanonicalDir(seed.realPath, canonicalDir);
       canonicalHash = await hashDirectory(canonicalDir);
-      originAgent = seed.source.agent;
+      originAgent = existing?.source.agent ?? seed.source.agent;
       originScannedAt = scannedAt;
-      const sha = await gitCommitPaths(repoPath, [path.relative(repoPath, canonicalDir)], commitMessageImport(name, originAgent));
+      const subject = canonicalMissing
+        ? `import ${name} (origin: ${originAgent}, restored)`
+        : commitMessageImport(name, originAgent);
+      const sha = await gitCommitPaths(repoPath, [path.relative(repoPath, canonicalDir)], subject);
       didCommit = sha !== "";
       if (didCommit) imported += 1;
     } else {
       // Canonical already exists in registry. Keep its content untouched:
       // re-import is NOT a sync — drift resolution belongs to the sync
-      // subsystem (R36-C21). We just refresh the hash from disk in case the
-      // on-disk canonical was edited by a tool outside this code path.
-      // TODO(R36-C21): if pathExists(canonicalDir) returns false here, we
-      // currently fall back to existing.hash (stale). A live scan instance
-      // could re-seed the canonical, but that decision is sync-scope.
-      canonicalHash = await pathExists(canonicalDir)
-        ? await hashDirectory(canonicalDir)
-        : existing.hash;
+      // subsystem. Refresh the hash from disk in case an external tool
+      // edited the canonical directly.
+      canonicalHash = await hashDirectory(canonicalDir);
       originAgent = existing.source.agent;
       originScannedAt = existing.updatedAt;
     }

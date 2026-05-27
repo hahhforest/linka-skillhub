@@ -15,6 +15,7 @@ import {
   gitStatus,
   importSkillsToRepository,
   loadSkillHubConfig,
+  readInstancesIndex,
   readRegistryManifest,
   readSkillHistory,
   reviewSkillWithAgent,
@@ -22,6 +23,11 @@ import {
   scanSkills,
   setRemote,
   summarizeSkills,
+  computeSyncStatus,
+  syncForkInstance,
+  syncPullFromInstance,
+  syncPushToAllInstances,
+  syncPushToInstance,
   validateRegistryPath,
   writeReviewResult,
   type AgentKind,
@@ -39,6 +45,54 @@ const PLAN_TTL_MS = 10 * 60 * 1000;
 // humanizeError on the client can show a localized message per failure mode.
 const VALID_SCOPES: readonly SkillScope[] = ["user", "private", "builtin", "system", "project", "unknown"];
 const AGENT_KIND_PATTERN = /^[a-z][a-z0-9-]*$/;
+// R36-C21: skill names share the same shape as agent kinds (lowercase, dashes,
+// digits) so we reuse the same pattern. The sync subsystem applies it as a
+// hard gate at the HTTP layer; sync.ts re-validates internally for callers
+// that bypass the server.
+const SKILL_NAME_PATTERN = AGENT_KIND_PATTERN;
+
+// Body shape for /api/sync/{pull,push,push-all,fork}. The discriminator
+// fields (`requireAgentField`, `requireNewName`) keep the four endpoints
+// reading from a single validator instead of four near-duplicate `if` chains.
+type SyncBodyValidation =
+  | { ok: true; name: string; agent: AgentKind; newName: string; repoPath: string | undefined }
+  | { ok: false; error: { error: string; code: string } };
+
+const validateSyncBody = (
+  body: { name?: unknown; fromAgent?: unknown; toAgent?: unknown; viaAgent?: unknown; newName?: unknown; repoPath?: unknown },
+  shape: { requireAgentField?: "fromAgent" | "toAgent" | "viaAgent"; requireNewName?: boolean }
+): SyncBodyValidation => {
+  const name = typeof body.name === "string" ? body.name.trim() : "";
+  if (!name) return { ok: false, error: { error: "name is required", code: "missing_name" } };
+  if (!SKILL_NAME_PATTERN.test(name)) {
+    return { ok: false, error: { error: `Invalid skill name '${name}': must match ${SKILL_NAME_PATTERN}.`, code: "invalid_skill_name" } };
+  }
+  let agent = "" as AgentKind;
+  if (shape.requireAgentField) {
+    const raw = body[shape.requireAgentField];
+    const candidate = typeof raw === "string" ? raw.trim() : "";
+    if (!candidate) {
+      return { ok: false, error: { error: `${shape.requireAgentField} is required`, code: "missing_agent" } };
+    }
+    if (!AGENT_KIND_PATTERN.test(candidate)) {
+      return { ok: false, error: { error: `Invalid ${shape.requireAgentField} '${candidate}': must match ${AGENT_KIND_PATTERN}.`, code: "invalid_agent_kind" } };
+    }
+    agent = candidate as AgentKind;
+  }
+  let newName = "";
+  if (shape.requireNewName) {
+    const candidate = typeof body.newName === "string" ? body.newName.trim() : "";
+    if (!candidate) {
+      return { ok: false, error: { error: "newName is required", code: "missing_new_name" } };
+    }
+    if (!SKILL_NAME_PATTERN.test(candidate)) {
+      return { ok: false, error: { error: `Invalid newName '${candidate}': must match ${SKILL_NAME_PATTERN}.`, code: "invalid_skill_name" } };
+    }
+    newName = candidate;
+  }
+  const repoPath = typeof body.repoPath === "string" && body.repoPath.trim().length > 0 ? body.repoPath : undefined;
+  return { ok: true, name, agent, newName, repoPath };
+};
 
 interface ServerOptions {
   readonly port: number;
@@ -401,6 +455,78 @@ export const startServer = (options: ServerOptions): http.Server => {
         const registryPath = resolveRepoPath(url.searchParams.get("repo") ?? undefined);
         const entries = await readSkillHistory(registryPath, name);
         sendJson(response, 200, { name, entries });
+        return;
+      }
+
+      // R36-C21: sync subsystem endpoints. status reads instances.json +
+      // manifest and returns CanonicalSyncStatus[]; pull/push/fork mutate the
+      // canonical via core/sync.ts and return the same shape the UI surfaces.
+      // All mutations land their own git commit (`pull <name> (from <agent>)`,
+      // `fork <new> (from <old>, via <agent>)`) so C20's history view picks
+      // them up automatically.
+      if (request.method === "GET" && url.pathname === "/api/sync/status") {
+        const repoPathArg = resolveRepoPath(url.searchParams.get("repo") ?? undefined);
+        try {
+          const manifest = await readRegistryManifest(repoPathArg);
+          const instances = await readInstancesIndex(repoPathArg);
+          const statuses = computeSyncStatus(manifest, instances);
+          sendJson(response, 200, { statuses });
+        } catch {
+          sendJson(response, 200, { statuses: [], missingRegistry: true });
+        }
+        return;
+      }
+      // Per-skill projection of the same data — saves the DetailPanel from
+      // fetching the whole list on every focus change.
+      const perSkillSyncMatch = request.method === "GET" && url.pathname.match(/^\/api\/skills\/([^/]+)\/sync$/);
+      if (perSkillSyncMatch) {
+        const name = decodeURIComponent(perSkillSyncMatch[1] ?? "");
+        const repoPathArg = resolveRepoPath(url.searchParams.get("repo") ?? undefined);
+        try {
+          const manifest = await readRegistryManifest(repoPathArg);
+          const instances = await readInstancesIndex(repoPathArg);
+          const all = computeSyncStatus(manifest, instances);
+          const entry = all.find((status) => status.name === name) ?? null;
+          sendJson(response, 200, { name, status: entry });
+        } catch {
+          sendJson(response, 200, { name, status: null, missingRegistry: true });
+        }
+        return;
+      }
+      if (request.method === "POST" && url.pathname === "/api/sync/pull") {
+        const body = await readJsonBody<{ name?: unknown; fromAgent?: unknown; repoPath?: unknown }>(request);
+        const validation = validateSyncBody(body, { requireAgentField: "fromAgent" });
+        if (!validation.ok) { sendJson(response, 400, validation.error); return; }
+        const repoPathArg = resolveRepoPath(validation.repoPath);
+        const result = await syncPullFromInstance(repoPathArg, validation.name, validation.agent);
+        sendJson(response, 200, result);
+        return;
+      }
+      if (request.method === "POST" && url.pathname === "/api/sync/push") {
+        const body = await readJsonBody<{ name?: unknown; toAgent?: unknown; repoPath?: unknown }>(request);
+        const validation = validateSyncBody(body, { requireAgentField: "toAgent" });
+        if (!validation.ok) { sendJson(response, 400, validation.error); return; }
+        const repoPathArg = resolveRepoPath(validation.repoPath);
+        const result = await syncPushToInstance(repoPathArg, validation.name, validation.agent);
+        sendJson(response, 200, result);
+        return;
+      }
+      if (request.method === "POST" && url.pathname === "/api/sync/push-all") {
+        const body = await readJsonBody<{ name?: unknown; repoPath?: unknown }>(request);
+        const validation = validateSyncBody(body, {});
+        if (!validation.ok) { sendJson(response, 400, validation.error); return; }
+        const repoPathArg = resolveRepoPath(validation.repoPath);
+        const results = await syncPushToAllInstances(repoPathArg, validation.name);
+        sendJson(response, 200, { name: validation.name, results });
+        return;
+      }
+      if (request.method === "POST" && url.pathname === "/api/sync/fork") {
+        const body = await readJsonBody<{ name?: unknown; viaAgent?: unknown; newName?: unknown; repoPath?: unknown }>(request);
+        const validation = validateSyncBody(body, { requireAgentField: "viaAgent", requireNewName: true });
+        if (!validation.ok) { sendJson(response, 400, validation.error); return; }
+        const repoPathArg = resolveRepoPath(validation.repoPath);
+        const result = await syncForkInstance(repoPathArg, validation.name, validation.newName, validation.agent);
+        sendJson(response, 200, result);
         return;
       }
 

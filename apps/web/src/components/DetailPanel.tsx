@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
-import { PackageCheck } from "lucide-react";
-import type { SkillHistoryEntry, SkillPackage } from "@linka-skillhub/core";
+import { ArrowDownToLine, ArrowUpFromLine, GitFork, PackageCheck } from "lucide-react";
+import type { CanonicalSyncStatus, RegistryInstance, SkillHistoryEntry, SkillPackage } from "@linka-skillhub/core";
 import { api } from "../api.js";
+import { humanizeError } from "../humanize-error.js";
 import { messages, type Language } from "../i18n.js";
 import { AgentLogo, agentTone, bucketLabel, statusClass } from "./skillVisuals.js";
 
@@ -76,18 +77,112 @@ export function DetailPanel({ skill, lang, emptyTextKey }: DetailPanelProps): JS
   // there"; null = "haven't fetched yet / loading"; the rendering
   // differentiates between the two so we don't flash "no history" briefly.
   const [history, setHistory] = useState<SkillHistoryEntry[] | null>(null);
+  // R36-C21: drift state for this canonical. Same lazy-fetch pattern as
+  // history. Re-fetched after any sync action so the UI reflects the new
+  // hash + per-instance status without a full page reload.
+  const [sync, setSync] = useState<CanonicalSyncStatus | null>(null);
+  const [syncBusy, setSyncBusy] = useState(false);
+  const [syncMessage, setSyncMessage] = useState<string>("");
+  const refreshSync = (name: string): Promise<void> =>
+    api.syncStatusFor(name)
+      .then((result) => { setSync(result.status); })
+      .catch(() => { setSync(null); });
+  const refreshHistory = (name: string): Promise<void> =>
+    api.skillHistory(name)
+      .then((result) => { setHistory(result.entries); })
+      .catch(() => { setHistory([]); });
   useEffect(() => {
     if (!skill) {
       setHistory(null);
+      setSync(null);
+      setSyncMessage("");
       return;
     }
     let cancelled = false;
     setHistory(null);
+    setSync(null);
+    setSyncMessage("");
     api.skillHistory(skill.name)
       .then((result) => { if (!cancelled) setHistory(result.entries); })
       .catch(() => { if (!cancelled) setHistory([]); });
+    api.syncStatusFor(skill.name)
+      .then((result) => { if (!cancelled) setSync(result.status); })
+      .catch(() => { if (!cancelled) setSync(null); });
     return () => { cancelled = true; };
   }, [skill?.name]);
+
+  // Each sync action refreshes BOTH history (a new commit landed) and the
+  // sync state (canonical hash + per-instance status changed). Errors are
+  // surfaced inline; we don't throw past the click handler.
+  const runSyncAction = async (action: () => Promise<string>): Promise<void> => {
+    if (!skill || syncBusy) return;
+    setSyncBusy(true);
+    setSyncMessage("");
+    try {
+      const message = await action();
+      await Promise.all([refreshSync(skill.name), refreshHistory(skill.name)]);
+      setSyncMessage(message);
+    } catch (error) {
+      setSyncMessage(humanizeError(error, lang));
+    } finally {
+      setSyncBusy(false);
+    }
+  };
+
+  const handlePull = (instance: RegistryInstance) =>
+    runSyncAction(async () => {
+      const agent = instance.viaAgents[0]!;
+      const result = await api.syncPull(skill!.name, agent);
+      if (result.oldHash === result.newHash) {
+        return t.syncDoneAlreadyInSync
+          .replace("{name}", result.name)
+          .replace("{agent}", agentTone[agent]?.label ?? agent);
+      }
+      return t.syncDonePulled
+        .replace("{name}", result.name)
+        .replace("{agent}", agentTone[agent]?.label ?? agent)
+        .replace("{count}", String(result.otherDrifted.length));
+    });
+
+  const handlePush = (instance: RegistryInstance) =>
+    runSyncAction(async () => {
+      const agent = instance.viaAgents[0]!;
+      const result = await api.syncPush(skill!.name, agent);
+      return t.syncDonePushed
+        .replace("{name}", result.name)
+        .replace("{agent}", agentTone[agent]?.label ?? agent);
+    });
+
+  const handlePushAll = () =>
+    runSyncAction(async () => {
+      const result = await api.syncPushAll(skill!.name);
+      if (result.results.length === 0) {
+        return t.syncDoneNothing.replace("{name}", result.name);
+      }
+      return t.syncDonePushAll
+        .replace("{name}", result.name)
+        .replace("{count}", String(result.results.length));
+    });
+
+  const handleFork = (instance: RegistryInstance) => {
+    // Use a native prompt for the fork name — keeps C21 scope tight; a
+    // proper dialog would belong with the merge UI in C22. Empty or invalid
+    // input simply aborts after surfacing a message.
+    const proposed = window.prompt(`${t.syncForkPromptTitle}\n\n${t.syncForkPromptBody}`, `${skill!.name}-fork`);
+    if (proposed == null) return;
+    const newName = proposed.trim();
+    if (!/^[a-z][a-z0-9-]*$/.test(newName)) {
+      setSyncMessage(t.syncForkInvalidName);
+      return;
+    }
+    void runSyncAction(async () => {
+      const agent = instance.viaAgents[0]!;
+      const result = await api.syncFork(skill!.name, agent, newName);
+      return t.syncDoneForked
+        .replace("{name}", result.newName)
+        .replace("{agent}", agentTone[agent]?.label ?? agent);
+    });
+  };
 
   if (!skill) {
     const emptyText = emptyTextKey ? t[emptyTextKey] : t.selectSkillToInspect;
@@ -117,6 +212,99 @@ export function DetailPanel({ skill, lang, emptyTextKey }: DetailPanelProps): JS
           <dt>{t.hash}</dt>
           <dd><code>{skill.hash.slice(0, 16)}</code></dd>
         </dl>
+      </div>
+      <div className="work-card instances-card">
+        <div className="instances-head">
+          <h3>{t.instancesTitle}</h3>
+          {sync && (sync.hasDrift || sync.hasMissing) && (
+            <button
+              type="button"
+              className="ghost instances-push-all"
+              onClick={handlePushAll}
+              disabled={syncBusy}
+              title={t.syncActionPushAll}
+            >
+              <ArrowUpFromLine size={14} />
+              {t.syncActionPushAll}
+            </button>
+          )}
+        </div>
+        {sync === null && <p className="muted-copy">{t.historyLoading}</p>}
+        {sync && sync.instances.length === 0 && (
+          <p className="muted-copy">{t.instancesEmpty}</p>
+        )}
+        {sync && sync.instances.length > 0 && (
+          <ul className="instance-list">
+            {sync.instances.map((instance) => {
+              // R36-C21: action-button gating mirrors the CLI:
+              //   in-sync → no buttons (nothing to reconcile)
+              //   drifted → pull / fork (consume the edits) + push (discard them)
+              //   missing → push only (re-materialise canonical at realPath)
+              const statusLabel =
+                instance.status === "in-sync" ? t.instanceStatusInSync :
+                instance.status === "drifted" ? t.instanceStatusDrifted :
+                t.instanceStatusMissing;
+              return (
+                <li
+                  key={instance.realPath}
+                  className={`instance-row instance-status-${instance.status}`}
+                >
+                  <div className="instance-row-top">
+                    <span className={`instance-badge instance-badge-${instance.status}`}>
+                      {statusLabel}
+                    </span>
+                    <div className="instance-agents">
+                      {instance.viaAgents.map((agent) => (
+                        <AgentLogo key={agent} agent={agent} />
+                      ))}
+                    </div>
+                  </div>
+                  <code className="instance-path">{instance.realPath}</code>
+                  {(instance.status === "drifted" || instance.status === "missing") && (
+                    <div className="instance-actions">
+                      {instance.status === "drifted" && (
+                        <button
+                          type="button"
+                          className="ghost instance-action"
+                          onClick={() => handlePull(instance)}
+                          disabled={syncBusy}
+                          title={t.syncActionPull}
+                        >
+                          <ArrowDownToLine size={14} />
+                          {t.syncActionPull}
+                        </button>
+                      )}
+                      {instance.status === "drifted" && (
+                        <button
+                          type="button"
+                          className="ghost instance-action"
+                          onClick={() => handleFork(instance)}
+                          disabled={syncBusy}
+                          title={t.syncActionFork}
+                        >
+                          <GitFork size={14} />
+                          {t.syncActionFork}
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        className="ghost instance-action"
+                        onClick={() => handlePush(instance)}
+                        disabled={syncBusy}
+                        title={t.syncActionPush}
+                      >
+                        <ArrowUpFromLine size={14} />
+                        {t.syncActionPush}
+                      </button>
+                    </div>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        )}
+        {syncBusy && <p className="muted-copy sync-busy">{t.syncRunning}</p>}
+        {syncMessage && !syncBusy && <p className="sync-message">{syncMessage}</p>}
       </div>
       <div className="work-card history-card">
         <h3>{t.historyTitle}</h3>
