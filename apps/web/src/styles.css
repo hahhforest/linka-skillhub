@@ -1156,6 +1156,88 @@ textarea:focus-visible {
   font-weight: var(--fw-medium);
 }
 .path-card { padding: var(--sp-3) var(--sp-4); }
+
+/* R36-C20: skill history timeline. Vertical track with dotted spine, each
+   entry has a small colored marker (color = action) + action label, agent
+   chips, and a timestamp. Keeps git syntax completely hidden — the user sees
+   "首次导入 · 源自 Mavis" with the Mavis logo chip, never "import lark-mail
+   (origin: mavis)". */
+.history-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+.history-timeline {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  max-height: 360px;
+  overflow-y: auto;
+}
+.history-entry {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr);
+  gap: var(--sp-2);
+  align-items: start;
+  position: relative;
+}
+.history-entry:not(:last-child)::after {
+  content: "";
+  position: absolute;
+  left: 7px;
+  top: 18px;
+  bottom: calc(-1 * var(--sp-3));
+  width: 1px;
+  background: var(--border);
+}
+.history-marker {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  margin-top: 4px;
+  background: var(--muted);
+  flex-shrink: 0;
+}
+.history-action-import .history-marker { background: var(--primary); }
+.history-action-pull   .history-marker { background: var(--accent); }
+.history-action-merge  .history-marker { background: var(--success); }
+.history-action-fork   .history-marker { background: var(--warning); }
+.history-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  min-width: 0;
+}
+.history-row-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: var(--sp-2);
+}
+.history-action {
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-medium);
+  color: var(--text);
+}
+.history-ts {
+  font-size: var(--fs-xs);
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+}
+.history-detail {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-1);
+  font-size: var(--fs-xs);
+  color: var(--muted);
+  flex-wrap: wrap;
+}
+.history-detail .agent-logo { width: 16px; height: 16px; font-size: 8px; }
+.history-detail .agent-logo.agent-image img { width: 16px; height: 16px; }
 .path-card h3 {
   font-size: var(--fs-sm);
   color: var(--muted);

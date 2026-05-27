@@ -128,6 +128,22 @@ export interface RegistryInstancesIndex {
   readonly byName: Record<string, readonly RegistryInstance[]>;
 }
 
+// R36-C20: structured projection of a canonical's git history. Action is
+// derived from the commit subject pattern that registry.ts / sync.ts /
+// merge.ts use; "other" catches anything that doesn't match (e.g. a manual
+// git commit outside our flows). Consumers (CLI table, WebUI timeline) render
+// this directly — they never see the raw git subject unless action == "other"
+// in which case rawSubject is the safe fallback.
+export type SkillHistoryAction = "import" | "pull" | "merge" | "fork" | "other";
+
+export interface SkillHistoryEntry {
+  readonly shortSha: string;
+  readonly ts: string;                 // ISO 8601
+  readonly action: SkillHistoryAction;
+  readonly agents: readonly AgentKind[]; // origin for import; sources for pull/merge; via-agent for fork
+  readonly rawSubject: string;          // shown only when action == "other"
+}
+
 export interface ImportResult {
   readonly repoPath: string;
   readonly manifestPath: string;

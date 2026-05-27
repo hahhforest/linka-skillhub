@@ -13,6 +13,7 @@ import {
   importSkillsToRepository,
   loadSkillHubConfig,
   readRegistryManifest,
+  readSkillHistory,
   reviewSkillWithAgent,
   reviewSkillWithRules,
   scanSkills,
@@ -24,6 +25,7 @@ import {
   type FrontmatterFixResult,
   type ReviewLanguage,
   type ReviewResult,
+  type SkillHistoryEntry,
   type SkillPackage
 } from "@linka-skillhub/core";
 import { defaultRepoPath, startServer } from "./server.js";
@@ -244,7 +246,6 @@ const formatRegistryShowHuman = (skill: SkillPackage): string => {
   lines.push(`${c.cyan("Source:")}  ${skill.source.agent}/${skill.source.scope}`);
   lines.push(`${c.cyan("Path:")}    ${c.dim(c.gray(skill.skillDir))}`);
   lines.push(`${c.cyan("Hash:")}    ${c.dim(c.gray(skill.hash.slice(0, 16)))}`);
-  lines.push(`${c.cyan("Variant:")} ${skill.variantId}`);
   lines.push(`${c.cyan("Updated:")} ${skill.updatedAt}`);
   if (skill.auto_fixed === true) lines.push(`${c.cyan("Auto-fixed:")} yes`);
   const issuesText =
@@ -252,6 +253,78 @@ const formatRegistryShowHuman = (skill: SkillPackage): string => {
       ? "(none)"
       : skill.issues.map((issue) => c.red(`${issue.code}: ${issue.message}`)).join("; ");
   lines.push(`${c.cyan("Issues:")}  ${issuesText}`);
+  return `${lines.join("\n")}\n`;
+};
+
+// R36-C20: pretty-print parsed skill history. We never print the raw git
+// subject for our known actions — the action label + agent list is the whole
+// human story. The fallback "other" branch still shows the raw subject so
+// nothing is silently dropped. Columns: ts | action | detail.
+const HISTORY_ACTION_LABEL: Record<ReviewLanguage, Record<SkillHistoryEntry["action"], string>> = {
+  zh: {
+    import: "首次导入",
+    pull:   "拉取本地改动",
+    merge:  "合并多端改动",
+    fork:   "分叉新建",
+    other:  "其他变更"
+  },
+  en: {
+    import: "Initial import",
+    pull:   "Pulled local edits",
+    merge:  "Merged divergent edits",
+    fork:   "Forked",
+    other:  "Other change"
+  }
+};
+
+const HISTORY_HEADERS: Record<ReviewLanguage, { ts: string; action: string; detail: string; empty: string }> = {
+  zh: { ts: "时间", action: "动作", detail: "详情", empty: "(暂无修改记录)" },
+  en: { ts: "Time", action: "Action", detail: "Detail", empty: "(no recorded changes)" }
+};
+
+// CJK characters render at width 2 in monospace terminals while String.length
+// counts them as 1. padEnd uses the .length count, so a row mixing "首次导入"
+// (4 chars / 8 cells) and "拉取本地改动" (6 chars / 12 cells) lands at
+// different visual columns and the table looks staggered. countCells gives
+// us the true terminal width; padCells pads to that.
+const CJK_RE = /[ᄀ-ᅟ⺀-꓏가-힣豈-﫿︰-﹏＀-｠￠-￦]/;
+const countCells = (str: string): number => {
+  let cells = 0;
+  for (const ch of str) cells += CJK_RE.test(ch) ? 2 : 1;
+  return cells;
+};
+const padCells = (str: string, width: number): string => {
+  const diff = width - countCells(str);
+  return diff > 0 ? str + " ".repeat(diff) : str;
+};
+
+const formatHistoryHuman = (name: string, entries: readonly SkillHistoryEntry[], lang: ReviewLanguage = "zh"): string => {
+  const headers = HISTORY_HEADERS[lang];
+  const labels = HISTORY_ACTION_LABEL[lang];
+  if (entries.length === 0) {
+    return `${c.bold(name)}\n\n${c.dim(headers.empty)}\n`;
+  }
+  const tsCol = 18;
+  // Widest label cell count (CJK-aware) + 2 spaces breathing room.
+  const actionCol = Math.max(...Object.values(labels).map((label) => countCells(label))) + 4;
+  const lines: string[] = [];
+  lines.push(c.bold(name));
+  lines.push("");
+  lines.push(`${c.dim(padCells(headers.ts, tsCol))}${c.dim(padCells(headers.action, actionCol))}${c.dim(headers.detail)}`);
+  lines.push(c.dim("─".repeat(tsCol + actionCol + 30)));
+  for (const entry of entries) {
+    const date = new Date(entry.ts);
+    const ts = Number.isNaN(date.getTime())
+      ? entry.ts
+      : `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")} ${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
+    const label = labels[entry.action];
+    const detail = entry.action === "other"
+      ? entry.rawSubject
+      : entry.agents.length > 0
+        ? entry.agents.join(" + ")
+        : "-";
+    lines.push(`${padCells(ts, tsCol)}${c.cyan(padCells(label, actionCol))}${detail}`);
+  }
   return `${lines.join("\n")}\n`;
 };
 
@@ -538,6 +611,28 @@ registry
       return;
     }
     process.stdout.write(formatRegistryShowHuman(skill));
+  });
+
+// R36-C20: `lsh history <name>` — readable change log for one canonical.
+// Internally parses `git log --pretty=...` of registry/skills/<name>/ via
+// readSkillHistory(); the user sees a tidy table (时间 / 动作 / 详情) and
+// never raw git syntax.
+program
+  .command("history <name>")
+  .description("Show the change history for a registry skill (parsed from git log, formatted for humans).")
+  .option("--repo <path>", "Registry path; defaults to profile registryRepo.")
+  .option("--lang <lang>", "zh | en", "zh")
+  .option("--json", "Print full JSON output instead of the human summary.")
+  .action(async (name: string, options: { repo?: string; lang?: string; json?: boolean }) => {
+    const runtime = await loadRuntimeConfig();
+    const repoPath = resolveRepoOption(options.repo, runtime.profile.registryRepo);
+    const lang: ReviewLanguage = options.lang === "en" ? "en" : "zh";
+    const entries = await readSkillHistory(repoPath, name);
+    if (options.json) {
+      printJson({ repoPath, name, entries });
+      return;
+    }
+    process.stdout.write(formatHistoryHuman(name, entries, lang));
   });
 
 program

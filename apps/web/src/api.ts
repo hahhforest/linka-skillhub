@@ -1,4 +1,4 @@
-import type { AgentDefinition, DistributionPlan, DistributionRun, DistributionTarget, RegistryManifest, ReviewResult, SkillPackage, SkillScope, SkillSource } from "@linka-skillhub/core";
+import type { AgentDefinition, DistributionPlan, DistributionRun, DistributionTarget, RegistryManifest, ReviewResult, SkillHistoryEntry, SkillPackage, SkillScope, SkillSource } from "@linka-skillhub/core";
 
 export interface ScanResponse {
   readonly skills: SkillPackage[];
@@ -110,6 +110,9 @@ export const api = {
   scan: (includeDefaultExcluded = true) => request<ScanResponse>("/api/scan", { method: "POST", body: JSON.stringify({ includeDefaultExcluded }) }),
   import: (repoPath?: string) => request<{ manifest: RegistryManifest; imported: number; skipped: number; repoPath: string }>("/api/import", { method: "POST", body: JSON.stringify({ repoPath }) }),
   skills: () => request<ScanResponse>("/api/skills"),
+  // R36-C20: fetch parsed git history for one canonical (action/agents/ts).
+  // Server returns [] gracefully for unknown names or repos with no git log.
+  skillHistory: (name: string) => request<{ name: string; entries: SkillHistoryEntry[] }>(`/api/skills/${encodeURIComponent(name)}/history`),
   reviewers: () => request<{ reviewers: ReviewerInfo[] }>("/api/reviewers"),
   review: (skillIds: string[], reviewer: string, language: "zh" | "en") => request<{ reviews: ReviewResult[] }>("/api/reviews/run", { method: "POST", body: JSON.stringify({ skillIds, reviewer, language }) }),
   addSource: (payload: AddSourcePayload) => request<AddSourceResponse>("/api/sources", { method: "POST", body: JSON.stringify(payload) }),

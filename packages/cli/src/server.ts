@@ -16,6 +16,7 @@ import {
   importSkillsToRepository,
   loadSkillHubConfig,
   readRegistryManifest,
+  readSkillHistory,
   reviewSkillWithAgent,
   reviewSkillWithRules,
   scanSkills,
@@ -386,6 +387,20 @@ export const startServer = (options: ServerOptions): http.Server => {
         } catch {
           sendJson(response, 200, { skills: [], summary: summarize([]), missingRegistry: true });
         }
+        return;
+      }
+
+      // R36-C20: structured projection of `git log` for one canonical. The
+      // server runs the git command in the registry repo; the parser turns
+      // each commit subject into action/agents/ts. UI never receives the
+      // raw subject for non-"other" actions, so the rendering layer stays a
+      // pure projection of the parsed data.
+      const historyMatch = request.method === "GET" && url.pathname.match(/^\/api\/skills\/([^/]+)\/history$/);
+      if (historyMatch) {
+        const name = decodeURIComponent(historyMatch[1] ?? "");
+        const registryPath = resolveRepoPath(url.searchParams.get("repo") ?? undefined);
+        const entries = await readSkillHistory(registryPath, name);
+        sendJson(response, 200, { name, entries });
         return;
       }
 
