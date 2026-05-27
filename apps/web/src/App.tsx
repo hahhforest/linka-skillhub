@@ -25,6 +25,7 @@ import { AddSourceDialog } from "./components/AddSourceDialog.js";
 import { ConfirmPlanModal } from "./components/ConfirmPlanModal.js";
 import { useModalFocusTrap } from "./components/useModalFocusTrap.js";
 import { AgentLogo, agentTone, scopeLabel } from "./components/skillVisuals.js";
+import { AgentSelect } from "./components/AgentSelect.js";
 import { SkillTable } from "./components/SkillTable.js";
 import { DetailPanel } from "./components/DetailPanel.js";
 import { RepoBrowser } from "./components/RepoBrowser.js";
@@ -235,13 +236,19 @@ function Overview({ skills, focusedSkillId, focusSkill, lang, totalSkillCount, a
   const focusedHidden = focusedSkill ? !displayedSkills.some((skill) => skill.id === focusedSkill.id) : false;
 
   const agentDropdown = (
-    <label className="overview-agent-filter">
+    <div className="overview-agent-filter">
       <span className="overview-agent-filter-label">{t.overviewAgentFilterLabel}</span>
-      <select value={overviewAgentFilter} onChange={(event) => setOverviewAgentFilter(event.target.value)}>
-        <option value="all">{t.allSources}</option>
-        {agents.map((agent) => <option key={agent.kind} value={agent.kind}>{agentTone[agent.kind]?.label ?? agent.label}</option>)}
-      </select>
-    </label>
+      <AgentSelect
+        value={overviewAgentFilter}
+        onChange={setOverviewAgentFilter}
+        ariaLabel={t.overviewAgentFilterLabel}
+        className="is-compact"
+        options={[
+          { value: "all", label: t.allSources },
+          ...agents.map((agent) => ({ value: agent.kind, label: agentTone[agent.kind]?.label ?? agent.label }))
+        ]}
+      />
+    </div>
   );
 
   if (totalSkillCount === 0) {
@@ -701,9 +708,19 @@ function Intersect({ skills, allSkills, targets, lang, plan, onPlan, onApply, ag
       <div className="section-head">
         <div><h2>{t.navIntersect}</h2><p>{t.intersectDesc}</p></div>
         <div className="agent-selects">
-          <select value={from} onChange={(event) => handleFromChange(event.target.value)}>{agents.map((agent) => <option key={agent} value={agent}>{agentTone[agent]?.label}</option>)}</select>
+          <AgentSelect
+            value={from}
+            onChange={handleFromChange}
+            ariaLabel={t.intersectDesc}
+            options={agentDefs.map((agent) => ({ value: agent.kind, label: agentTone[agent.kind]?.label ?? agent.label }))}
+          />
           <ArrowRight size={18} />
-          <select value={to} onChange={(event) => setTo(event.target.value)}>{agents.map((agent) => <option key={agent} value={agent} disabled={agent === from}>{agentTone[agent]?.label}</option>)}</select>
+          <AgentSelect
+            value={to}
+            onChange={setTo}
+            ariaLabel={t.intersectDesc}
+            options={agentDefs.map((agent) => ({ value: agent.kind, label: agentTone[agent.kind]?.label ?? agent.label, disabled: agent.kind === from }))}
+          />
         </div>
       </div>
       <div className="intersect-body">

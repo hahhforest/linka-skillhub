@@ -40,7 +40,12 @@ const allTotal = await page.locator(".stat-card strong").first().innerText();
 // R34 commit 2: agent filtering is now an Overview header dropdown, not a
 // clickable sidebar legend. Pick Mavis from the select and confirm the table
 // + cards narrow accordingly.
-await page.locator(".overview-agent-filter select").selectOption("mavis");
+// R35-C11: the dropdown is now a custom AgentSelect (button + popover) so the
+// logo can render next to each label; selectOption() doesn't work — click the
+// trigger, then click the option row.
+await page.locator(".overview-agent-filter .agent-select-button").click();
+await page.waitForSelector(".agent-select-popover", { state: "visible", timeout: 3000 });
+await page.locator(".agent-select-popover .agent-select-option").filter({ hasText: "Mavis" }).first().click();
 await page.waitForTimeout(200);
 await screenshot("04-mavis-filter");
 const mavisTotal = await page.locator(".stat-card strong").first().innerText();
@@ -51,8 +56,12 @@ await expectText("当前范围: Mavis", "Mavis scope label");
 const legacyAgentFilters = await page.locator(".sidebar .agent-filter").count();
 if (legacyAgentFilters > 0) failures.push(`Sidebar still renders ${legacyAgentFilters} agent-filter buttons`);
 // Reset for the rest of the flow so subsequent assertions see the full set.
-await page.locator(".overview-agent-filter select").selectOption("all");
+// R35-C11: popover-based AgentSelect — click trigger to open, then click the
+// "全部来源" row. Force a state reset with a slight pause so React commits.
+await page.locator(".overview-agent-filter .agent-select-button").click({ force: true });
 await page.waitForTimeout(150);
+await page.locator(".overview-agent-filter .agent-select-popover .agent-select-option").filter({ hasText: "全部来源" }).first().click({ force: true });
+await page.waitForTimeout(200);
 
 await page.getByRole("button", { name: /仓库管理/ }).click();
 // R34 commit 5: RepoBrowser replaces RepoView. Verify the new meta bar, the

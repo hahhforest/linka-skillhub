@@ -15,6 +15,7 @@ import { messages, type Language } from "../i18n.js";
 import { DetailPanel } from "./DetailPanel.js";
 import { SkillTable } from "./SkillTable.js";
 import { agentTone } from "./skillVisuals.js";
+import { AgentSelect } from "./AgentSelect.js";
 import { LoadRegistryDialog } from "./LoadRegistryDialog.js";
 import { ImportConfirmDialog } from "./ImportConfirmDialog.js";
 
@@ -206,15 +207,19 @@ export function RepoBrowser({
               <h3>{t.registryBrowserTitle}<span className="title-count">{tableCount}</span></h3>
               <p>{t.registryBrowserHint}</p>
             </div>
-            <label className="overview-agent-filter">
+            <div className="overview-agent-filter">
               <span className="overview-agent-filter-label">{t.overviewAgentFilterLabel}</span>
-              <select value={agentFilter} onChange={(event) => setAgentFilter(event.target.value)}>
-                <option value="all">{t.allSources}</option>
-                {agents.map((agent) => (
-                  <option key={agent.kind} value={agent.kind}>{agentTone[agent.kind]?.label ?? agent.label}</option>
-                ))}
-              </select>
-            </label>
+              <AgentSelect
+                value={agentFilter}
+                onChange={setAgentFilter}
+                ariaLabel={t.overviewAgentFilterLabel}
+                className="is-compact"
+                options={[
+                  { value: "all", label: t.allSources },
+                  ...agents.map((agent) => ({ value: agent.kind, label: agentTone[agent.kind]?.label ?? agent.label }))
+                ]}
+              />
+            </div>
           </div>
           {isEmpty ? (
             <div className="skill-table-empty muted-copy">

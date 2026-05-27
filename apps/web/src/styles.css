@@ -553,6 +553,89 @@ textarea:focus-visible {
 .dot.bad { background: var(--danger); }
 .dot.other { background: #cbd5e1; }
 
+/* R35-C11: AgentSelect — a button + popover dropdown that can render an
+   AgentLogo (PNG / color avatar) next to each option's label. Replaces the
+   four HTML <select> sites where text-only options were inconsistent with
+   the rest of the UI's agent chips. The trigger button takes the parent's
+   sizing cues (height + font-size inherited from the surrounding control
+   slot), so the same component works inside Overview's small header slot
+   AND Intersect's bigger inline pair without per-site styling. */
+.agent-select {
+  position: relative;
+  display: inline-block;
+}
+.agent-select-button {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  height: var(--ctrl-md);
+  padding: 0 var(--sp-2) 0 var(--sp-2);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  color: var(--text);
+  font-size: var(--fs-sm);
+  cursor: pointer;
+  transition: border-color var(--t-fast), background var(--t-fast);
+}
+.agent-select-button:hover { border-color: var(--primary); }
+.agent-select-button:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 1px;
+}
+.agent-select-button .agent-logo {
+  width: 18px;
+  height: 18px;
+  font-size: 9px;
+}
+.agent-select-button .agent-logo.agent-image img { width: 18px; height: 18px; }
+.agent-select-label {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 180px;
+}
+.agent-select-chevron { color: var(--muted); flex-shrink: 0; }
+.agent-select-popover {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  min-width: 100%;
+  max-height: 320px;
+  overflow-y: auto;
+  margin: 0;
+  padding: var(--sp-1) 0;
+  list-style: none;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  box-shadow: var(--shadow-pop);
+  z-index: 20;
+}
+.agent-select-option {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-2) var(--sp-3);
+  font-size: var(--fs-sm);
+  color: var(--text);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.agent-select-option:hover { background: var(--surface-2); }
+.agent-select-option.active { background: var(--surface-2); outline: 2px solid var(--primary); outline-offset: -2px; }
+.agent-select-option.selected { background: var(--surface-2); font-weight: var(--fw-medium); }
+.agent-select-option.disabled { opacity: 0.45; cursor: not-allowed; }
+.agent-select-option.disabled:hover { background: transparent; }
+.agent-select-option .agent-logo {
+  width: 18px;
+  height: 18px;
+  font-size: 9px;
+}
+.agent-select-option .agent-logo.agent-image img { width: 18px; height: 18px; }
+/* Smaller variant for the muted Overview / RepoBrowser header slot. */
+.agent-select.is-compact .agent-select-button { height: var(--ctrl-sm); font-size: var(--fs-xs); }
+
 .skill-table, .skill-list { display: grid; gap: var(--sp-2); }
 .skill-row {
   width: 100%;
