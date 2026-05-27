@@ -79,6 +79,21 @@ export const DEFAULT_AGENTS: Record<AgentKind, AgentDefinition> = {
       { path: "~/.openclaw/workspace/skills", scope: "user", defaultSelected: true }
     ]
   },
+  hermes: {
+    kind: "hermes",
+    label: "Hermes",
+    command: "hermes",
+    color: "#7c3aed",
+    defaultTargetDir: "~/.hermes/skills",
+    sourceDirs: [
+      // Hermes (NousResearch/hermes-agent) organises its skills under category
+      // folders one level deep — e.g. ~/.hermes/skills/apple/apple-notes/SKILL.md,
+      // ~/.hermes/skills/productivity/notion/SKILL.md — alongside flat skills at
+      // ~/.hermes/skills/markdown-to-pdf/SKILL.md. includeNested lets the scanner
+      // walk both depths so we don't miss category-nested SKILL.md files.
+      { path: "~/.hermes/skills", scope: "user", defaultSelected: true, includeNested: true, note: "Hermes skills can live at <root>/<skill>/SKILL.md or <root>/<category>/<skill>/SKILL.md; the scanner descends." }
+    ]
+  },
   shared: {
     kind: "shared",
     label: ".agents/skills",

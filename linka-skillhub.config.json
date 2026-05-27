@@ -172,6 +172,17 @@
               "defaultSelected": true
             }
           ]
+        },
+        "hermes": {
+          "targetDir": "~/.hermes/skills",
+          "sourceDirs": [
+            {
+              "path": "~/.hermes/skills",
+              "scope": "user",
+              "defaultSelected": true,
+              "includeNested": true
+            }
+          ]
         }
       }
     },
@@ -267,6 +278,17 @@
               "path": "./.sandbox/local-mirror/sources/openclaw/skills",
               "scope": "user",
               "defaultSelected": true
+            }
+          ]
+        },
+        "hermes": {
+          "targetDir": "./.sandbox/local-mirror/targets/hermes/skills",
+          "sourceDirs": [
+            {
+              "path": "./.sandbox/local-mirror/sources/hermes/skills",
+              "scope": "user",
+              "defaultSelected": true,
+              "includeNested": true
             }
           ]
         }

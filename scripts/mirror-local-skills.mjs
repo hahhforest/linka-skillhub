@@ -19,7 +19,8 @@ const sources = [
   { label: "mavis builtin", source: "~/.mavis/.builtin-skills", dest: "sources/mavis/builtin", mode: "direct" },
   { label: "mavis agent-private", source: "~/.mavis/agents", dest: "sources/mavis/agent-private", mode: "nested-skills" },
   { label: "cursor user", source: "~/.cursor/skills-cursor", dest: "sources/cursor/skills", mode: "direct" },
-  { label: "openclaw user", source: "~/.openclaw/workspace/skills", dest: "sources/openclaw/skills", mode: "direct" }
+  { label: "openclaw user", source: "~/.openclaw/workspace/skills", dest: "sources/openclaw/skills", mode: "direct" },
+  { label: "hermes user", source: "~/.hermes/skills", dest: "sources/hermes/skills", mode: "nested-recursive" }
 ];
 
 const targets = [
@@ -29,7 +30,8 @@ const targets = [
   { label: "mavis target", source: "~/.mavis/skills", dest: "targets/mavis/skills", mode: "direct" },
   { label: "shared-agents target", source: "~/.agents/skills", dest: "targets/shared-agents/skills", mode: "direct" },
   { label: "cursor target", source: "~/.cursor/skills-cursor", dest: "targets/cursor/skills", mode: "direct" },
-  { label: "openclaw target", source: "~/.openclaw/workspace/skills", dest: "targets/openclaw/skills", mode: "direct" }
+  { label: "openclaw target", source: "~/.openclaw/workspace/skills", dest: "targets/openclaw/skills", mode: "direct" },
+  { label: "hermes target", source: "~/.hermes/skills", dest: "targets/hermes/skills", mode: "nested-recursive" }
 ];
 
 const exists = async (target) => {
@@ -101,11 +103,45 @@ const copyNestedSkills = async (entry) => {
   return { ...entry, sourceRoot, destRoot, copied };
 };
 
+// Hermes (NousResearch/hermes-agent) groups skills under category folders with
+// mixed depth: some skills sit directly under <root>/<skill>/SKILL.md while
+// others live under <root>/<category>/<skill>/SKILL.md. Walk recursively up to
+// depth 3, copy whole skill packages preserving the relative path so the
+// sandbox source matches the on-disk layout the scanner will see when reading
+// the real ~/.hermes/skills/.
+const copyNestedRecursive = async (entry) => {
+  const sourceRoot = expand(entry.source);
+  const destRoot = path.join(mirrorRoot, entry.dest);
+  await fs.rm(destRoot, { recursive: true, force: true });
+  await fs.mkdir(destRoot, { recursive: true });
+  if (!(await exists(sourceRoot))) return { ...entry, sourceRoot, destRoot, copied: 0, missing: true };
+
+  let copied = 0;
+  const walk = async (current, depth) => {
+    if (depth > 3) return;
+    if (await hasSkill(current)) {
+      const rel = path.relative(sourceRoot, current);
+      await copySkillPackage(current, path.join(destRoot, rel));
+      copied += 1;
+      return;
+    }
+    const children = await fs.readdir(current, { withFileTypes: true });
+    for (const child of children) {
+      if ((!child.isDirectory() && !child.isSymbolicLink()) || child.name === ".DS_Store" || child.name === "node_modules" || child.name === ".git") continue;
+      await walk(path.join(current, child.name), depth + 1);
+    }
+  };
+  await walk(sourceRoot, 0);
+  return { ...entry, sourceRoot, destRoot, copied };
+};
+
 await fs.rm(mirrorRoot, { recursive: true, force: true });
 await fs.mkdir(mirrorRoot, { recursive: true });
 const results = [];
 for (const entry of [...sources, ...targets]) {
-  results.push(entry.mode === "nested-skills" ? await copyNestedSkills(entry) : await copyDirect(entry));
+  if (entry.mode === "nested-skills") results.push(await copyNestedSkills(entry));
+  else if (entry.mode === "nested-recursive") results.push(await copyNestedRecursive(entry));
+  else results.push(await copyDirect(entry));
 }
 
 const summary = {

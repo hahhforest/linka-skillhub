@@ -22,7 +22,7 @@ await screenshot("01-initial");
 await expectText("测试镜像", "Chinese profile label");
 await expectText("扫描 skills", "scan button");
 
-await page.getByRole("button", { name: /English/ }).click();
+await page.getByRole("button", { name: "English", exact: true }).click();
 await expectText("Skill Manager", "English app title");
 await expectText("Scan skills", "English scan button");
 await screenshot("02-english");

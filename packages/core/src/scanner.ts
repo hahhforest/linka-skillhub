@@ -17,7 +17,19 @@ const findSkillDirs = async (source: SkillSource): Promise<string[]> => {
   const dirs = new Set<string>();
   const sourceRealPath = await fs.realpath(source.rootPath).catch(() => source.rootPath);
 
+  // R35-C13: when a source opts into includeNested it has explicitly told the
+  // scanner "walk freely" — that includes following symlinks that point
+  // outside the source root. Hermes is the canonical case: ~/.hermes/skills/
+  // contains a mix of real packages (apple/, productivity/, ...) AND symlinks
+  // back to ~/.agents/skills/lark-* (the user's central lark-skill bundle).
+  // Without this, the scanner silently drops the 25-ish symlinked lark skills
+  // even though `find -L` sees them, because realpath escapes the source root
+  // and the containment guard rejects the entry. Sources without
+  // includeNested still get the tight check — that's the safe-by-default
+  // behavior for flat sources where wandering through a symlink would be a
+  // bug, not a feature.
   const isContainedSkillDir = async (dir: string): Promise<boolean> => {
+    if (source.includeNested) return true;
     const real = await fs.realpath(dir).catch(() => dir);
     const relative = path.relative(sourceRealPath, real);
     return relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative));

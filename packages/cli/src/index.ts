@@ -86,7 +86,7 @@ const printJson = (value: unknown): void => {
   process.stdout.write(`${JSON.stringify(value, null, 2)}\n`);
 };
 
-const KNOWN_AGENTS: readonly AgentKind[] = ["mavis", "opencode", "claude", "codex", "shared"];
+const KNOWN_AGENTS: readonly AgentKind[] = ["mavis", "opencode", "claude", "codex", "cursor", "openclaw", "hermes", "shared"];
 const KNOWN_REVIEWERS = ["rules", "mavis", "opencode", "claude", "codex"] as const;
 const KNOWN_LANGUAGES: readonly ReviewLanguage[] = ["zh", "en"];
 
