@@ -445,6 +445,20 @@ export function App() {
   // import/load, so this only nukes the in-page transient strings.
   useEffect(() => { setMessage(""); }, [view]);
 
+  // R35-C14: officially-supported agents whose source has zero skills on
+  // disk shouldn't pollute the read-side lists (Overview agent filter, source-
+  // distribution bars, Intersect from/to selectors, RepoBrowser filter, status
+  // footer). A user who doesn't run mavis or openclaw shouldn't see them
+  // everywhere with "0". Computed off the full registry skill set (not the
+  // query-filtered subset) so typing in the topbar search doesn't make agents
+  // briefly vanish from the dropdowns. Targets (write-side, in Distribute)
+  // intentionally still show every configured agent — initializing an empty
+  // agent by copying skills into it is a real use case.
+  const populatedAgents = useMemo(
+    () => agents.filter((agent) => skills.some((skill) => skill.source.agent === agent.kind)),
+    [agents, skills]
+  );
+
   // R34 commit 2: the global agent filter that used to live in the sidebar is
   // gone. visibleSkills now only narrows by the topbar search query; agent
   // narrowing happens inside Overview / Intersect / Distribute / Repo, each
@@ -549,13 +563,13 @@ export function App() {
       <div className="workspace">
         <Sidebar view={view} setView={setView} lang={lang} />
         <div className="content">
-          {view === "overview" && <Overview skills={visibleSkills} focusedSkillId={focusedSkillId} focusSkill={focusSkill} lang={lang} totalSkillCount={skills.length} allSkills={skills} query={query} agents={agents} overviewAgentFilter={overviewAgentFilter} setOverviewAgentFilter={setOverviewAgentFilter} onOpenAddSource={() => setDialog("addSource")} />}
+          {view === "overview" && <Overview skills={visibleSkills} focusedSkillId={focusedSkillId} focusSkill={focusSkill} lang={lang} totalSkillCount={skills.length} allSkills={skills} query={query} agents={populatedAgents} overviewAgentFilter={overviewAgentFilter} setOverviewAgentFilter={setOverviewAgentFilter} onOpenAddSource={() => setDialog("addSource")} />}
           {view === "repo" && (
             <RepoBrowser
               skills={visibleSkills}
               allSkills={skills}
               totalSkillCount={skills.length}
-              agents={agents}
+              agents={populatedAgents}
               focusedSkillId={focusedSkillId}
               onFocus={focusSkill}
               lang={lang}
@@ -574,9 +588,9 @@ export function App() {
               onRegistryLoaded={(result) => { setRegistryRepo(result.repoPath); if (result.skills) setSkills(result.skills); setMessage(`${messages[lang].loadRegistrySuccess}: ${result.repoPath} (${result.skillCount ?? result.skills?.length ?? 0})`); }}
             />
           )}
-          {view === "intersect" && <Intersect skills={visibleSkills} allSkills={skills} targets={targets} lang={lang} plan={plan} onPlan={planDistribution} onApply={applyDistribution} agents={agents} focusedSkillId={focusedSkillId} onFocus={focusSkill} />}
+          {view === "intersect" && <Intersect skills={visibleSkills} allSkills={skills} targets={targets} lang={lang} plan={plan} onPlan={planDistribution} onApply={applyDistribution} agents={populatedAgents} focusedSkillId={focusedSkillId} onFocus={focusSkill} />}
           {view === "distribute" && <Distribute skills={visibleSkills} allSkills={skills} totalSkillCount={skills.length} targets={targets} onPlan={planDistribution} onApply={applyDistribution} plan={plan} busy={busy} lang={lang} focusedSkillId={focusedSkillId} onFocus={focusSkill} query={query} />}
-          <footer className="status-footer"><span>{agents.length} agents</span><span>{focusedSkillId ? 1 : 0} {t.focusedCount}</span><span className="status-message" title={message}>{message}</span></footer>
+          <footer className="status-footer"><span>{populatedAgents.length} agents</span><span>{focusedSkillId ? 1 : 0} {t.focusedCount}</span><span className="status-message" title={message}>{message}</span></footer>
         </div>
       </div>
       {dialog === "scan" && <DialogFrame title={t.scanDialogTitle} onClose={() => setDialog(null)} closeLabel={t.cancel}><p>{t.scanDialogBody}</p><label className="checkbox-line"><input type="checkbox" checked={includeBuiltin} onChange={(event) => setIncludeBuiltin(event.target.checked)} /> {t.includeBuiltin}</label><div className="dialog-actions"><button className="ghost" onClick={() => setDialog(null)}>{t.cancel}</button><button className="primary" onClick={runScan} disabled={busy}>{t.confirmScan}</button></div></DialogFrame>}
@@ -617,8 +631,29 @@ export function App() {
 
 function Intersect({ skills, allSkills, targets, lang, plan, onPlan, onApply, agents: agentDefs, focusedSkillId, onFocus }: { readonly skills: SkillPackage[]; readonly allSkills: SkillPackage[]; readonly targets: DistributionTarget[]; readonly lang: Language; readonly plan?: DistributionPlan; readonly onPlan: (agents: string[], skillIds?: string[]) => void; readonly onApply: (agents: string[], skillIds?: string[]) => void; readonly agents: AgentDefinition[]; readonly focusedSkillId: string | null; readonly onFocus: (id: string) => void }) {
   const t = messages[lang];
-  const [from, setFrom] = useState("mavis");
-  const [to, setTo] = useState("claude");
+  // R35-C14 follow-up: defaults derive from the populated-agent list passed in
+  // (agentDefs is App's populatedAgents filter), not hardcoded "mavis" /
+  // "claude". A user whose registry has neither agent populated would
+  // otherwise land on a select with no matching option — the browser would
+  // render the first option visually while `from` state still said "mavis",
+  // and the source-skills lane would silently look empty until the user
+  // touched the dropdown. The snap-back useEffect below handles agent-list
+  // changes after mount (e.g. switching to a registry where the previously
+  // selected from/to disappear).
+  const [from, setFrom] = useState<string>(() => agentDefs[0]?.kind ?? "mavis");
+  const [to, setTo] = useState<string>(() => agentDefs.find((agent) => agent.kind !== (agentDefs[0]?.kind ?? "mavis"))?.kind ?? "claude");
+  useEffect(() => {
+    if (agentDefs.length === 0) return;
+    const kinds: string[] = agentDefs.map((agent) => agent.kind);
+    let nextFrom = from;
+    let nextTo = to;
+    if (!kinds.includes(nextFrom)) nextFrom = kinds[0]!;
+    if (!kinds.includes(nextTo) || nextTo === nextFrom) {
+      nextTo = kinds.find((kind) => kind !== nextFrom) ?? nextFrom;
+    }
+    if (nextFrom !== from) setFrom(nextFrom);
+    if (nextTo !== to) setTo(nextTo);
+  }, [agentDefs]);
   // Per-page selection for "which source skills do I want to copy to the
   // target agent". This used to live in App's global `selected`, sharing
   // state with Overview's focus and Distribute's selection. R34 commit 1
