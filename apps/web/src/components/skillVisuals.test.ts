@@ -31,7 +31,7 @@ describe("agentColor", () => {
 
 describe("official logo registries", () => {
   it("every supported agent ships an image asset", () => {
-    const expected = ["claude", "codex", "cursor", "mavis", "openclaw", "opencode"];
+    const expected = ["claude", "codex", "cursor", "mavis", "hermes", "openclaw", "opencode"];
     for (const kind of expected) {
       expect(OfficialLogoImage[kind], `OfficialLogoImage should expose '${kind}'`).toBeTypeOf("string");
       expect(OfficialLogoImage[kind]?.length ?? 0, `${kind} image URL should be non-empty`).toBeGreaterThan(0);

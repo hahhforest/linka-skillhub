@@ -15,6 +15,7 @@ import claudeLogoUrl from "../assets/agents/claude.png";
 import codexLogoUrl from "../assets/agents/codex.png";
 import cursorLogoUrl from "../assets/agents/cursor.png";
 import mavisLogoUrl from "../assets/agents/mavis.png";
+import hermesLogoUrl from "../assets/agents/hermes.png";
 import openclawLogoUrl from "../assets/agents/openclaw.png";
 import opencodeLogoUrl from "../assets/agents/opencode.png";
 
@@ -31,6 +32,7 @@ export const OfficialLogoImage: Record<string, string> = {
   codex: codexLogoUrl,
   cursor: cursorLogoUrl,
   mavis: mavisLogoUrl,
+  hermes: hermesLogoUrl,
   openclaw: openclawLogoUrl,
   opencode: opencodeLogoUrl
 };
