@@ -336,7 +336,14 @@ function Overview({ skills, focusedSkillId, focusSkill, lang, totalSkillCount, a
           );
         })()}
         <h3>{t.statusDistribution}</h3><div className="donut" style={donutStyle} />
-        <div className="status-list"><span><i className="dot ok" />{t.shareable} {cardsSummary.portable}</span><span><i className="dot warn" />{t.agentBound} {cardsSummary.agentBound}</span><span><i className="dot bad" />{t.problematic} {cardsSummary.invalid}</span></div>
+        {/* R35-C15: the donut already paints a trailing grey wedge for any
+            skills that don't fall into portable / agent_bound / invalid (i.e.
+            valid+unreviewed only). The legend used to skip that wedge, so a
+            user who filtered to a tiny scope like openclaw (1 unreviewed
+            skill) would see "可共享 0 · Agent 限定 0 · 存在问题 0" with no
+            hint of where the 1 skill went. The fourth row makes that bucket
+            explicit and matches the bucketLabel("other") wording elsewhere. */}
+        <div className="status-list"><span><i className="dot ok" />{t.shareable} {cardsSummary.portable}</span><span><i className="dot warn" />{t.agentBound} {cardsSummary.agentBound}</span><span><i className="dot bad" />{t.problematic} {cardsSummary.invalid}</span><span><i className="dot other" />{t.unreviewedBucket} {Math.max(0, cardsSummary.total - cardsSummary.portable - cardsSummary.agentBound - cardsSummary.invalid)}</span></div>
       </div>
       <div className="overview-results-row span-all">
         <div className="work-card table-card">

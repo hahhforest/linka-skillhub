@@ -551,6 +551,7 @@ textarea:focus-visible {
 .dot.ok { background: var(--success); }
 .dot.warn { background: var(--warning); }
 .dot.bad { background: var(--danger); }
+.dot.other { background: #cbd5e1; }
 
 .skill-table, .skill-list { display: grid; gap: var(--sp-2); }
 .skill-row {
