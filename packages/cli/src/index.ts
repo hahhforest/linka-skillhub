@@ -23,6 +23,7 @@ import {
   setRemote,
   summarizeSkills,
   syncForkInstance,
+  syncMergeInstances,
   syncPullFromInstance,
   syncPushToAllInstances,
   syncPushToInstance,
@@ -1094,6 +1095,68 @@ sync
     process.stdout.write(`${c.green("✓")} Forked ${c.bold(result.newName)} from ${c.bold(result.fromName)} via ${c.cyan(result.viaAgent)}\n`);
     process.stdout.write(`  canonical dir: ${c.dim(result.canonicalDir)}\n`);
     if (result.shortSha) process.stdout.write(`  commit: ${c.dim(result.shortSha)}\n`);
+  });
+
+sync
+  .command("merge <name>")
+  .description("Delegate a multi-instance merge to a code agent; canonical is replaced with the agent's output.")
+  .requiredOption("--from <agents>", "comma-separated source agents (at least 2)")
+  .requiredOption("--by <agent>", "agent that executes the merge (claude, codex, opencode, or mavis)")
+  .option("--timeout-ms <n>", "agent timeout in milliseconds (default 600000)")
+  .option("--repo <path>", "Registry path; defaults to profile registryRepo.")
+  .option("--json", "Print full JSON output instead of the human summary.")
+  .action(async (name: string, options: { from: string; by: string; timeoutMs?: string; repo?: string; json?: boolean }) => {
+    const runtime = await loadRuntimeConfig();
+    const repoPath = resolveRepoOption(options.repo, runtime.profile.registryRepo);
+    const fromList = options.from.split(",").map((piece) => piece.trim()).filter(Boolean);
+    if (fromList.length < 2) {
+      process.stderr.write(`${c.red("error:")} --from must list at least two agents (got ${fromList.length}).\n`);
+      process.exitCode = 1;
+      return;
+    }
+    const fromAgents: AgentKind[] = [];
+    for (const item of fromList) {
+      const agent = assertKnownAgent(item, "--from");
+      if (!agent) return;
+      fromAgents.push(agent);
+    }
+    // --by accepts only the four agents that have a CLI runner wired in
+    // sync.ts (claude / codex / opencode / mavis). We DON'T reuse
+    // assertKnownReviewer here because its error message labels the field
+    // as "(--reviewer)" and lists "rules" as valid — both wrong for merge.
+    // Inline check keeps the error message accurate with one print.
+    const mergeExecutors = ["claude", "codex", "opencode", "mavis"] as const;
+    const reviewer = (options.by ?? "").trim();
+    if (!(mergeExecutors as readonly string[]).includes(reviewer)) {
+      process.stderr.write(`${c.red("error:")} --by must be one of: ${mergeExecutors.join(", ")} (got '${options.by}').\n`);
+      process.exitCode = 1;
+      return;
+    }
+    const timeoutMs = options.timeoutMs ? Number(options.timeoutMs) : undefined;
+    if (timeoutMs !== undefined && (!Number.isFinite(timeoutMs) || timeoutMs <= 0)) {
+      process.stderr.write(`${c.red("error:")} --timeout-ms must be a positive number.\n`);
+      process.exitCode = 1;
+      return;
+    }
+    if (!options.json) {
+      process.stdout.write(`Working in ${c.dim(`<repo>/.merges/${name}-…`)}\n`);
+      process.stdout.write(`Started ${c.cyan(reviewer)} for merge of ${c.bold(name)} (${c.cyan(fromAgents.join(" + "))})…\n`);
+    }
+    const result = await syncMergeInstances(repoPath, name, fromAgents, reviewer as AgentKind, { timeoutMs });
+    if (options.json) {
+      printJson(result);
+      return;
+    }
+    process.stdout.write(`${c.green("✓")} Merged ${c.bold(name)} (${c.cyan(result.fromAgents.join(" + "))}) via ${c.cyan(result.byAgent)}\n`);
+    process.stdout.write(`  canonical hash: ${c.dim(result.oldHash.slice(0, 12))} -> ${c.dim(result.newHash.slice(0, 12))}\n`);
+    if (result.shortSha) process.stdout.write(`  commit: ${c.dim(result.shortSha)}\n`);
+    process.stdout.write(`  attempts: ${c.dim(String(result.attempts))}\n`);
+    process.stdout.write(`  workspace: ${c.dim(result.workspaceDir)}\n`);
+    const otherDriftCount = result.otherDrifted.length;
+    if (otherDriftCount > 0) {
+      process.stdout.write(`\n  ${c.yellow(String(otherDriftCount))} instance${otherDriftCount === 1 ? "" : "s"} now drift from the new canonical.\n`);
+      process.stdout.write(`  Run ${c.cyan(`lsh sync push-all ${name}`)} to fan it out.\n`);
+    }
   });
 
 const repo = program.command("repo").description("Manage the registry Git repository.");

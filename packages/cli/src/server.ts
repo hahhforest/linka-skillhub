@@ -25,6 +25,7 @@ import {
   summarizeSkills,
   computeSyncStatus,
   syncForkInstance,
+  syncMergeInstances,
   syncPullFromInstance,
   syncPushToAllInstances,
   syncPushToInstance,
@@ -92,6 +93,64 @@ const validateSyncBody = (
   }
   const repoPath = typeof body.repoPath === "string" && body.repoPath.trim().length > 0 ? body.repoPath : undefined;
   return { ok: true, name, agent, newName, repoPath };
+};
+
+// Separate validator for /api/sync/merge — different shape (fromAgents
+// array of length ≥ 2, byAgent single agent, optional timeoutMs). Mixing it
+// into the four-endpoint validator above would push the shape discriminator
+// into a third dimension, so we keep them separate.
+type SyncMergeBodyValidation =
+  | { ok: true; name: string; fromAgents: AgentKind[]; byAgent: AgentKind; timeoutMs: number | undefined; repoPath: string | undefined }
+  | { ok: false; error: { error: string; code: string } };
+
+const validateSyncMergeBody = (body: {
+  name?: unknown;
+  fromAgents?: unknown;
+  byAgent?: unknown;
+  timeoutMs?: unknown;
+  repoPath?: unknown;
+}): SyncMergeBodyValidation => {
+  const name = typeof body.name === "string" ? body.name.trim() : "";
+  if (!name) return { ok: false, error: { error: "name is required", code: "missing_name" } };
+  if (!SKILL_NAME_PATTERN.test(name)) {
+    return { ok: false, error: { error: `Invalid skill name '${name}': must match ${SKILL_NAME_PATTERN}.`, code: "invalid_skill_name" } };
+  }
+  if (!Array.isArray(body.fromAgents)) {
+    return { ok: false, error: { error: "fromAgents must be an array of at least 2 agent kinds", code: "missing_from_agents" } };
+  }
+  if (body.fromAgents.length < 2) {
+    return { ok: false, error: { error: `fromAgents requires at least 2 entries (got ${body.fromAgents.length})`, code: "too_few_from_agents" } };
+  }
+  const fromAgents: AgentKind[] = [];
+  const seen = new Set<string>();
+  for (const item of body.fromAgents) {
+    if (typeof item !== "string") {
+      return { ok: false, error: { error: "fromAgents must be an array of strings", code: "invalid_from_agents" } };
+    }
+    const trimmed = item.trim();
+    if (!AGENT_KIND_PATTERN.test(trimmed)) {
+      return { ok: false, error: { error: `Invalid fromAgents entry '${trimmed}': must match ${AGENT_KIND_PATTERN}.`, code: "invalid_agent_kind" } };
+    }
+    if (seen.has(trimmed)) {
+      return { ok: false, error: { error: `fromAgents entries must be distinct; '${trimmed}' appears more than once.`, code: "duplicate_from_agent" } };
+    }
+    seen.add(trimmed);
+    fromAgents.push(trimmed as AgentKind);
+  }
+  const byAgentRaw = typeof body.byAgent === "string" ? body.byAgent.trim() : "";
+  if (!byAgentRaw) return { ok: false, error: { error: "byAgent is required", code: "missing_by_agent" } };
+  if (!AGENT_KIND_PATTERN.test(byAgentRaw)) {
+    return { ok: false, error: { error: `Invalid byAgent '${byAgentRaw}': must match ${AGENT_KIND_PATTERN}.`, code: "invalid_agent_kind" } };
+  }
+  let timeoutMs: number | undefined;
+  if (body.timeoutMs !== undefined) {
+    if (typeof body.timeoutMs !== "number" || !Number.isFinite(body.timeoutMs) || body.timeoutMs <= 0) {
+      return { ok: false, error: { error: "timeoutMs must be a positive number", code: "invalid_timeout" } };
+    }
+    timeoutMs = body.timeoutMs;
+  }
+  const repoPath = typeof body.repoPath === "string" && body.repoPath.trim().length > 0 ? body.repoPath : undefined;
+  return { ok: true, name, fromAgents, byAgent: byAgentRaw as AgentKind, timeoutMs, repoPath };
 };
 
 interface ServerOptions {
@@ -526,6 +585,27 @@ export const startServer = (options: ServerOptions): http.Server => {
         if (!validation.ok) { sendJson(response, 400, validation.error); return; }
         const repoPathArg = resolveRepoPath(validation.repoPath);
         const result = await syncForkInstance(repoPathArg, validation.name, validation.newName, validation.agent);
+        sendJson(response, 200, result);
+        return;
+      }
+      if (request.method === "POST" && url.pathname === "/api/sync/merge") {
+        const body = await readJsonBody<{
+          name?: unknown;
+          fromAgents?: unknown;
+          byAgent?: unknown;
+          timeoutMs?: unknown;
+          repoPath?: unknown;
+        }>(request);
+        const validation = validateSyncMergeBody(body);
+        if (!validation.ok) { sendJson(response, 400, validation.error); return; }
+        const repoPathArg = resolveRepoPath(validation.repoPath);
+        const result = await syncMergeInstances(
+          repoPathArg,
+          validation.name,
+          validation.fromAgents,
+          validation.byAgent,
+          { timeoutMs: validation.timeoutMs }
+        );
         sendJson(response, 200, result);
         return;
       }

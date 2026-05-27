@@ -62,7 +62,11 @@ const inferScope = (source: SkillSource, skillDir: string): SkillSource => {
   return source;
 };
 
-const classifySkill = (input: {
+// R36-C22: exported because the merge subsystem needs to validate the
+// agent's output target/ directory the same way a scan would (status must
+// include valid + portable for the merge to land). Keeping the body and
+// callsite identical so a single source of truth governs both flows.
+export const classifySkill = (input: {
   readonly name?: string;
   readonly description?: string;
   readonly directoryName: string;

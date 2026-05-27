@@ -5,14 +5,19 @@ import { describe, expect, it } from "vitest";
 import {
   computeSyncStatus,
   discoverSkillSources,
+  hashDirectory,
   importSkillsToRepository,
+  prepareMergeWorkspace,
   readInstancesIndex,
   readRegistryManifest,
   syncForkInstance,
+  syncMergeInstances,
   syncPullFromInstance,
   syncPushToAllInstances,
-  syncPushToInstance
+  syncPushToInstance,
+  validateMergeTarget
 } from "../src/index.js";
+import type { MergeRunner } from "../src/sync.js";
 
 // Each test stands up a fresh tmpdir, two skill source dirs, runs a full
 // scan + import (which initialises a git repo, writes manifest + canonical,
@@ -158,5 +163,190 @@ describe("syncForkInstance", () => {
     const { repoPath } = await setupTwoAgents();
     const tooLong = `a${"b".repeat(96)}`; // 97 chars
     await expect(syncForkInstance(repoPath, "shared-skill", tooLong, "opencode")).rejects.toThrow(/too long/);
+  }, TEST_TIMEOUT);
+});
+
+// Helper: a merge runner that synchronously writes target/SKILL.md with the
+// caller-supplied body. Lets each test simulate "the agent did X" without
+// spawning a real CLI. Returning empty stdout/stderr matches the production
+// runner shape; the real value-add of these tests is that the validation +
+// commit + manifest update logic runs against actual files on disk.
+const makeMockRunner = (writes: readonly string[]): MergeRunner => {
+  let attemptIndex = 0;
+  return async ({ workspaceDir }) => {
+    const targetDir = path.join(workspaceDir, "target");
+    await fs.mkdir(targetDir, { recursive: true });
+    const body = writes[attemptIndex] ?? "";
+    await fs.writeFile(path.join(targetDir, "SKILL.md"), body, "utf8");
+    attemptIndex += 1;
+    return { stdout: "", stderr: "" };
+  };
+};
+
+const validMergedSkill = (name: string): string =>
+  `---\nname: ${name}\ndescription: Merged across multiple agents.\n---\n# ${name}\nSome merged body.\n`;
+
+describe("prepareMergeWorkspace", () => {
+  it("builds the workspace skeleton with one subdir per source agent and an INSTRUCTIONS.md naming each", async () => {
+    const { repoPath } = await setupTwoAgents();
+    const prep = await prepareMergeWorkspace(repoPath, "shared-skill", ["opencode", "claude"], { workspaceId: "abcde" });
+    expect(prep.workspaceDir).toContain(path.join(".merges", "shared-skill-abcde"));
+    expect(prep.sources).toHaveLength(2);
+    expect(prep.sources[0]?.subdir).toBe("a");
+    expect(prep.sources[1]?.subdir).toBe("b");
+    // Each source subdir contains the original SKILL.md (whole-tree copy).
+    expect(await fs.stat(path.join(prep.workspaceDir, "a", "SKILL.md"))).toBeTruthy();
+    expect(await fs.stat(path.join(prep.workspaceDir, "b", "SKILL.md"))).toBeTruthy();
+    // target/ is created empty.
+    const targetEntries = await fs.readdir(prep.targetDir);
+    expect(targetEntries).toHaveLength(0);
+    // INSTRUCTIONS.md mentions both source agents and absolute paths.
+    const instructions = await fs.readFile(prep.instructionsPath, "utf8");
+    expect(instructions).toContain("opencode");
+    expect(instructions).toContain("claude");
+    expect(instructions).toContain(prep.workspaceDir);
+    // .merges/.gitignore makes the parent invisible to git.
+    const mergesGitignore = await fs.readFile(path.join(repoPath, ".merges", ".gitignore"), "utf8");
+    expect(mergesGitignore).toContain("*");
+  }, TEST_TIMEOUT);
+
+  it("rejects fewer than 2 source agents", async () => {
+    const { repoPath } = await setupTwoAgents();
+    await expect(prepareMergeWorkspace(repoPath, "shared-skill", ["opencode"])).rejects.toThrow(/at least 2/);
+  }, TEST_TIMEOUT);
+
+  it("rejects duplicate agents in fromAgents", async () => {
+    const { repoPath } = await setupTwoAgents();
+    await expect(prepareMergeWorkspace(repoPath, "shared-skill", ["opencode", "opencode"])).rejects.toThrow(/distinct/);
+  }, TEST_TIMEOUT);
+});
+
+describe("validateMergeTarget", () => {
+  it("returns ok when target/SKILL.md is valid + portable with the expected name", async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "linka-merge-validate-"));
+    await fs.writeFile(path.join(dir, "SKILL.md"), validMergedSkill("shared-skill"), "utf8");
+    const result = await validateMergeTarget(dir, "shared-skill");
+    expect(result.ok).toBe(true);
+    expect(result.reasons).toHaveLength(0);
+    expect(result.hash).not.toBe("");
+  }, TEST_TIMEOUT);
+
+  it("flags missing SKILL.md with a reason that points the agent at target/", async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "linka-merge-validate-"));
+    const result = await validateMergeTarget(dir, "shared-skill");
+    expect(result.ok).toBe(false);
+    expect(result.reasons.join(" ")).toMatch(/target\/SKILL\.md does not exist/);
+  }, TEST_TIMEOUT);
+
+  it("flags wrong name in frontmatter", async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "linka-merge-validate-"));
+    await fs.writeFile(path.join(dir, "SKILL.md"), validMergedSkill("wrong-name"), "utf8");
+    const result = await validateMergeTarget(dir, "shared-skill");
+    expect(result.ok).toBe(false);
+    expect(result.reasons.join(" ")).toMatch(/name='shared-skill'/);
+  }, TEST_TIMEOUT);
+});
+
+describe("syncMergeInstances", () => {
+  it("succeeds on first attempt when the runner produces a valid target/", async () => {
+    const { repoPath } = await setupTwoAgents();
+    const runner = makeMockRunner([validMergedSkill("shared-skill")]);
+    const result = await syncMergeInstances(repoPath, "shared-skill", ["opencode", "claude"], "claude", { runner, workspaceId: "fffff" });
+    expect(result.attempts).toBe(1);
+    expect(result.fromAgents).toEqual(["opencode", "claude"]);
+    expect(result.byAgent).toBe("claude");
+    expect(result.oldHash).not.toBe(result.newHash);
+    expect(result.shortSha).not.toBe("");
+    // Canonical now matches the merged content.
+    const canonicalSkill = await fs.readFile(path.join(repoPath, "registry", "skills", "shared-skill", "SKILL.md"), "utf8");
+    expect(canonicalSkill).toContain("Merged across multiple agents");
+    // Workspace persists for inspection.
+    expect(await fs.stat(result.workspaceDir)).toBeTruthy();
+  }, TEST_TIMEOUT);
+
+  it("retries once when the first runner output fails strict validation, succeeds on second", async () => {
+    const { repoPath } = await setupTwoAgents();
+    const runner = makeMockRunner([
+      "no frontmatter at all\n",                  // first attempt: invalid
+      validMergedSkill("shared-skill")            // retry: valid
+    ]);
+    const result = await syncMergeInstances(repoPath, "shared-skill", ["opencode", "claude"], "claude", { runner, workspaceId: "ggggg" });
+    expect(result.attempts).toBe(2);
+    // INSTRUCTIONS.md was appended with a retry feedback block before the 2nd attempt.
+    const instructions = await fs.readFile(path.join(result.workspaceDir, "INSTRUCTIONS.md"), "utf8");
+    expect(instructions).toMatch(/Previous attempt failed strict validation/);
+  }, TEST_TIMEOUT);
+
+  it("throws after two failed attempts and keeps the workspace on disk", async () => {
+    const { repoPath } = await setupTwoAgents();
+    const runner = makeMockRunner([
+      "no frontmatter\n",
+      "still no frontmatter\n"
+    ]);
+    await expect(
+      syncMergeInstances(repoPath, "shared-skill", ["opencode", "claude"], "claude", { runner, workspaceId: "hhhhh" })
+    ).rejects.toThrow(/failed strict validation after 2 attempts/);
+    // Workspace path is in the error message; ensure it still exists.
+    const workspaceDir = path.join(repoPath, ".merges", "shared-skill-hhhhh");
+    expect(await fs.stat(workspaceDir)).toBeTruthy();
+  }, TEST_TIMEOUT);
+
+  it("commit subject lists fromAgents in the order the user supplied", async () => {
+    const { repoPath } = await setupTwoAgents();
+    const runner = makeMockRunner([validMergedSkill("shared-skill")]);
+    await syncMergeInstances(repoPath, "shared-skill", ["claude", "opencode"], "claude", { runner, workspaceId: "iiiii" });
+    // git log -1 --format=%s on the canonical path → most recent subject.
+    const { spawnSync } = await import("node:child_process");
+    const subject = spawnSync("git", ["log", "-1", "--format=%s", "--", path.join("registry", "skills", "shared-skill")], { cwd: repoPath, encoding: "utf8" }).stdout.trim();
+    expect(subject).toBe("merge shared-skill (claude + opencode)");
+  }, TEST_TIMEOUT);
+
+  it("wipes target/ between retry attempts so attempt-1 scratch files don't leak into the canonical", async () => {
+    const { repoPath } = await setupTwoAgents();
+    // Attempt 1 writes both an invalid SKILL.md AND a scratch file alongside.
+    // Attempt 2 writes only a valid SKILL.md. If the wipe is missing, the
+    // canonical would end up with stale-scratch.txt from attempt 1.
+    let attemptIndex = 0;
+    const runner: MergeRunner = async ({ workspaceDir }) => {
+      const targetDir = path.join(workspaceDir, "target");
+      await fs.mkdir(targetDir, { recursive: true });
+      if (attemptIndex === 0) {
+        await fs.writeFile(path.join(targetDir, "SKILL.md"), "no frontmatter\n", "utf8");
+        await fs.writeFile(path.join(targetDir, "stale-scratch.txt"), "leftover from attempt 1\n", "utf8");
+      } else {
+        await fs.writeFile(path.join(targetDir, "SKILL.md"), validMergedSkill("shared-skill"), "utf8");
+      }
+      attemptIndex += 1;
+      return { stdout: "", stderr: "" };
+    };
+    const result = await syncMergeInstances(repoPath, "shared-skill", ["opencode", "claude"], "claude", { runner, workspaceId: "jjjjj" });
+    expect(result.attempts).toBe(2);
+    const canonicalEntries = await fs.readdir(path.join(repoPath, "registry", "skills", "shared-skill"));
+    expect(canonicalEntries).toContain("SKILL.md");
+    // The whole point: the scratch file from attempt 1 must NOT be in the canonical.
+    expect(canonicalEntries).not.toContain("stale-scratch.txt");
+  }, TEST_TIMEOUT);
+
+  it("restores the canonical to its pre-merge content when the commit/manifest write fails", async () => {
+    const { repoPath } = await setupTwoAgents();
+    const canonicalDir = path.join(repoPath, "registry", "skills", "shared-skill");
+    const preMergeContent = await fs.readFile(path.join(canonicalDir, "SKILL.md"), "utf8");
+    const preMergeHash = (await readRegistryManifest(repoPath)).skills.find((s) => s.name === "shared-skill")!.hash;
+    // Wreck the git repo so gitCommitPaths fails: remove .git/HEAD which makes
+    // every subsequent git command (add / commit / rev-parse) bomb. Workspace
+    // setup + prepareMergeWorkspace + the runner all touch the filesystem
+    // without git, so they keep working up to the commit step.
+    await fs.rm(path.join(repoPath, ".git", "HEAD"), { force: true });
+    const runner = makeMockRunner([validMergedSkill("shared-skill")]);
+    await expect(
+      syncMergeInstances(repoPath, "shared-skill", ["opencode", "claude"], "claude", { runner, workspaceId: "kkkkk" })
+    ).rejects.toThrow(/Canonical reverted to pre-merge state/);
+    // Canonical content must equal the pre-merge content. (We can't read the
+    // manifest here because writeManifestWithUpdatedSkill never ran, so the
+    // file on disk is authoritative.)
+    const afterFailContent = await fs.readFile(path.join(canonicalDir, "SKILL.md"), "utf8");
+    expect(afterFailContent).toBe(preMergeContent);
+    // Sanity: hash matches what was there before.
+    expect(await hashDirectory(canonicalDir)).toBe(preMergeHash);
   }, TEST_TIMEOUT);
 });

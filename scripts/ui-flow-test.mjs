@@ -234,6 +234,19 @@ const syncActionCount = await page.locator(".repo-detail-panel .instances-card .
 if (syncActionCount > 0) {
   failures.push(`Sync action buttons should be hidden when all instances are in-sync (got ${syncActionCount})`);
 }
+// R36-C22: the merge button is gated stricter (hasDrift + ≥2 instances).
+// Sandbox starts in-sync, so the button must NOT render. Also confirms
+// push-all (which gates on hasDrift OR hasMissing) is hidden — same regression
+// detector for both card-level affordances. If we ever load a drifted fixture
+// here, this assertion needs a sibling that confirms BOTH appear.
+const mergeButtonCount = await page.locator(".repo-detail-panel .instances-card .instances-merge").count();
+if (mergeButtonCount > 0) {
+  failures.push(`Merge button should be hidden when all instances are in-sync (got ${mergeButtonCount})`);
+}
+const pushAllButtonCount = await page.locator(".repo-detail-panel .instances-card .instances-push-all").count();
+if (pushAllButtonCount > 0) {
+  failures.push(`Push-all button should be hidden when nothing is drifted/missing (got ${pushAllButtonCount})`);
+}
 await screenshot("10b-sync-instances");
 
 // R35-C4: Add Source Directory flow. Verify the modal opens from Overview,

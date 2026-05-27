@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
-import { ArrowDownToLine, ArrowUpFromLine, GitFork, PackageCheck } from "lucide-react";
-import type { CanonicalSyncStatus, RegistryInstance, SkillHistoryEntry, SkillPackage } from "@linka-skillhub/core";
+import { ArrowDownToLine, ArrowUpFromLine, GitFork, GitMerge, PackageCheck } from "lucide-react";
+import type { CanonicalSyncStatus, RegistryInstance, SkillHistoryEntry, SkillPackage, SyncMergeResult } from "@linka-skillhub/core";
 import { api } from "../api.js";
 import { humanizeError } from "../humanize-error.js";
 import { messages, type Language } from "../i18n.js";
 import { AgentLogo, agentTone, bucketLabel, statusClass } from "./skillVisuals.js";
+import { MergeDialog } from "./MergeDialog.js";
 
 // Typed key into the messages map so callers cannot pass a string that does
 // not exist in i18n. Both `zh` and `en` share the same shape.
@@ -83,6 +84,7 @@ export function DetailPanel({ skill, lang, emptyTextKey }: DetailPanelProps): JS
   const [sync, setSync] = useState<CanonicalSyncStatus | null>(null);
   const [syncBusy, setSyncBusy] = useState(false);
   const [syncMessage, setSyncMessage] = useState<string>("");
+  const [mergeDialogOpen, setMergeDialogOpen] = useState(false);
   const refreshSync = (name: string): Promise<void> =>
     api.syncStatusFor(name)
       .then((result) => { setSync(result.status); })
@@ -194,6 +196,7 @@ export function DetailPanel({ skill, lang, emptyTextKey }: DetailPanelProps): JS
     );
   }
   return (
+    <>
     <section className="detail-inline">
       <div className="detail-head">
         <div>
@@ -216,18 +219,35 @@ export function DetailPanel({ skill, lang, emptyTextKey }: DetailPanelProps): JS
       <div className="work-card instances-card">
         <div className="instances-head">
           <h3>{t.instancesTitle}</h3>
-          {sync && (sync.hasDrift || sync.hasMissing) && (
-            <button
-              type="button"
-              className="ghost instances-push-all"
-              onClick={handlePushAll}
-              disabled={syncBusy}
-              title={t.syncActionPushAll}
-            >
-              <ArrowUpFromLine size={14} />
-              {t.syncActionPushAll}
-            </button>
-          )}
+          <div className="instances-head-actions">
+            {/* R36-C22: merge is gated stricter than push-all because it
+                spawns an agent and writes a new canonical — only show when
+                there's actual drift across at least 2 instances to reconcile. */}
+            {sync && sync.hasDrift && sync.instances.length >= 2 && (
+              <button
+                type="button"
+                className="ghost instances-merge"
+                onClick={() => setMergeDialogOpen(true)}
+                disabled={syncBusy}
+                title={t.syncActionMerge}
+              >
+                <GitMerge size={14} />
+                {t.syncActionMerge}
+              </button>
+            )}
+            {sync && (sync.hasDrift || sync.hasMissing) && (
+              <button
+                type="button"
+                className="ghost instances-push-all"
+                onClick={handlePushAll}
+                disabled={syncBusy}
+                title={t.syncActionPushAll}
+              >
+                <ArrowUpFromLine size={14} />
+                {t.syncActionPushAll}
+              </button>
+            )}
+          </div>
         </div>
         {sync === null && <p className="muted-copy">{t.historyLoading}</p>}
         {sync && sync.instances.length === 0 && (
@@ -357,5 +377,25 @@ export function DetailPanel({ skill, lang, emptyTextKey }: DetailPanelProps): JS
         <code>{skill.skillDir}</code>
       </div>
     </section>
+    {mergeDialogOpen && sync && (
+      <MergeDialog
+        lang={lang}
+        skill={skill}
+        sync={sync}
+        onClose={() => setMergeDialogOpen(false)}
+        onMerged={(result: SyncMergeResult) => {
+          setMergeDialogOpen(false);
+          void Promise.all([refreshSync(skill.name), refreshHistory(skill.name)]);
+          setSyncMessage(
+            t.mergeDoneSuccess
+              .replace("{name}", result.name)
+              .replace("{from}", result.fromAgents.map((agent) => agentTone[agent]?.label ?? agent).join(" + "))
+              .replace("{agent}", agentTone[result.byAgent]?.label ?? result.byAgent)
+              .replace("{drifted}", String(result.otherDrifted.length))
+          );
+        }}
+      />
+    )}
+    </>
   );
 }

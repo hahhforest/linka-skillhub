@@ -1257,7 +1257,13 @@ textarea:focus-visible {
   flex-wrap: wrap;
 }
 .instances-head h3 { margin: 0; }
-.instances-push-all {
+.instances-head-actions {
+  display: inline-flex;
+  gap: var(--sp-2);
+  flex-wrap: wrap;
+}
+.instances-push-all,
+.instances-merge {
   height: var(--ctrl-sm);
   padding: 0 var(--sp-3);
   font-size: var(--fs-xs);
@@ -1539,6 +1545,82 @@ textarea:focus-visible {
   gap: var(--sp-3);
   margin-top: var(--sp-4);
 }
+
+/* R36-C22: merge dialog. Wider than the default to fit the multi-select
+   instance list with their realPaths; sections stack with a small gap. */
+.merge-dialog { width: min(640px, 100%); }
+.merge-section {
+  margin-top: var(--sp-4);
+}
+.merge-section h3 {
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-medium);
+  margin: 0 0 var(--sp-1) 0;
+}
+.merge-instance-list {
+  list-style: none;
+  margin: var(--sp-2) 0 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  max-height: 220px;
+  overflow-y: auto;
+}
+.merge-instance-row {
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  padding: var(--sp-2) var(--sp-3);
+}
+.merge-instance-row.instance-status-drifted { border-color: var(--warning); }
+.merge-instance-row.instance-status-missing { border-color: var(--danger); opacity: 0.7; }
+.merge-instance-row label {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  cursor: pointer;
+  width: 100%;
+  flex-wrap: wrap;
+}
+.merge-instance-row label input[type="checkbox"] {
+  margin: 0;
+}
+.merge-instance-agents {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+}
+.merge-instance-agents .agent-logo { width: 16px; height: 16px; font-size: 8px; }
+.merge-instance-agents .agent-logo.agent-image img { width: 16px; height: 16px; }
+.merge-instance-path {
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  color: var(--text-2);
+  word-break: break-all;
+  flex: 1 1 100%;
+  margin-left: 28px; /* align with content after checkbox+badge */
+}
+.merge-by-select {
+  width: 100%;
+  height: var(--ctrl-md);
+  padding: 0 var(--sp-3);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  margin-top: var(--sp-2);
+}
+.merge-progress {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-6) 0;
+}
+.merge-progress-title {
+  font-weight: var(--fw-medium);
+  margin: 0;
+}
+
 .checkbox-line {
   display: flex;
   align-items: center;

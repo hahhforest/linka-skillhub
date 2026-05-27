@@ -1,4 +1,4 @@
-import type { AgentDefinition, CanonicalSyncStatus, DistributionPlan, DistributionRun, DistributionTarget, RegistryManifest, ReviewResult, SkillHistoryEntry, SkillPackage, SkillScope, SkillSource, SyncForkResult, SyncPullResult, SyncPushResult } from "@linka-skillhub/core";
+import type { AgentDefinition, CanonicalSyncStatus, DistributionPlan, DistributionRun, DistributionTarget, RegistryManifest, ReviewResult, SkillHistoryEntry, SkillPackage, SkillScope, SkillSource, SyncForkResult, SyncMergeResult, SyncPullResult, SyncPushResult } from "@linka-skillhub/core";
 
 export interface ScanResponse {
   readonly skills: SkillPackage[];
@@ -144,5 +144,11 @@ export const api = {
   syncPushAll: (name: string) =>
     request<{ name: string; results: SyncPushResult[] }>("/api/sync/push-all", { method: "POST", body: JSON.stringify({ name }) }),
   syncFork: (name: string, viaAgent: string, newName: string) =>
-    request<SyncForkResult>("/api/sync/fork", { method: "POST", body: JSON.stringify({ name, viaAgent, newName }) })
+    request<SyncForkResult>("/api/sync/fork", { method: "POST", body: JSON.stringify({ name, viaAgent, newName }) }),
+  // R36-C22: merge action runs an agent over multiple instance copies in
+  // a workspace, then validates target/ and updates the canonical. Default
+  // timeout is 600s; merge may legitimately take a few minutes so the UI
+  // shouldn't enforce an aggressive client-side timeout.
+  syncMerge: (name: string, fromAgents: string[], byAgent: string, timeoutMs?: number) =>
+    request<SyncMergeResult>("/api/sync/merge", { method: "POST", body: JSON.stringify({ name, fromAgents, byAgent, timeoutMs }) })
 };

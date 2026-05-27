@@ -165,6 +165,22 @@ export interface SyncForkResult {
   readonly shortSha: string;
 }
 
+// R36-C22: aggregate of one merge run. attempts is 1 on first-shot success
+// or 2 when the agent's first output failed strict validation and the
+// follow-up succeeded. workspaceDir is kept on disk after the run so the
+// user can inspect agent reasoning + intermediate writes.
+export interface SyncMergeResult {
+  readonly name: string;
+  readonly fromAgents: readonly AgentKind[];
+  readonly byAgent: AgentKind;
+  readonly workspaceDir: string;
+  readonly oldHash: string;
+  readonly newHash: string;
+  readonly shortSha: string;
+  readonly attempts: 1 | 2;
+  readonly otherDrifted: readonly string[];
+}
+
 // R36-C20: structured projection of a canonical's git history. Action is
 // derived from the commit subject pattern that registry.ts / sync.ts /
 // merge.ts use; "other" catches anything that doesn't match (e.g. a manual
