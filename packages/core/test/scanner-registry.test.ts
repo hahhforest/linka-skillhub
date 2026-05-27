@@ -28,8 +28,10 @@ describe("scanner and registry", () => {
     const result = await importSkillsToRepository({ repoPath, cwd, selectedSourceIds: selected });
     expect(result.imported).toBe(1);
     expect(await fs.stat(path.join(repoPath, "registry", "skills.json"))).toBeTruthy();
-    // R36-C19: canonical content lives at skills/<name>/, no variantId subdir.
-    expect(await fs.stat(path.join(repoPath, "skills", "sample-skill", "SKILL.md"))).toBeTruthy();
+    // R36-C19: canonical content lives at registry/skills/<name>/, no
+    // variantId subdir. linka-skillhub never writes to repo top-level outside
+    // registry/ + prompts/.
+    expect(await fs.stat(path.join(repoPath, "registry", "skills", "sample-skill", "SKILL.md"))).toBeTruthy();
     expect(await fs.stat(path.join(repoPath, "registry", "instances.json"))).toBeTruthy();
   });
 });

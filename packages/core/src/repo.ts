@@ -37,7 +37,10 @@ export const gitStatus = async (repoPath: string): Promise<string> => (await run
 
 export const gitCommitAll = async (repoPath: string, message = "Update skill registry"): Promise<string> => {
   await ensureGitRepository(repoPath);
-  await run("git", ["add", "registry", "skills", "prompts"], { cwd: repoPath });
+  // R36-C19: dropped top-level `skills` from the staged set — v2 keeps every
+  // canonical inside registry/skills/<name>/, so a top-level skills/ entry on
+  // disk is no longer ours. registry/ + prompts/ cover everything we write.
+  await run("git", ["add", "registry", "prompts"], { cwd: repoPath });
   const status = (await run("git", ["status", "--porcelain"], { cwd: repoPath })).stdout;
   if (!status) return "No changes to commit.";
   await run("git", ["commit", "-m", message], { cwd: repoPath });

@@ -24,15 +24,17 @@ export interface ValidateRegistryResult {
 }
 
 // R36-C19: canonical-per-name model. Each canonical lives at
-// registry/skills/<name>/ (no variantId subdir). Directory IS the canonical
-// content, git-tracked, hash = hashDirectory(). Same name across agents
-// collapses to ONE canonical; per-realPath instances tracked separately in
-// registry/instances.json. variantId stays on SkillPackage at scan time (a
-// per-instance unique key still useful for "this file at this realpath") but
-// does not drive registry storage paths anymore.
+// registry/skills/<name>/ (no variantId subdir). The whole canonical write
+// surface is contained inside registry/ — repo top-level NEVER gets touched by
+// linka-skillhub, which keeps the "what's ours / what's yours" boundary clear.
+// Directory IS the canonical content, git-tracked, hash = hashDirectory().
+// Same name across agents collapses to ONE canonical; per-realPath instances
+// tracked separately in registry/instances.json. variantId stays on
+// SkillPackage at scan time (a per-instance unique key still useful for "this
+// file at this realpath") but does not drive registry storage paths anymore.
 export const registryCanonicalPath = (repoPath: string, name: string): string => {
   assertNoPathSeparators(name, "skill.name");
-  return path.join(repoPath, "skills", sanitizePathSegment(name));
+  return path.join(repoPath, "registry", "skills", sanitizePathSegment(name));
 };
 
 // Back-compat helper: distribution still imports registrySkillPath; in v2 it
@@ -214,7 +216,7 @@ export const importSkillsToRepository = async (options: ImportOptions): Promise<
     );
     const seed = ordered[0]!;
     const canonicalDir = registryCanonicalPath(repoPath, name);
-    assertPathInside(path.join(repoPath, "skills"), canonicalDir, "registry package target");
+    assertPathInside(path.join(repoPath, "registry", "skills"), canonicalDir, "registry package target");
 
     const existing = existingByName.get(name);
     let canonicalHash: string;
