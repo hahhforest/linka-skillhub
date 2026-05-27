@@ -48,8 +48,6 @@ export function DetailPanel({ skill, lang, emptyTextKey }: DetailPanelProps): JS
           <dd>{skill.source.scope}</dd>
           <dt>{t.hash}</dt>
           <dd><code>{skill.hash.slice(0, 16)}</code></dd>
-          <dt>{t.variant}</dt>
-          <dd><code>{skill.variantId}</code></dd>
         </dl>
       </div>
       <div className="work-card">

@@ -133,7 +133,7 @@ describe("applyFrontmatterFix", () => {
   it("finds invalid skills in a manifest", async () => {
     const skill = await setupInvalidSkill(cwd, "marker-skill");
     const manifest: RegistryManifest = {
-      version: 1,
+      version: 2,
       generatedAt: new Date().toISOString(),
       skills: [skill]
     };

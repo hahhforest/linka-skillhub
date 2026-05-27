@@ -44,6 +44,21 @@ export const gitCommitAll = async (repoPath: string, message = "Update skill reg
   return (await run("git", ["rev-parse", "--short", "HEAD"], { cwd: repoPath })).stdout;
 };
 
+// R36-C19: per-skill commit for the canonical-per-name model. registry.ts
+// calls this once per newly-created or pulled canonical directory so each
+// SKILL change has its own git history entry — keeping the lineage clean
+// and `git log -- registry/skills/<name>/` answers "history of this skill"
+// directly. Returns "" when there's nothing staged so callers can no-op.
+export const gitCommitPaths = async (repoPath: string, paths: readonly string[], message: string): Promise<string> => {
+  if (paths.length === 0) return "";
+  await ensureGitRepository(repoPath);
+  await run("git", ["add", "--", ...paths], { cwd: repoPath });
+  const status = (await run("git", ["status", "--porcelain", "--", ...paths], { cwd: repoPath })).stdout;
+  if (!status) return "";
+  await run("git", ["commit", "-m", message, "--", ...paths], { cwd: repoPath });
+  return (await run("git", ["rev-parse", "--short", "HEAD"], { cwd: repoPath })).stdout;
+};
+
 export const gitPull = async (repoPath: string): Promise<string> => (await run("git", ["pull", "--ff-only"], { cwd: repoPath })).stdout;
 
 export const gitPush = async (repoPath: string): Promise<string> => (await run("git", ["push"], { cwd: repoPath })).stdout;

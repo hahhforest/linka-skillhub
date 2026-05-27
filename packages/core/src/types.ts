@@ -91,9 +91,39 @@ export interface SkillPackage {
 }
 
 export interface RegistryManifest {
-  readonly version: 1;
+  // R36-C19: bumped to 2 — canonical-per-name model. v1 stored every (agent,
+  // scope) variant as a separate skills/<name>/<variantId>/ package; v2
+  // collapses to one canonical per skill name at skills/<name>/. skills[]
+  // still uses SkillPackage shape (UI consumes it via /api/skills) but
+  // `source` now denotes the canonical's ORIGIN (first-import agent + scope),
+  // not the current on-disk source. Live instance locations live in
+  // registry/instances.json — see RegistryInstancesIndex. No v1→v2 migration
+  // shipped: the sandbox fixture is wiped and rebuilt; users haven't run a
+  // production import yet. Layout under repoPath:
+  //   skills/<name>/...           ← canonical content, git-tracked
+  //   registry/skills.json        ← manifest (this type)
+  //   registry/instances.json     ← live realPath ↔ canonical map
+  //   prompts/                    ← snapshot of prompt files (best-effort)
+  readonly version: 2;
   readonly generatedAt: string;
   readonly skills: readonly SkillPackage[];
+}
+
+// Where this canonical is materialised on disk right now. instances.json is
+// rewritten on every scan — it's derived state, not history. History lives in
+// the git log of registry/skills/<name>/.
+export interface RegistryInstance {
+  readonly realPath: string;             // canonical key — symlink-deduped
+  readonly viaAgents: readonly AgentKind[]; // agents whose source dirs surface this realPath
+  readonly lastSeenHash: string;
+  readonly lastSeenAt: string;
+  readonly status: "in-sync" | "drifted" | "missing";
+}
+
+export interface RegistryInstancesIndex {
+  readonly version: 1;
+  readonly generatedAt: string;
+  readonly byName: Record<string, readonly RegistryInstance[]>;
 }
 
 export interface ImportResult {

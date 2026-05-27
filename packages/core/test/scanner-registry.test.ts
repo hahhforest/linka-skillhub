@@ -28,7 +28,9 @@ describe("scanner and registry", () => {
     const result = await importSkillsToRepository({ repoPath, cwd, selectedSourceIds: selected });
     expect(result.imported).toBe(1);
     expect(await fs.stat(path.join(repoPath, "registry", "skills.json"))).toBeTruthy();
-    expect(await fs.stat(path.join(repoPath, "skills", "sample-skill", skills[0]!.variantId, "SKILL.md"))).toBeTruthy();
+    // R36-C19: canonical content lives at skills/<name>/, no variantId subdir.
+    expect(await fs.stat(path.join(repoPath, "skills", "sample-skill", "SKILL.md"))).toBeTruthy();
+    expect(await fs.stat(path.join(repoPath, "registry", "instances.json"))).toBeTruthy();
   });
 });
 
@@ -37,7 +39,7 @@ describe("validateRegistryPath", () => {
     const cwd = await fs.mkdtemp(path.join(os.tmpdir(), "linka-skillhub-validate-"));
     const repoPath = path.join(cwd, "registry");
     const manifest: RegistryManifest = {
-      version: 1,
+      version: 2,
       generatedAt: new Date().toISOString(),
       skills: []
     };
@@ -45,14 +47,14 @@ describe("validateRegistryPath", () => {
     const result = await validateRegistryPath(repoPath, { cwd, profileRoot: cwd });
     expect(result.ok).toBe(true);
     expect(result.skillCount).toBe(0);
-    expect(result.manifestVersion).toBe(1);
+    expect(result.manifestVersion).toBe(2);
   });
 
   it("rejects paths that escape the profile root", async () => {
     const cwd = await fs.mkdtemp(path.join(os.tmpdir(), "linka-skillhub-validate-"));
     const outside = await fs.mkdtemp(path.join(os.tmpdir(), "linka-skillhub-outside-"));
     const repoPath = path.join(outside, "registry");
-    await writeRegistryManifest(repoPath, { version: 1, generatedAt: new Date().toISOString(), skills: [] });
+    await writeRegistryManifest(repoPath, { version: 2, generatedAt: new Date().toISOString(), skills: [] });
     const result = await validateRegistryPath(repoPath, { cwd, profileRoot: cwd });
     expect(result.ok).toBe(false);
     expect(result.reason).toBe("outside_profile_root");
