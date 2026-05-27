@@ -369,10 +369,26 @@ export const syncForkInstance = async (
 // validateMergeTarget hash is computed via hashDirectory so the merge tells
 // us "the canonical now equals this hash" the same way pull / push do.
 
-const AGENT_CLI_COMMANDS: Partial<Record<AgentKind, readonly string[]>> = {
-  claude: ["claude", "-p"],
-  codex: ["codex", "exec", "-"],
-  opencode: ["opencode", "run", "-"],
+// agent CLIs in non-interactive mode require explicit permission flags before
+// they'll run filesystem tools — otherwise the model emits text but never
+// writes target/. We pass minimal-but-sufficient flags rather than the
+// blanket --dangerously-skip-permissions for claude (cwd is locked to the
+// per-merge workspace by spawn options, so the blast radius is bounded).
+//   - claude: --permission-mode bypassPermissions limits the agent to tools,
+//             without bypassing safety checks like prompt injection guards.
+//   - codex: --dangerously-bypass-approvals-and-sandbox (yes, the literal
+//             flag name) — codex exec otherwise asks for tool approval and
+//             stalls in non-interactive runs. Equivalent to claude's bypass.
+//   - opencode / mavis: their run/ask non-interactive modes already auto-approve
+//             tools in their own configs; no flag needed.
+// Exported for tests / introspection — callers should use `runAgentMerge`, not
+// look up commands themselves. The shape is intentionally readonly so a test
+// can assert specific argv flags (e.g. permission bypass) without risking
+// mutation from the test side.
+export const AGENT_CLI_COMMANDS: Partial<Record<AgentKind, readonly string[]>> = {
+  claude: ["claude", "-p", "--permission-mode", "bypassPermissions"],
+  codex: ["codex", "exec", "--dangerously-bypass-approvals-and-sandbox", "-"],
+  opencode: ["opencode", "run", "--dangerously-skip-permissions", "-"],
   mavis: ["mavis", "ask", "-"]
 };
 

@@ -350,3 +350,20 @@ describe("syncMergeInstances", () => {
     expect(await hashDirectory(canonicalDir)).toBe(preMergeHash);
   }, TEST_TIMEOUT);
 });
+
+describe("AGENT_CLI_COMMANDS", () => {
+  // Regression — claude/codex/opencode in non-interactive mode require an
+  // explicit "skip permission prompt" flag, otherwise the model emits text but
+  // never executes Read/Write/Edit and target/ stays empty. We hit this in
+  // R36-C22's first end-to-end run; the merge would silently fail twice and
+  // bubble up `target/SKILL.md does not exist` even though the agent CLI
+  // appeared to "work". Pinning the flag in tests means a future cleanup
+  // (e.g. someone "simplifying" the argv) can't quietly reintroduce the bug.
+  it("includes a permission-bypass flag in every agentic non-interactive runner", async () => {
+    const { AGENT_CLI_COMMANDS } = await import("../src/sync.js");
+    expect(AGENT_CLI_COMMANDS.claude).toContain("--permission-mode");
+    expect(AGENT_CLI_COMMANDS.claude).toContain("bypassPermissions");
+    expect(AGENT_CLI_COMMANDS.codex).toContain("--dangerously-bypass-approvals-and-sandbox");
+    expect(AGENT_CLI_COMMANDS.opencode).toContain("--dangerously-skip-permissions");
+  });
+});
