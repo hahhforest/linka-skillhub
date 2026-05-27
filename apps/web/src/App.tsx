@@ -734,7 +734,34 @@ function Intersect({ skills, allSkills, targets, lang, plan, onPlan, onApply, ag
           />
         </div>
       </div>
+      {/* R36-C17 layout: the previous side-by-side "skill list left + detail
+          panel right" caused horizontal drift — skill descriptions vary
+          wildly in length, so clicking different rows resized the right
+          column and shoved the left column around. Moved the detail panel
+          to a full-width row at the bottom (variable height now affects only
+          what's below it, not the list above), and moved the copy-operation
+          action bar to the LEFT of the skill list (where it stays anchored
+          regardless of detail content). User feedback:
+          "把skill的展示放在下面，交汇复制的操作放到skill列表的左边". */}
       <div className="intersect-body">
+        <div className="work-card intersect-action-bar">
+          {sameSourceTarget && <p className="warning-line" role="alert">{t.sameSourceTargetWarning}</p>}
+          <div className="action-bar-counter">
+            <strong>{selectedSkills.length}</strong>
+            <span>{t.selectedCount} / {left.length}</span>
+          </div>
+          <p className="target-path-line">{t.targetPath}:</p>
+          <code className="target-path-code" title={targetPath}>{targetPath}</code>
+          <button className="primary action-bar-button" disabled={selectedSkills.length === 0 || sameSourceTarget} onClick={() => onPlan([to], selectedIds)}><UploadCloud size={16} /> {t.previewIntersection}</button>
+          {plan && selectedSkills.length > 0 && !sameSourceTarget && <button className="primary action-bar-button" onClick={() => onApply([to], selectedIds)}><Check size={16} /> {t.applyIntersection}</button>}
+          {selectedSkills.length === 0 && <p className="muted-copy">{t.noSourceSelection}</p>}
+          {plan && (
+            <div className="action-bar-plan">
+              <h3>{t.planSummary}</h3>
+              <PlanItems plan={plan} lang={lang} />
+            </div>
+          )}
+        </div>
         <div className="work-card intersect-table-card">
           <div className="card-head">
             <div>
@@ -755,30 +782,11 @@ function Intersect({ skills, allSkills, targets, lang, plan, onPlan, onApply, ag
             onToggleSelect={toggleSelectForCopy}
           />
         </div>
-        <div className="intersect-detail-panel">
-          <DetailPanel skill={focusedSkill} lang={lang} />
-          {focusedSkill && focusedHidden && (
-            <p className="muted-copy">{t.focusedHidden}</p>
-          )}
-        </div>
       </div>
-      <div className="work-card intersect-action-bar">
-        {sameSourceTarget && <p className="warning-line" role="alert">{t.sameSourceTargetWarning}</p>}
-        <div className="action-bar-row">
-          <span className="action-bar-counter">
-            <strong>{selectedSkills.length}</strong> {t.selectedCount} / {left.length}
-          </span>
-          <p className="target-path-line">{t.targetPath}: <code title={targetPath}>{targetPath}</code></p>
-          <span className="action-bar-spacer" />
-          <button className="primary" disabled={selectedSkills.length === 0 || sameSourceTarget} onClick={() => onPlan([to], selectedIds)}><UploadCloud size={16} /> {t.previewIntersection}</button>
-          {plan && selectedSkills.length > 0 && !sameSourceTarget && <button className="primary" onClick={() => onApply([to], selectedIds)}><Check size={16} /> {t.applyIntersection}</button>}
-        </div>
-        {selectedSkills.length === 0 && <p className="muted-copy">{t.noSourceSelection}</p>}
-        {plan && (
-          <div className="action-bar-plan">
-            <h3>{t.planSummary}</h3>
-            <PlanItems plan={plan} lang={lang} />
-          </div>
+      <div className="intersect-detail-panel">
+        <DetailPanel skill={focusedSkill} lang={lang} />
+        {focusedSkill && focusedHidden && (
+          <p className="muted-copy">{t.focusedHidden}</p>
         )}
       </div>
     </section>
