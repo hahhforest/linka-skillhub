@@ -366,4 +366,69 @@ describe("AGENT_CLI_COMMANDS", () => {
     expect(AGENT_CLI_COMMANDS.codex).toContain("--dangerously-bypass-approvals-and-sandbox");
     expect(AGENT_CLI_COMMANDS.opencode).toContain("--dangerously-skip-permissions");
   });
+  it("forces claude into stream-json output so issue #2 live-output panels actually get chunks", async () => {
+    // claude -p in default text mode batches the whole response and only
+    // flushes it on exit — the CLI / WebUI log panel would stay empty for
+    // minutes. stream-json + --verbose emits one JSON event per turn so the
+    // user sees motion as soon as the model picks a tool.
+    const { AGENT_CLI_COMMANDS } = await import("../src/sync.js");
+    expect(AGENT_CLI_COMMANDS.claude).toContain("--output-format");
+    expect(AGENT_CLI_COMMANDS.claude).toContain("stream-json");
+    expect(AGENT_CLI_COMMANDS.claude).toContain("--verbose");
+  });
+});
+
+describe("syncMergeInstances onChunk streaming (issue #2)", () => {
+  it("forwards each runner stdout/stderr chunk to onChunk in order", async () => {
+    const { repoPath } = await setupTwoAgents();
+    const observed: Array<{ kind: "stdout" | "stderr"; text: string }> = [];
+    // Custom runner that simulates what runAgentMerge would do for a real
+    // CLI: emit a couple of chunks via onChunk, then write target/. The
+    // sequencing matters — onChunk fires DURING the run, not after — so we
+    // observe ordering between chunks (e.g. stdout-stderr-stdout) and
+    // confirm syncMergeInstances passes the same callback through unchanged.
+    const runner: MergeRunner = async ({ workspaceDir, onChunk }) => {
+      onChunk?.("stdout", "starting agent\n");
+      onChunk?.("stderr", "warning: low memory\n");
+      onChunk?.("stdout", "done\n");
+      const targetDir = path.join(workspaceDir, "target");
+      await fs.mkdir(targetDir, { recursive: true });
+      await fs.writeFile(path.join(targetDir, "SKILL.md"), validMergedSkill("shared-skill"), "utf8");
+      return { stdout: "starting agent\ndone\n", stderr: "warning: low memory\n" };
+    };
+    await syncMergeInstances(repoPath, "shared-skill", ["opencode", "claude"], "claude", {
+      runner,
+      workspaceId: "lllll",
+      onChunk: (kind, text) => { observed.push({ kind, text }); }
+    });
+    expect(observed).toEqual([
+      { kind: "stdout", text: "starting agent\n" },
+      { kind: "stderr", text: "warning: low memory\n" },
+      { kind: "stdout", text: "done\n" }
+    ]);
+  }, TEST_TIMEOUT);
+
+  it("survives an onChunk callback that throws (a flaky observer must not abort the merge)", async () => {
+    const { repoPath } = await setupTwoAgents();
+    // Production scenario: a streaming HTTP response gets closed mid-merge
+    // (browser tab navigated away) and writes start throwing. The merge
+    // itself must continue and produce a valid canonical regardless.
+    const runner: MergeRunner = async ({ workspaceDir, onChunk }) => {
+      onChunk?.("stdout", "ok"); // observer throws here, runner must not bubble it up
+      const targetDir = path.join(workspaceDir, "target");
+      await fs.mkdir(targetDir, { recursive: true });
+      await fs.writeFile(path.join(targetDir, "SKILL.md"), validMergedSkill("shared-skill"), "utf8");
+      return { stdout: "ok", stderr: "" };
+    };
+    const result = await syncMergeInstances(repoPath, "shared-skill", ["opencode", "claude"], "claude", {
+      runner,
+      workspaceId: "mmmmm",
+      // The runner's onChunk wrapper in production catches exceptions; the
+      // syncMergeInstances passthrough must preserve that behavior. We verify
+      // by checking the merge still succeeded (commit landed, hash bumped).
+      onChunk: () => { throw new Error("observer disconnected"); }
+    });
+    expect(result.attempts).toBe(1);
+    expect(result.shortSha).not.toBe("");
+  }, TEST_TIMEOUT);
 });

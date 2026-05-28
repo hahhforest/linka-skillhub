@@ -15,6 +15,16 @@ export interface MergeDialogProps {
   readonly onClose: () => void;
 }
 
+// issue #2: a single log line in the live agent-output panel. `text` is
+// already the decoded chunk (could be multi-line), `kind` colors stderr
+// dim. We keep them as discrete events instead of joining into one string
+// so React re-renders are cheap (append a row instead of replace the whole
+// blob).
+interface LogChunk {
+  readonly kind: "stdout" | "stderr";
+  readonly text: string;
+}
+
 // R36-C22: dialog for the merge subsystem. Two phases:
 //   1. picking — user multi-selects source instances (must be ≥2) and a
 //      single executor agent. Submit triggers the long-running api.syncMerge.
@@ -38,6 +48,15 @@ export function MergeDialog({ lang, skill, sync, onMerged, onClose }: MergeDialo
   const [byAgent, setByAgent] = useState<string>("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // issue #2: live agent output. Append-only during a run; cleared at the
+  // start of each new submit (including retries triggered by the user
+  // re-pressing Start after a failure). Bounded growth isn't enforced —
+  // claude / codex CLI outputs aren't massive (a few MB at worst), and
+  // truncating mid-stream would hide diagnostic info exactly when users
+  // need it most.
+  const [logChunks, setLogChunks] = useState<readonly LogChunk[]>([]);
+  const logPanelRef = useRef<HTMLPreElement>(null);
+  const abortRef = useRef<AbortController | null>(null);
   const dialogRef = useRef<HTMLDivElement>(null);
   useModalFocusTrap(dialogRef);
   useEffect(() => {
@@ -53,6 +72,22 @@ export function MergeDialog({ lang, skill, sync, onMerged, onClose }: MergeDialo
       .then((result) => { if (!cancelled) setReviewers(result.reviewers); })
       .catch(() => { if (!cancelled) setReviewers([]); });
     return () => { cancelled = true; };
+  }, []);
+  // Auto-scroll the log panel to the bottom whenever a new chunk lands —
+  // but only if the user hasn't scrolled up to read older output. The
+  // 20px threshold absorbs sub-pixel scroll position drift from React's
+  // re-render.
+  useEffect(() => {
+    const panel = logPanelRef.current;
+    if (!panel) return;
+    const atBottom = panel.scrollHeight - panel.scrollTop - panel.clientHeight < 20;
+    if (atBottom) panel.scrollTop = panel.scrollHeight;
+  }, [logChunks]);
+  // Cancel any in-flight stream when the dialog unmounts (parent closes us
+  // mid-merge). Without this, the fetch keeps draining server output into a
+  // dead component until the agent exits.
+  useEffect(() => {
+    return () => { abortRef.current?.abort(); };
   }, []);
 
   const availableReviewers = useMemo(
@@ -120,12 +155,29 @@ export function MergeDialog({ lang, skill, sync, onMerged, onClose }: MergeDialo
     if (!canSubmit) return;
     setBusy(true);
     setError(null);
+    setLogChunks([]); // clear log on each fresh submit (incl. retries from a prior error)
+    const controller = new AbortController();
+    abortRef.current = controller;
     try {
-      const result = await api.syncMerge(skill.name, fromAgentsForSubmit, byAgent);
+      const result = await api.syncMergeStream(
+        skill.name,
+        fromAgentsForSubmit,
+        byAgent,
+        (kind, data) => {
+          // Use functional setState because chunks arrive faster than React
+          // can rerender; the closure-captured `logChunks` would be stale.
+          setLogChunks((prev) => [...prev, { kind, text: data }]);
+        },
+        { signal: controller.signal }
+      );
       onMerged(result);
     } catch (err) {
+      // Suppress abort errors — those mean the user closed the dialog or
+      // hit cancel intentionally, no need to scream about it.
+      if (controller.signal.aborted) return;
       setError(`${t.mergeFailedTitle}: ${humanizeError(err, lang)}`);
     } finally {
+      abortRef.current = null;
       setBusy(false);
     }
   };
@@ -152,6 +204,24 @@ export function MergeDialog({ lang, skill, sync, onMerged, onClose }: MergeDialo
             <p className="muted-copy">
               {t.mergeWorkingBody.replace("{agent}", agentTone[byAgent]?.label ?? byAgent)}
             </p>
+            {/* issue #2: live agent output panel. Always rendered while
+                merging (even when empty) so the user has a stable spot to
+                watch — text begins to appear as soon as the agent CLI
+                writes its first chunk. The pre block scrolls horizontally
+                for long lines (no wrap), vertically for many lines, with
+                auto-stick-to-bottom handled in the effect above. */}
+            <div className="merge-log-frame">
+              <div className="merge-log-head">{t.mergeLogLabel}</div>
+              <pre className="merge-log" ref={logPanelRef}>
+                {logChunks.length === 0
+                  ? <span className="merge-log-waiting">{t.mergeLogWaiting}</span>
+                  : logChunks.map((chunk, index) => (
+                      <span key={index} className={chunk.kind === "stderr" ? "merge-log-stderr" : "merge-log-stdout"}>
+                        {chunk.text}
+                      </span>
+                    ))}
+              </pre>
+            </div>
           </div>
         )}
 

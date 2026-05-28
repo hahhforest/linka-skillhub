@@ -376,17 +376,23 @@ export const syncForkInstance = async (
 // per-merge workspace by spawn options, so the blast radius is bounded).
 //   - claude: --permission-mode bypassPermissions limits the agent to tools,
 //             without bypassing safety checks like prompt injection guards.
+//             --output-format stream-json + --verbose so each tool call /
+//             reasoning event appears on stdout as soon as it happens
+//             (issue #2). Default "text" mode only flushes the final reply,
+//             leaving CLI / WebUI users staring at a blank panel for
+//             minutes with no signal that anything is happening.
 //   - codex: --dangerously-bypass-approvals-and-sandbox (yes, the literal
 //             flag name) — codex exec otherwise asks for tool approval and
-//             stalls in non-interactive runs. Equivalent to claude's bypass.
+//             stalls in non-interactive runs. Default output is already
+//             chunked so no extra streaming flag is needed.
 //   - opencode / mavis: their run/ask non-interactive modes already auto-approve
-//             tools in their own configs; no flag needed.
+//             tools in their own configs; default output is already chunked.
 // Exported for tests / introspection — callers should use `runAgentMerge`, not
 // look up commands themselves. The shape is intentionally readonly so a test
 // can assert specific argv flags (e.g. permission bypass) without risking
 // mutation from the test side.
 export const AGENT_CLI_COMMANDS: Partial<Record<AgentKind, readonly string[]>> = {
-  claude: ["claude", "-p", "--permission-mode", "bypassPermissions"],
+  claude: ["claude", "-p", "--permission-mode", "bypassPermissions", "--output-format", "stream-json", "--verbose"],
   codex: ["codex", "exec", "--dangerously-bypass-approvals-and-sandbox", "-"],
   opencode: ["opencode", "run", "--dangerously-skip-permissions", "-"],
   mavis: ["mavis", "ask", "-"]
@@ -570,11 +576,22 @@ export const prepareMergeWorkspace = async (
 // without spawning a real agent CLI. Production code passes runAgentMerge as
 // the default. The runner gets the prepared workspace + chosen agent and is
 // expected to make the agent populate workspaceDir/target/ before resolving.
+//
+// onChunk (optional, R36-C22 follow-up for issue #2): called for every chunk
+// of stdout/stderr the runner observes from the spawned agent. CLI hooks it
+// to stream output to the user terminal in real time; the streaming server
+// endpoint forwards the chunks to the WebUI log panel. The runner still
+// resolves with the final accumulated stdout/stderr, so callers that don't
+// care about live output can ignore onChunk.
+export type MergeStreamKind = "stdout" | "stderr";
+export type MergeChunkHandler = (kind: MergeStreamKind, data: string) => void;
+
 export type MergeRunner = (params: {
   readonly workspaceDir: string;
   readonly byAgent: AgentKind;
   readonly timeoutMs: number;
   readonly attempt: 1 | 2;
+  readonly onChunk?: MergeChunkHandler;
 }) => Promise<{ stdout: string; stderr: string }>;
 
 const agentCliPrompt = (workspaceDir: string): string =>
@@ -586,7 +603,7 @@ const agentCliPrompt = (workspaceDir: string): string =>
     `Do not stop to ask questions. Use your file tools.`
   ].join("\n");
 
-export const runAgentMerge: MergeRunner = ({ workspaceDir, byAgent, timeoutMs }) =>
+export const runAgentMerge: MergeRunner = ({ workspaceDir, byAgent, timeoutMs, onChunk }) =>
   new Promise((resolve, reject) => {
     const command = AGENT_CLI_COMMANDS[byAgent];
     if (!command) {
@@ -610,8 +627,17 @@ export const runAgentMerge: MergeRunner = ({ workspaceDir, byAgent, timeoutMs })
     }, timeoutMs);
     child.stdout.setEncoding("utf8");
     child.stderr.setEncoding("utf8");
-    child.stdout.on("data", (chunk) => { stdout += chunk; });
-    child.stderr.on("data", (chunk) => { stderr += chunk; });
+    // chunks are accumulated for the resolve path AND fanned out via onChunk
+    // for live streaming. onChunk failures are swallowed so a flaky stream
+    // listener (e.g. a closed HTTP response) can't take down the merge.
+    child.stdout.on("data", (chunk: string) => {
+      stdout += chunk;
+      if (onChunk) try { onChunk("stdout", chunk); } catch { /* ignore */ }
+    });
+    child.stderr.on("data", (chunk: string) => {
+      stderr += chunk;
+      if (onChunk) try { onChunk("stderr", chunk); } catch { /* ignore */ }
+    });
     child.on("error", (error) => {
       clearTimeout(timer);
       reject(error);
@@ -694,7 +720,16 @@ export const syncMergeInstances = async (
   name: string,
   fromAgents: readonly AgentKind[],
   byAgent: AgentKind,
-  options: { readonly now?: Date; readonly timeoutMs?: number; readonly runner?: MergeRunner; readonly workspaceId?: string } = {}
+  options: {
+    readonly now?: Date;
+    readonly timeoutMs?: number;
+    readonly runner?: MergeRunner;
+    readonly workspaceId?: string;
+    // issue #2: live agent stdout/stderr stream. Each chunk fires once
+    // (no buffering) so CLI / WebUI can render output in real time without
+    // waiting for the whole run. Optional — omit for headless tests.
+    readonly onChunk?: MergeChunkHandler;
+  } = {}
 ): Promise<SyncMergeResult> =>
   withMergeLock(name, async () => {
     const manifest = await readRegistryManifest(repoPath);
@@ -702,9 +737,19 @@ export const syncMergeInstances = async (
     const prep = await prepareMergeWorkspace(repoPath, name, fromAgents, { workspaceId: options.workspaceId });
     const runner = options.runner ?? runAgentMerge;
     const timeoutMs = options.timeoutMs ?? MERGE_DEFAULT_TIMEOUT_MS;
+    // Wrap the caller's onChunk so a throwing observer (closed HTTP stream,
+    // stale React component, whatever) can't take down a 5-minute merge.
+    // runAgentMerge already swallows exceptions inside its own spawn handler;
+    // this wrapper covers the case where a custom runner (mock / test / future
+    // alternate impl) forwards onChunk without that protection.
+    const safeOnChunk: MergeChunkHandler | undefined = options.onChunk
+      ? (kind, data) => {
+          try { options.onChunk!(kind, data); } catch { /* ignore */ }
+        }
+      : undefined;
     let attempts: 1 | 2 = 1;
     let validation: ValidateMergeTargetResult;
-    await runner({ workspaceDir: prep.workspaceDir, byAgent, timeoutMs, attempt: 1 });
+    await runner({ workspaceDir: prep.workspaceDir, byAgent, timeoutMs, attempt: 1, onChunk: safeOnChunk });
     validation = await validateMergeTarget(prep.targetDir, name);
     if (!validation.ok) {
       await appendRetryFeedback(prep.instructionsPath, validation.reasons);
@@ -716,7 +761,7 @@ export const syncMergeInstances = async (
       await fs.rm(prep.targetDir, { recursive: true, force: true });
       await ensureDir(prep.targetDir);
       attempts = 2;
-      await runner({ workspaceDir: prep.workspaceDir, byAgent, timeoutMs, attempt: 2 });
+      await runner({ workspaceDir: prep.workspaceDir, byAgent, timeoutMs, attempt: 2, onChunk: safeOnChunk });
       validation = await validateMergeTarget(prep.targetDir, name);
       if (!validation.ok) {
         throw new Error(

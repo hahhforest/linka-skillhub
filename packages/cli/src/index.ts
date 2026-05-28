@@ -1141,12 +1141,26 @@ sync
     if (!options.json) {
       process.stdout.write(`Working in ${c.dim(`<repo>/.merges/${name}-…`)}\n`);
       process.stdout.write(`Started ${c.cyan(reviewer)} for merge of ${c.bold(name)} (${c.cyan(fromAgents.join(" + "))})…\n`);
+      process.stdout.write(c.dim("─── agent output (live) ───\n"));
     }
-    const result = await syncMergeInstances(repoPath, name, fromAgents, reviewer as AgentKind, { timeoutMs });
+    // issue #2: stream agent stdout/stderr live so the user sees progress
+    // instead of staring at a blank terminal for minutes. Skipped in --json
+    // mode (machine-parseable output should be just the JSON object).
+    const onChunk = options.json
+      ? undefined
+      : (kind: "stdout" | "stderr", data: string): void => {
+          // stderr is dimmed so it's distinguishable from agent stdout but
+          // still readable. agent CLIs tend to put reasoning on stdout and
+          // progress / warnings on stderr.
+          const sink = kind === "stderr" ? process.stderr : process.stdout;
+          sink.write(kind === "stderr" ? c.dim(data) : data);
+        };
+    const result = await syncMergeInstances(repoPath, name, fromAgents, reviewer as AgentKind, { timeoutMs, onChunk });
     if (options.json) {
       printJson(result);
       return;
     }
+    process.stdout.write(c.dim("\n─── end agent output ───\n"));
     process.stdout.write(`${c.green("✓")} Merged ${c.bold(name)} (${c.cyan(result.fromAgents.join(" + "))}) via ${c.cyan(result.byAgent)}\n`);
     process.stdout.write(`  canonical hash: ${c.dim(result.oldHash.slice(0, 12))} -> ${c.dim(result.newHash.slice(0, 12))}\n`);
     if (result.shortSha) process.stdout.write(`  commit: ${c.dim(result.shortSha)}\n`);

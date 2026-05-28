@@ -609,6 +609,56 @@ export const startServer = (options: ServerOptions): http.Server => {
         sendJson(response, 200, result);
         return;
       }
+      // issue #2: streaming variant. Same input shape as /api/sync/merge,
+      // but the response is a chunked NDJSON stream — one JSON line per
+      // agent stdout/stderr chunk, then a terminal `result` line carrying
+      // either the SyncMergeResult or the error message. The client (WebUI)
+      // uses fetch + ReadableStream to render live agent output in the
+      // MergeDialog log panel. The non-streaming /api/sync/merge above is
+      // kept so old clients / scripted callers don't have to parse NDJSON.
+      if (request.method === "POST" && url.pathname === "/api/sync/merge/stream") {
+        const body = await readJsonBody<{
+          name?: unknown;
+          fromAgents?: unknown;
+          byAgent?: unknown;
+          timeoutMs?: unknown;
+          repoPath?: unknown;
+        }>(request);
+        const validation = validateSyncMergeBody(body);
+        if (!validation.ok) { sendJson(response, 400, validation.error); return; }
+        const repoPathArg = resolveRepoPath(validation.repoPath);
+        // application/x-ndjson is the de-facto MIME for line-delimited JSON
+        // and is what tools like curl --stream and most fetch + readable-
+        // stream clients expect for incremental parsing.
+        response.writeHead(200, {
+          "content-type": "application/x-ndjson",
+          "cache-control": "no-store",
+          "x-accel-buffering": "no" // tell intermediate proxies not to buffer
+        });
+        const writeEvent = (event: object): void => {
+          response.write(`${JSON.stringify(event)}\n`);
+        };
+        try {
+          const result = await syncMergeInstances(
+            repoPathArg,
+            validation.name,
+            validation.fromAgents,
+            validation.byAgent,
+            {
+              timeoutMs: validation.timeoutMs,
+              onChunk: (kind, data) => {
+                writeEvent({ kind, data });
+              }
+            }
+          );
+          writeEvent({ kind: "result", ok: true, result });
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          writeEvent({ kind: "result", ok: false, error: message });
+        }
+        response.end();
+        return;
+      }
 
       if (request.method === "POST" && url.pathname === "/api/reviews/run") {
         const body = await readJsonBody<{ repoPath?: string; skillIds?: string[]; reviewer?: AgentKind | "rules"; language?: "zh" | "en" }>(request);

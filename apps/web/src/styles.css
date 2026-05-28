@@ -1629,6 +1629,51 @@ textarea:focus-visible {
   font-weight: var(--fw-medium);
   margin: 0;
 }
+/* issue #2: live agent output panel inside the working state. The frame
+   sits below the spinner / title block; head row is a small uppercase
+   label, body is a dark scrollable pre. We keep the panel always-mounted
+   while merging so the user has a stable destination to watch — empty
+   state shows a "waiting…" placeholder. */
+.merge-log-frame {
+  width: 100%;
+  margin-top: var(--sp-3);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  overflow: hidden;
+}
+.merge-log-head {
+  background: var(--surface-2);
+  color: var(--muted);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-medium);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: var(--sp-1) var(--sp-3);
+  border-bottom: 1px solid var(--border);
+}
+.merge-log {
+  margin: 0;
+  padding: var(--sp-3);
+  background: #0f172a;
+  color: #dbeafe;
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  line-height: var(--lh-base);
+  /* Vertical: scroll when many lines arrive; horizontal: scroll for very
+     long lines (don't wrap — agents emit JSON or stack traces that read
+     better on a single line). */
+  max-height: 280px;
+  overflow: auto;
+  white-space: pre;
+  /* No interactive selection of background while a chunk is appending */
+  user-select: text;
+}
+.merge-log-stdout { color: #dbeafe; }
+.merge-log-stderr { color: #fcd34d; }
+.merge-log-waiting {
+  color: var(--muted);
+  font-style: italic;
+}
 
 .checkbox-line {
   display: flex;

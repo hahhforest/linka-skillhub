@@ -150,5 +150,82 @@ export const api = {
   // timeout is 600s; merge may legitimately take a few minutes so the UI
   // shouldn't enforce an aggressive client-side timeout.
   syncMerge: (name: string, fromAgents: string[], byAgent: string, timeoutMs?: number) =>
-    request<SyncMergeResult>("/api/sync/merge", { method: "POST", body: JSON.stringify({ name, fromAgents, byAgent, timeoutMs }) })
+    request<SyncMergeResult>("/api/sync/merge", { method: "POST", body: JSON.stringify({ name, fromAgents, byAgent, timeoutMs }) }),
+  // issue #2: streaming variant — same shape, but the response is NDJSON
+  // (one event per line). onChunk fires for every stdout/stderr chunk the
+  // server forwards from the agent; the promise resolves with the final
+  // SyncMergeResult or rejects with the agent error. The fetch abort signal
+  // lets callers cancel mid-stream (e.g. dialog close while merging).
+  syncMergeStream: async (
+    name: string,
+    fromAgents: string[],
+    byAgent: string,
+    onChunk: (kind: "stdout" | "stderr", data: string) => void,
+    options: { readonly timeoutMs?: number; readonly signal?: AbortSignal } = {}
+  ): Promise<SyncMergeResult> => {
+    const response = await fetch("/api/sync/merge/stream", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ name, fromAgents, byAgent, timeoutMs: options.timeoutMs }),
+      signal: options.signal
+    });
+    if (!response.ok || !response.body) {
+      // Validation errors come back as a regular JSON error body (the
+      // streaming handler only kicks in after validation passes). Re-use the
+      // same shape humanizeError() reads off the error code.
+      const text = await response.text();
+      let message = `Stream request failed: ${response.status}`;
+      let code: string | undefined;
+      try {
+        const parsed = JSON.parse(text) as { error?: string; code?: string };
+        if (parsed.error) message = parsed.error;
+        if (parsed.code) code = parsed.code;
+      } catch { /* keep default */ }
+      const err = new Error(message) as Error & { code?: string };
+      if (code) err.code = code;
+      throw err;
+    }
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    // Parses any complete NDJSON lines accumulated in `buffer`, dispatching
+    // chunk events to onChunk and returning the terminal `result` event when
+    // it arrives. A partial trailing line stays in `buffer` for the next read.
+    let finalResult: SyncMergeResult | null = null;
+    let finalError: string | null = null;
+    while (true) {
+      const { value, done } = await reader.read();
+      if (value) buffer += decoder.decode(value, { stream: true });
+      let newlineAt = buffer.indexOf("\n");
+      while (newlineAt !== -1) {
+        const line = buffer.slice(0, newlineAt).trim();
+        buffer = buffer.slice(newlineAt + 1);
+        if (line) {
+          try {
+            const event = JSON.parse(line) as
+              | { kind: "stdout" | "stderr"; data: string }
+              | { kind: "result"; ok: true; result: SyncMergeResult }
+              | { kind: "result"; ok: false; error: string };
+            if (event.kind === "stdout" || event.kind === "stderr") {
+              onChunk(event.kind, event.data);
+            } else if (event.kind === "result" && event.ok) {
+              finalResult = event.result;
+            } else if (event.kind === "result") {
+              finalError = event.error;
+            }
+          } catch { /* skip unparseable line — server bug, but don't crash UI */ }
+        }
+        newlineAt = buffer.indexOf("\n");
+      }
+      if (done) break;
+    }
+    if (finalError !== null) {
+      const err = new Error(finalError);
+      throw err;
+    }
+    if (!finalResult) {
+      throw new Error("Merge stream ended without a result event");
+    }
+    return finalResult;
+  }
 };
