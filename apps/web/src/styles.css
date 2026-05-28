@@ -444,8 +444,11 @@ textarea:focus-visible {
   border: 1px solid var(--border);
   border-radius: var(--r-sm);
   padding: 4px var(--sp-2);
-  overflow: hidden;
-  text-overflow: ellipsis;
+  /* issue #1: never ellipsis real paths — users need to read the whole
+     thing to confirm "is this the sandbox or the real ~/.mavis?". Let the
+     code element scroll horizontally inside its flex slot; the parent li
+     hides overflow so the copy button next to it isn't pushed off-screen. */
+  overflow-x: auto;
   white-space: nowrap;
 }
 .source-path-copy {
@@ -1049,8 +1052,9 @@ textarea:focus-visible {
   margin-top: var(--sp-1);
   color: var(--muted);
   font-weight: var(--fw-regular);
-  overflow: hidden;
-  text-overflow: ellipsis;
+  /* issue #1: target dirs are real filesystem paths; horizontal scroll
+     instead of ellipsis so the user can read the whole thing. */
+  overflow-x: auto;
   white-space: nowrap;
 }
 .plan-list {
@@ -1317,7 +1321,12 @@ textarea:focus-visible {
   font-family: var(--font-mono);
   font-size: var(--fs-xs);
   color: var(--text-2);
-  word-break: break-all;
+  /* issue #1: was word-break: break-all (paths wrapped onto 2-3 lines and
+     made every instance row a different height). Switch to a single
+     horizontally-scrollable line so the row stays compact and the user
+     scrolls right when they want to see the rest of the path. */
+  overflow-x: auto;
+  white-space: nowrap;
 }
 .instance-actions {
   display: flex;
@@ -1756,8 +1765,9 @@ textarea:focus-visible {
 }
 .plan-item code {
   display: block;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  /* issue #1: plan items show source / target paths and backup paths;
+     horizontal scroll instead of ellipsis. */
+  overflow-x: auto;
   white-space: nowrap;
 }
 
@@ -1843,10 +1853,12 @@ textarea:focus-visible {
   font-family: var(--font-mono);
   font-size: var(--fs-xs);
   color: var(--text);
-  overflow: hidden;
-  text-overflow: ellipsis;
+  /* issue #1: the meta-bar's registry-path chip used to ellipsis + cap at
+     36ch. Replace with horizontal scroll inside a bounded width so the chip
+     still fits the meta-bar row but lets the user read the full path. */
+  overflow-x: auto;
   white-space: nowrap;
-  max-width: 36ch;
+  max-width: 56ch;
 }
 .repo-meta-bar button.ghost {
   height: var(--ctrl-sm);
