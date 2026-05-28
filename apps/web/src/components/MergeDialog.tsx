@@ -63,46 +63,7 @@ const parseClaudeEvent = (line: string): LogLine | null => {
     }
     return { kind: "stdout", level: "system", summary: `· system: ${subtype || "?"}`, rawJson };
   }
-  if (type === "assistant") {
-    // {message: {content: [{type:"text",text:"..."} | {type:"tool_use",name:"Read",input:{...}}]}}
-    const message = event.message as { content?: unknown } | undefined;
-    const content = Array.isArray(message?.content) ? message.content : [];
-    const lines: LogLine[] = [];
-    for (const block of content) {
-      if (!block || typeof block !== "object") continue;
-      const blockType = (block as { type?: unknown }).type;
-      if (blockType === "text") {
-        const text = (block as { text?: unknown }).text;
-        if (typeof text === "string" && text.trim().length > 0) {
-          // Truncate long agent prose to one line; full text still visible
-          // via raw expander.
-          const oneLine = text.replace(/\s+/g, " ").trim();
-          const clipped = oneLine.length > 200 ? `${oneLine.slice(0, 200)}…` : oneLine;
-          lines.push({ kind: "stdout", level: "agent", summary: `🗣 ${clipped}`, rawJson });
-        }
-      } else if (blockType === "tool_use") {
-        const name = (block as { name?: unknown }).name;
-        const input = (block as { input?: unknown }).input as Record<string, unknown> | undefined;
-        // Pick the most useful field per tool. file_path / path / pattern /
-        // command cover the common ones across Read/Edit/Write/Bash/Glob.
-        const detail =
-          (input?.file_path as string | undefined) ??
-          (input?.path as string | undefined) ??
-          (input?.pattern as string | undefined) ??
-          (input?.command as string | undefined) ??
-          "";
-        const detailStr = detail.length > 80 ? `${detail.slice(0, 80)}…` : detail;
-        lines.push({
-          kind: "stdout",
-          level: "tool",
-          summary: detailStr ? `🔧 ${name ?? "tool"}: ${detailStr}` : `🔧 ${name ?? "tool"}`,
-          rawJson
-        });
-      }
-    }
-    if (lines.length > 0) return lines[0]!; // first line; multi-block handled by caller below
-    return { kind: "stdout", level: "agent", summary: "🗣 (assistant turn)", rawJson };
-  }
+  // assistant events are handled by parseClaudeEventAll (it fans blocks out).
   if (type === "user") {
     // tool_result events come back as user-typed; surface as a "result" line.
     return { kind: "stdout", level: "tool", summary: "✓ tool result", rawJson };
@@ -214,7 +175,6 @@ export function MergeDialog({ lang, skill, sync, onMerged, onClose }: MergeDialo
   useModalFocusTrap(dialogRef);
 
   const isWorking = phase === "working";
-  const closeAllowed = phase !== "working" || confirmAbort;
 
   useEffect(() => {
     const handleKey = (event: KeyboardEvent) => {
@@ -433,7 +393,7 @@ export function MergeDialog({ lang, skill, sync, onMerged, onClose }: MergeDialo
       role="dialog"
       aria-modal="true"
       aria-labelledby="merge-dialog-title"
-      onClick={(event) => { if (event.target === event.currentTarget && closeAllowed && !isWorking) closeAndPropagate(); }}
+      onClick={(event) => { if (event.target === event.currentTarget && !isWorking) closeAndPropagate(); }}
     >
       <div ref={dialogRef} tabIndex={-1} className="dialog merge-dialog" onClick={(event) => event.stopPropagation()}>
         <button
