@@ -1631,9 +1631,9 @@ textarea:focus-visible {
 }
 /* issue #2: live agent output panel inside the working state. The frame
    sits below the spinner / title block; head row is a small uppercase
-   label, body is a dark scrollable pre. We keep the panel always-mounted
-   while merging so the user has a stable destination to watch — empty
-   state shows a "waiting…" placeholder. */
+   label + copy button, body is a dark scrollable list of human-summarised
+   lines (claude stream-json parsed into one-liners). Fixed height across
+   all phases so the dialog doesn't visibly resize as chunks arrive. */
 .merge-log-frame {
   width: 100%;
   margin-top: var(--sp-3);
@@ -1642,6 +1642,10 @@ textarea:focus-visible {
   overflow: hidden;
 }
 .merge-log-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2);
   background: var(--surface-2);
   color: var(--muted);
   font-size: var(--fs-xs);
@@ -1651,28 +1655,162 @@ textarea:focus-visible {
   padding: var(--sp-1) var(--sp-3);
   border-bottom: 1px solid var(--border);
 }
+.merge-log-copy {
+  height: 22px;
+  padding: 0 var(--sp-2);
+  font-size: var(--fs-xs);
+  letter-spacing: normal;
+  text-transform: none;
+  min-width: 0;
+}
 .merge-log {
   margin: 0;
-  padding: var(--sp-3);
+  padding: var(--sp-2) var(--sp-3);
   background: #0f172a;
   color: #dbeafe;
   font-family: var(--font-mono);
   font-size: var(--fs-xs);
   line-height: var(--lh-base);
-  /* Vertical: scroll when many lines arrive; horizontal: scroll for very
-     long lines (don't wrap — agents emit JSON or stack traces that read
-     better on a single line). */
-  max-height: 280px;
-  overflow: auto;
+  /* Fixed height end-to-end (working / done / error). Without this the
+     dialog grows as chunks arrive then shrinks again on transition to
+     done, which the sub-agent UX review flagged as visible jitter. */
+  height: 240px;
+  overflow-y: auto;
+  overflow-x: auto;
   white-space: pre;
-  /* No interactive selection of background while a chunk is appending */
   user-select: text;
 }
-.merge-log-stdout { color: #dbeafe; }
-.merge-log-stderr { color: #fcd34d; }
+.merge-log-line {
+  display: block;
+  padding: 2px 0;
+}
+.merge-log-summary {
+  display: inline-block;
+}
+.merge-log-summary.clickable {
+  cursor: pointer;
+  border-radius: var(--r-sm);
+  padding: 0 4px;
+}
+.merge-log-summary.clickable:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+.merge-log-raw {
+  margin: 4px 0 4px 12px;
+  padding: 6px 8px;
+  background: #1e293b;
+  border-left: 2px solid var(--primary);
+  color: #94a3b8;
+  font-size: 11px;
+  white-space: pre-wrap;
+  word-break: break-all;
+  border-radius: 0 var(--r-sm) var(--r-sm) 0;
+}
+/* per-line color cues so the user can spot tool calls / agent prose
+   without having to read every line. tone is loose — tool stands out
+   most because it's the "agent did something concrete" signal. */
+.merge-log-info    { color: #dbeafe; }
+.merge-log-stdout  { color: #dbeafe; }
+.merge-log-system  { color: #94a3b8; }
+.merge-log-tool    { color: #5eead4; }
+.merge-log-agent   { color: #e0e7ff; }
+.merge-log-stderr  { color: #fcd34d; }
+.merge-log-raw     { color: #94a3b8; }
 .merge-log-waiting {
   color: var(--muted);
   font-style: italic;
+}
+
+/* Working-phase abort confirmation banner. Slots between the spinner and
+   the log frame so the user notices it before the log keeps scrolling
+   past underneath. */
+.merge-abort-confirm {
+  width: 100%;
+  margin-top: var(--sp-2);
+  padding: var(--sp-3);
+  border: 1px solid var(--warning);
+  border-radius: var(--r-md);
+  background: #fef3c7;
+  color: #92400e;
+}
+.merge-abort-confirm p { margin: 0 0 var(--sp-2) 0; }
+.merge-abort-actions {
+  display: flex;
+  gap: var(--sp-2);
+  justify-content: flex-end;
+}
+
+/* Done-phase success summary. Reuses .merge-progress's vertical rhythm
+   but with a green accent line and a CTA for push-all. */
+.merge-done {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--sp-3);
+  padding: var(--sp-3) 0;
+}
+.merge-done-head {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-3);
+}
+.merge-done-icon {
+  color: var(--success);
+  background: #dcfce7;
+  border-radius: 50%;
+  padding: 4px;
+  flex-shrink: 0;
+}
+.merge-done-title {
+  margin: 0 0 4px 0;
+  font-weight: var(--fw-medium);
+}
+.merge-done-drift {
+  padding: var(--sp-3);
+  border: 1px solid var(--warning);
+  border-radius: var(--r-md);
+  background: #fef3c7;
+  color: #92400e;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+.merge-done-drift p { margin: 0; }
+.merge-done-drift .primary {
+  align-self: flex-start;
+}
+.merge-done-pushed {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  color: var(--success);
+  margin: 0;
+}
+
+/* Error-phase. */
+.merge-error {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  padding: var(--sp-2) 0;
+}
+
+/* .danger button modifier — for the abort / retry buttons. */
+.ghost.danger {
+  color: var(--danger);
+  border-color: var(--danger);
+}
+.ghost.danger:hover:not(:disabled) {
+  background: #fee2e2;
+}
+.primary.danger {
+  background: var(--danger);
+  border-color: var(--danger);
+  box-shadow: 0 8px 18px rgba(239, 68, 68, 0.22);
+}
+.primary.danger:hover:not(:disabled) {
+  background: #dc2626;
+  border-color: #dc2626;
 }
 
 .checkbox-line {
