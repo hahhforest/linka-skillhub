@@ -1583,6 +1583,10 @@ textarea:focus-visible {
 }
 .merge-instance-row.instance-status-drifted { border-color: var(--warning); }
 .merge-instance-row.instance-status-missing { border-color: var(--danger); opacity: 0.7; }
+/* R36-C22: in-sync rows contribute no diff to a merge. Dim them and remove
+   the pointer cursor so the disabled state is obvious without a tooltip. */
+.merge-instance-row--unselectable { opacity: 0.5; }
+.merge-instance-row--unselectable label { cursor: not-allowed; }
 .merge-instance-row label {
   display: flex;
   align-items: center;
