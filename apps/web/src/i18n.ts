@@ -56,6 +56,16 @@ export const messages = {
     commitMessage: "提交说明",
     commitMessageDefault: "更新技能仓库",
     remoteSyncDesc: "这些操作只作用于当前 Registry 仓库，不会写入任何 Agent skills 目录。",
+    // R36-C23: bind the registry repo to a new GitHub remote. The CLI's
+    // `lsh repo connect --remote <url>` was the only path; the WebUI just
+    // never surfaced it.
+    connectRemote: "绑定到 GitHub remote",
+    connectRemoteTitle: "绑定到 GitHub remote",
+    connectRemoteBody: "把当前 Registry 仓库的 git remote 改成下面这个 URL。任何已有的 remote 都会被覆盖。",
+    connectRemotePlaceholder: "git@github.com:<owner>/<repo>.git",
+    connectRemoteApply: "绑定",
+    connectRemoteSuccess: "已绑定到 {url}",
+    connectRemoteInvalidUrl: "URL 格式不像 git remote",
     scanDialogTitle: "确认扫描来源",
     scanDialogBody: "将扫描当前环境配置中的来源目录。mirror 环境只读取真实 skills 的沙箱副本，不会写入本机真实目录。",
     includeBuiltin: "包含 builtin / system 来源",
@@ -341,6 +351,14 @@ export const messages = {
     commitMessage: "Commit message",
     commitMessageDefault: "Update skill registry",
     remoteSyncDesc: "These actions only affect the active Registry repo and never write agent skill directories.",
+    // R36-C23: bind the registry repo to a new GitHub remote.
+    connectRemote: "Bind to GitHub remote",
+    connectRemoteTitle: "Bind to GitHub remote",
+    connectRemoteBody: "Rewrite the git remote of the current Registry repo to the URL below. Any existing remote is overwritten.",
+    connectRemotePlaceholder: "git@github.com:<owner>/<repo>.git",
+    connectRemoteApply: "Bind",
+    connectRemoteSuccess: "Bound to {url}",
+    connectRemoteInvalidUrl: "URL doesn't look like a git remote",
     scanDialogTitle: "Confirm Scan Sources",
     scanDialogBody: "This will scan source directories from the active profile. Mirror profile reads only sandbox copies of real skills and never writes real local skill directories.",
     includeBuiltin: "Include builtin / system sources",

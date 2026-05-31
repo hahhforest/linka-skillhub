@@ -2305,3 +2305,19 @@ textarea:focus-visible {
 .fix-frontmatter-button {
   margin-top: var(--sp-3);
 }
+
+/* R36-C23: connect-remote dialog. Inherits .dialog layout. */
+.connect-remote-dialog .connect-remote-input {
+  width: 100%;
+  font-family: var(--font-mono);
+  margin: var(--sp-2) 0 var(--sp-3) 0;
+  padding: var(--sp-2) var(--sp-3);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--bg-input);
+  color: var(--fg);
+}
+.connect-remote-dialog .connect-remote-input:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: -1px;
+}

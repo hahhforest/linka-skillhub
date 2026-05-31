@@ -611,6 +611,7 @@ export function App() {
               onPull={pullRegistry}
               onPush={pushRegistry}
               onRegistryLoaded={(result) => { setRegistryRepo(result.repoPath); if (result.skills) setSkills(result.skills); setMessage(`${messages[lang].loadRegistrySuccess}: ${result.repoPath} (${result.skillCount ?? result.skills?.length ?? 0})`); }}
+              onRemoteConnected={(status, url) => { setGitStatusText(status); setMessage(messages[lang].connectRemoteSuccess.replace("{url}", url)); }}
             />
           )}
           {view === "intersect" && <Intersect skills={visibleSkills} allSkills={skills} targets={targets} lang={lang} plan={plan} onPlan={planDistribution} onApply={applyDistribution} agents={populatedAgents} focusedSkillId={focusedSkillId} onFocus={focusSkill} />}
