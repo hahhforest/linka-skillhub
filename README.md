@@ -1,115 +1,234 @@
 # linka-skillhub
 
-`linka-skillhub` 是一个本地优先的 code-agent skill 管理工具，用来扫描、汇总、版本化、审查和分发 Mavis、OpenCode、Claude Code、Codex 的 skills。
+Local-first skill management for code agents (Mavis / OpenCode / Claude Code / Codex / Cursor / OpenClaw / Hermes). Scans, validates, imports, reviews, reconciles, and distributes skills across agents and machines — with a Git-versioned registry at the center and an optional Web console for everything that isn't a single shell call.
 
-主命令 `lsh`（兼容别名 `linka-skillhub`）。如果本机已有同名 `lsh`（如 openssh-lpk/lsh-utils），用 `pnpm lsh` 或 `npx lsh` 替代。
+Primary command: `lsh` (alias: `linka-skillhub`). Use `pnpm lsh` or `npx lsh` if you already have an unrelated `lsh` on `$PATH`.
 
-`pnpm lsh ...` 直接跑已构建的 `packages/cli/dist/index.js`，单次 invoke 约 100ms，不会重新 build。**首次 clone 仓库或刚清掉 dist 时，请先 `pnpm build`。** 如果需要源代码热运行（自动 build core + tsx 跑 TS），用开发模式 `pnpm lsh:dev ...`，但每次会多花 1-2 秒 build。
+## Why
 
-## 当前能力
+Multiple coding agents, each with its own `skills/` directory, each editing skills in place, no shared history. linka-skillhub is the layer that:
 
-- 扫描本机四类 agent 的 skill 目录，并识别 user/private/builtin/system/project 来源。
-- 校验 `SKILL.md` frontmatter，识别 invalid YAML、缺失 `name`/`description`、agent 绑定和疑似敏感信息。
-- 将 skill 原样复制到 registry 仓库，并写入 `registry/skills.json`。
-- 保留同名 skill 的多 variant，不做破坏性改名。
-- 从 registry 生成分发计划，默认只分发合法、可共享、非 agent-bound、非 unsafe 的 skill。
-- 覆盖前备份目标目录到当前 profile 的 `stateDir/backups`。
-- **所有写操作（CLI 与 Web）默认要求 `y/N` 确认；非交互必须显式 `--yes` 或 `confirmToken`。**
-- **`lsh fix frontmatter` 可自动补缺失的 `SKILL.md` frontmatter（默认只写沙箱目录，写真实源需 `--allow-unsafe-source`）。**
-- **Web 控制台支持加载已有 Registry 路径（必须位于当前 profile 范围内）。**
-- 提供 CLI 和本地 Web 控制台。
+- **Scans** every agent's skill source dirs and groups by (agent, scope).
+- **Imports** skills into a single Git-versioned registry (`registry/skills/<name>/`) so you can diff, revert, and share.
+- **Reviews** each skill (deterministic rules + optional code-agent reviews) and tags it `valid` / `portable` / `agent_bound` / `unsafe` / `invalid`.
+- **Distributes** registry skills to one or more agents (`registry → mavis`, `registry → codex + claude`, etc.) with preview-then-confirm.
+- **Reconciles drift** between a registry canonical and the live instances under each agent's source dir (the sync subsystem: pull / push / push-all / fork / merge).
+- **Surfaces the timeline**: per-skill history view backed by `git log` over the registry repo.
 
-## 配置与安全开发
+Two interfaces ship in one binary: a full CLI (primary, works on remote Linux with no display) and a Web console on `lsh serve` (the convenient way to drive the same flows from a browser). The Web console is a thin layer — every state-changing call goes through the same `core` functions the CLI uses.
 
-路径全部放在 `linka-skillhub.config.json` 里。当前默认 profile 是 `mirror`，读取 `.sandbox/local-mirror/sources/...`，写入 `.sandbox/local-mirror/targets/...`，用于真实内容测试但不会写入你本机真实 skills 目录。
-
-```bash
-pnpm mirror:local                                    # 复制本机真实 skill packages 到 sandbox mirror
-pnpm scan                                            # 默认扫描 mirror profile
-pnpm lsh -- --profile local list                     # 显式扫描真实本机目录
-```
-
-`sandbox` profile 仍保留为小型合成 fixture。真实目录在 `local` profile 中配置。任何会写目标目录的分发操作，只有在显式使用 `--profile local` 时才会指向 `~/.codex/skills`、`~/.claude/skills`、`~/.mavis/skills` 等真实路径。
-
-## 开发
+## Install / run
 
 ```bash
 pnpm install
-pnpm mirror:local
-pnpm typecheck
-pnpm test
-pnpm build
-pnpm verify
-pnpm serve
+pnpm mirror:local            # copy real ~/.mavis / ~/.claude / ~/.codex / ... into .sandbox/local-mirror
+pnpm typecheck               # tsc on packages/core + cli + apps/web
+pnpm test                    # vitest on all packages
+pnpm build                   # produces packages/cli/dist + apps/web/dist
+pnpm verify                  # typecheck + test + build + ui-audit + ui-flow-test (exit gate)
+pnpm review:smoke            # optional: end-to-end smoke against every reviewer (not in verify)
+pnpm serve                   # start the Web console + API on http://127.0.0.1:4873
 ```
 
-默认 Web/API 地址：`http://127.0.0.1:4873`。
+`pnpm verify` is the iteration exit gate — all five steps must pass before shipping a change. `ui-audit` walks the running Web console looking for a11y / overflow / contrast regressions; `ui-flow-test` exercises a few canonical paths (refresh, import-confirm, search, view switching).
 
-`pnpm verify` 是每轮迭代的退出门槛：类型检查、单元测试、构建、浏览器巡检、浏览器流程测试都必须通过。
+The Web bundle is built by Vite. The CLI serves the static bundle from `apps/web/dist` on the same port as the API; open `http://127.0.0.1:4873` in any browser.
 
-`pnpm review:smoke`（opt-in）对每个 reviewer（rules + codex/opencode/claude/mavis）跑一次端到端冒烟；rules 必须成功，外部 reviewer 任意 1 个成功即视为通过。不接入 `pnpm verify`。
+## Profiles
 
-`pnpm check:invalid` 列出当前 registry 中的 invalid skill，exit code 表示有/无。
+linka-skillhub has three profiles. The active profile is chosen by `--profile <name>` (CLI) or by editing `linka-skillhub.config.json`. The profile decides which source dirs are scanned and which target dirs writes land in.
 
-## CLI
+| Profile | Source dirs | Target dirs | Purpose |
+|---|---|---|---|
+| `mirror` | `.sandbox/local-mirror/sources/**` (snapshots of real agent dirs) | `.sandbox/local-mirror/targets/**` | **Default.** Real-content testing without touching the user's real skills. |
+| `sandbox` | tiny synthetic fixtures | tiny synthetic targets | Reproducible unit / e2e tests. |
+| `local` | the real `~/.codex/skills`, `~/.claude/skills`, `~/.mavis/skills`, etc. | the same | Real writes. Opt-in only. |
 
 ```bash
-# 列出当前 profile 下扫描到的 skills
-lsh list
-lsh --profile local list --all --json
-lsh scan           # alias，stderr 提示已 deprecated
-
-# Registry
-lsh registry import --yes
-lsh registry list
-lsh registry show <id>
-
-# 审查
-lsh review --reviewer rules
-lsh review --reviewer codex --skill <id1>,<id2>
-lsh review --reviewer claude --language en
-
-# A→B 复制（单源单目标）
-lsh copy preview --from mavis --to codex --skill <id>
-lsh copy apply --from mavis --to codex --skill <id> --yes
-
-# 多目标分发
-lsh distribute preview --target codex,claude --skill <id>
-lsh distribute apply --target codex,claude --skill <id> --yes
-
-# Repo
-lsh repo status
-lsh repo push --message "feat: update skills" --yes
-
-# 配置 / profile
-lsh config list
-lsh profile show
-
-# 修复 invalid skill 的 frontmatter
-lsh fix frontmatter <id> --dry-run
-lsh fix frontmatter <id> --yes                                    # 写入 mirror sandbox source
-lsh fix frontmatter <id> --allow-unsafe-source --yes              # 写入真实源（仅 local profile 必需）
-
-# 启动 Web 控制台
-lsh serve
+lsh --profile local list                        # scan the real machine
+lsh --profile local list --all --json           # include builtin / system
+lsh config list                                  # show the resolved config
+lsh profile show                                 # show the active profile + paths
 ```
 
-写操作 (`registry import`、`copy apply`、`distribute apply`、`repo push`、`fix frontmatter`) 在非 TTY 下必须 `--yes` 或 `LINKA_SKILLHUB_FORCE_YES=1`，否则以 exit code 2 拒绝并打印预览到 stderr。
+`mirror` is the default because every write goes to a sandbox by design. To make changes that actually land in `~/.codex/skills/...`, you must explicitly opt in with `--profile local` (and a `--yes` for non-interactive).
 
-## Registry 结构
+## Commands
 
-```text
-registry/skills.json             # manifest：来源、hash、状态、variant、auto_fixed
-registry/reviews/*.json          # 审查结果摘要
-skills/<skill>/<variant>/...     # 原样复制的 skill 包
-prompts/skill-review-v1.md       # 固化审查 prompt
+```
+lsh list                           scan + list (alias: `lsh scan` deprecated)
+lsh registry import [--create]     import scanned skills into the registry repo
+lsh registry list                  list registry skills
+lsh registry show <id>             show one skill's frontmatter + evidence
+lsh registry history <name>        show the per-skill history (parsed git log)
+lsh review --reviewer <kind>       run review (rules | codex | claude | opencode | mavis)
+lsh distribute preview|apply --target <agents> --skill <ids>
+lsh copy preview|apply --from <a> --to <b> --skill <ids>
+lsh sync status                    show drift between canonicals and live instances
+lsh sync pull <name> --from <a>    pull an instance's diff into the canonical
+lsh sync push <name> --to <a>      push the canonical over an instance
+lsh sync push-all <name>           push the canonical to every drifted instance
+lsh sync fork <name> --from-instance <a> --as <newName>
+lsh sync merge <name> --from <a,b,...> --by <agent>
+                                   spawn a code agent to reconcile multiple instances
+lsh repo status|connect|pull|push  manage the registry's Git remote
+lsh fix frontmatter <id> [--allow-unsafe-source]   repair a missing/broken SKILL.md frontmatter
+lsh serve                          start the Web console + API
+lsh config list                    show the resolved config
+lsh profile show                   show the active profile + paths
 ```
 
-## 默认安全策略
+`<agents>` and `<a>` are agent kinds: `mavis`, `opencode`, `claude`, `codex`, `cursor`, `openclaw`, `hermes`, `shared` (the `.agents/skills` dir), or any custom kind added via `linka-skillhub.config.json`.
 
-- builtin/system skills 会展示，但默认不导入、不分发。
-- unsafe、invalid、agent-bound skills 默认不会进入一键分发。
-- 目标已有同名 skill 时，计划显示 overwrite；执行前会备份再覆盖。
-- LLM/agent 审查接口已预留；当前 deterministic rules 是默认可用审查器。
-- 所有 Web 写操作需先 `POST /api/distributions/plan` 拿到 `plan.id`，再以 `confirmToken` 调 `POST /api/distributions/apply`；plan TTL 10 分钟，可幂等重放。
-- `loadRegistry` 必须指向当前 profile 范围内的合法 manifest，路径逃逸由服务端 `validateRegistryPath` 拒绝。
+### Write operations
+
+Every state-changing command shows source / target / action and asks for `y/N` confirmation in a TTY. In non-interactive mode the same commands require an explicit `--yes` (or `LINKA_SKILLHUB_FORCE_YES=1`). The Web console enforces the same rule via two-step dialogs (preview → `confirmToken` → apply) backed by `/api/distributions/plan` + `/api/distributions/apply`, `/api/sync/merge/preview` + `/api/sync/merge`, etc.
+
+```bash
+lsh distribute preview --target codex,claude --skill smart-commit
+lsh distribute apply  --target codex,claude --skill smart-commit --yes
+lsh sync pull   writing-plans --from claude --yes
+lsh sync merge  writing-plans --from claude,hermes --by claude --timeout-ms 600000 --yes
+```
+
+## Web console
+
+`lsh serve` (default `http://127.0.0.1:4873`) opens the same flows through a browser. Four pages, all backed by the same `/api/...` endpoints the CLI calls:
+
+- **Overview** — stat cards (total / shareable / agent-bound / problematic), source-distribution bars, status donut, search, agent filter, per-skill detail panel.
+- **Intersect (A→B copy)** — pick a source agent + target agent, select skills from the left, preview the copy plan, apply.
+- **Distribute (registry → many)** — pick target agents, select registry skills, preview the multi-target plan, apply.
+- **Repo (registry management)** — import, load existing registry, run review, refresh git status, bind to a GitHub remote, pull, push, per-skill history.
+
+Per-skill detail panel (visible on every page that lists skills) surfaces:
+
+- **Metadata**: source agent, scope, hash.
+- **Instances**: live paths under each agent, status (`in-sync` / `drifted` / `missing`), per-instance `pull` / `push` / `fork` actions, plus `push-all` and `merge` at the card level.
+- **History**: parsed `git log` for the canonical — import / pull / merge / fork / other.
+- **Evidence**: review results + parse issues; `fix frontmatter` button appears when status contains `invalid`.
+
+The language toggle (zh / en) sits in the top bar. State (focused skill, source bar, agent filter, per-page selection) is page-local — switching views never carries selection across pages.
+
+## Registry layout
+
+A v2 registry (created by `lsh registry import`) is a Git repo with this layout:
+
+```
+registry/
+  skills/<name>/SKILL.md        canonical copy of the skill
+  instances.json                { byName: { "<name>": [ { realPath, viaAgents, lastSeenHash, status } ] } }
+  skills.json                   legacy v1 manifest; v2 is canonical-per-name
+  reviews/<skill>-<ts>.json     per-review artifacts
+prompts/
+  skill-review-v1.md            frozen review prompt (zh + en variants)
+```
+
+`registry/skills/<name>/` is the canonical of record. Every write — import, pull, merge, fork — produces a single `git commit` with one of these subjects so `lsh registry history <name>` can parse the timeline:
+
+```
+import <name> (origin: <agent>)
+pull   <name> (from <agent>)
+push   <name> (to <agent>)        # not currently emitted; kept for future
+merge  <name> (<a> + <b> + ...)
+fork  <name> (from <agent>)
+```
+
+The merge subject is produced by linka-skillhub, not the user — see `packages/core/src/sync.ts`. Anything that doesn't match a known subject shows up as `other` with the raw subject preserved.
+
+## Sync subsystem
+
+The sync layer reconciles the **canonical** (`registry/skills/<name>/`) against the **live instances** on disk (the (agent, scope) source dirs the registry imported from).
+
+- `pull <name> --from <a>` — overwrite the canonical with the live content under `<a>`; bumps the canonical hash; every other live instance becomes `drifted`.
+- `push <name> --to <a>` — overwrite `<a>`'s live content with the canonical; `<a>` becomes `in-sync` again.
+- `push-all <name>` — push the canonical to every drifted instance.
+- `fork <name> --from-instance <a> --as <newName>` — create a new canonical from `<a>`'s content under a new name. The new name must match `^[a-z][a-z0-9-]*$`.
+- `merge <name> --from <a,b,...> --by <agent>` — prepare a workspace at `<repo>/.merges/<uid>/` containing `a/`, `b/`, …, `target/`, and a `INSTRUCTIONS.md`. Spawn the named agent CLI to read those copies and write the reconciled canonical into `target/`. The agent must write a valid `SKILL.md` (or the merge is retried once with the failure reason appended to the prompt). Workspace is kept permanently for debugging.
+
+The merge workspace is git-ignored inside the registry repo (`.merges/`), so agent writes don't bleed into `git log` of the canonical.
+
+## Configuration
+
+`linka-skillhub.config.json` is discovered by walking up from the working directory. The schema declares profiles, source / target paths, and the list of agents to expose:
+
+```json
+{
+  "profiles": {
+    "mirror": { "registryRepo": ".sandbox/local-mirror/targets/registry", "stateDir": ".sandbox/local-mirror/state" },
+    "sandbox": { "registryRepo": ".sandbox/sandbox/registry", "stateDir": ".sandbox/sandbox/state" },
+    "local":   { "registryRepo": "~/skillhub/registry", "stateDir": "~/.local/share/linka-skillhub" }
+  },
+  "activeProfile": "mirror"
+}
+```
+
+CLI / WebUI never accept raw filesystem paths from the user — every write targets a profile's `registryRepo` after path-safety checks (`assertPathInside`). Custom agents can be added by extending the agent definitions; the Web console surfaces whatever the active profile declares.
+
+## Default safety policy
+
+These rules apply in every profile and every interface (CLI + Web):
+
+- **Real-agent dirs are opt-in.** Default `mirror` writes to a sandbox; `local` profile is the only one that touches `~/.codex/skills`, `~/.claude/skills`, etc.
+- **Reviews are user-driven.** Code-agent reviewers (`codex`, `claude`, `opencode`, `mavis`) are off by default; the dialog surfaces availability per agent and only proceeds after explicit confirmation.
+- **`unsafe` / `invalid` skills are excluded by default** from one-click distribute. `--include-unsafe` / `--include-agent-bound` is the explicit opt-in.
+- **Overwrite is loud.** A pre-flight preview lists every `copy` / `overwrite` / `skip` line with the source / target / reason, and a backup lands in `<stateDir>/backups` before the first overwrite.
+- **No exposed internal verbs.** The UI never says "generate plan" or "execute plan" — it says "预览复制结果" / "确认复制到选中的目标 Agent" and equivalent. Same for sync: "用中心覆盖这份", "另存为新 skill", "把这份改动拉回中心".
+- **Server-side validation.** The HTTP layer re-validates every path and agent kind; the WebUI cannot bypass profile safety by constructing a custom URL.
+
+## Architecture
+
+The monorepo has three packages and one app. The dependency graph is strictly downward: app → cli → core. The CLI is the only thing that imports `node:*` modules — the Web bundle is pure browser.
+
+```
+packages/core    no I/O at module level; pure functions on top of fs/promises
+                 — registry.ts (read / write manifest + canonical)
+                 — scanner.ts   (scan + classify skill frontmatter)
+                 — frontmatter.ts, frontmatter-fix.ts
+                 — review.ts    (rules + code-agent dispatch)
+                 — distribution.ts (preview + apply distribute)
+                 — repo.ts      (git commit / push / pull / remote)
+                 — sync.ts      (pull / push / push-all / fork / merge)
+                 — history.ts   (parse git log into action / agents / ts)
+                 — types.ts, agents.ts, config.ts, hash.ts, path-safety.ts, summary.ts, safety.ts
+
+packages/cli     commander + Node http server; serves /api/* and the static Web bundle
+                 — index.ts:  every CLI subcommand
+                 — server.ts: 26 routes (/api/skills, /api/sync/*, /api/repo/*, /api/fix/*, /api/distributions/*, …)
+                 — prompts.ts: review prompt templates
+
+apps/web         React + Vite; no node imports
+                 — App.tsx + 4 page components (Overview / Intersect / Distribute / Repo)
+                 — DetailPanel (per-skill metadata + instances + history + fix-frontmatter button)
+                 — MergeDialog (multi-instance reconciliation UI with phase machine + log)
+                 — FixFrontmatterDialog, ConnectRemoteDialog, LoadRegistryDialog, ImportConfirmDialog
+                 — api.ts: 1:1 thin wrapper around /api/* — no business logic
+                 — i18n.ts (zh + en), styles.css
+```
+
+`apps/web/src/api.ts` is the thin client: every method is one `fetch` call to a `core` route. No business logic in the Web — that's deliberate, so a future TUI / VS Code extension can reuse the same endpoints.
+
+## Verify
+
+```bash
+pnpm verify
+```
+
+Runs, in order:
+
+1. `pnpm typecheck` — tsc on all three packages.
+2. `pnpm test` — vitest, ~75 tests across core / cli / web.
+3. `pnpm build` — esbuild via tsc for core/cli, Vite for web.
+4. `node scripts/ui-audit.mjs` — boots a headless Chrome via `playwright-core`, walks the Web console looking for a11y / overflow / contrast issues. Fails on any issue.
+5. `node scripts/ui-flow-test.mjs` — exercises the canonical paths (search, source-bar selection, view switching, dialog open/close).
+
+`pnpm review:smoke` is opt-in: it boots every reviewer (rules, codex, claude, opencode, mavis) once each and requires the rules reviewer to succeed. External reviewers may be marked available or not based on which CLIs are on `$PATH`. Not part of `verify`.
+
+## Known limits
+
+- The merge subsystem spawns a code-agent CLI and trusts it to write into `target/`. A failed validation runs the agent one more time with the failure reason appended to the prompt; if that also fails, the workspace is kept at `<repo>/.merges/<uid>/` for manual inspection.
+- WebUI is a thin layer over the same `core` functions the CLI uses. Anything you can do in the Web console you can do in the CLI; the inverse is not yet true (`lsh fix frontmatter` was the last CLI-only escape hatch, now also exposed in the Web).
+- The merge workspace accumulates. Delete `<repo>/.merges/` manually once you've confirmed each merge's commit.
+
+## License
+
+MIT. See `LICENSE`.
