@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react";
-import { ArrowDownToLine, ArrowUpFromLine, GitFork, GitMerge, PackageCheck } from "lucide-react";
+import { ArrowDownToLine, ArrowUpFromLine, FileText, GitFork, GitMerge, PackageCheck } from "lucide-react";
 import type { CanonicalSyncStatus, RegistryInstance, SkillHistoryEntry, SkillPackage, SyncMergeResult } from "@linka-skillhub/core";
 import { api } from "../api.js";
 import { humanizeError } from "../humanize-error.js";
 import { messages, type Language } from "../i18n.js";
 import { AgentLogo, agentTone, bucketLabel, statusClass } from "./skillVisuals.js";
 import { MergeDialog } from "./MergeDialog.js";
+import { FixFrontmatterDialog } from "./FixFrontmatterDialog.js";
 
 // Typed key into the messages map so callers cannot pass a string that does
 // not exist in i18n. Both `zh` and `en` share the same shape.
@@ -85,6 +86,12 @@ export function DetailPanel({ skill, lang, emptyTextKey }: DetailPanelProps): JS
   const [syncBusy, setSyncBusy] = useState(false);
   const [syncMessage, setSyncMessage] = useState<string>("");
   const [mergeDialogOpen, setMergeDialogOpen] = useState(false);
+  // R36-C23: open only when the focused skill has at least one "invalid" issue
+  // (missing name/description in SKILL.md, broken YAML, etc.). After a
+  // successful apply we refetch the same skill so the issues list / status
+  // pill / sync state all reflect the now-valid skill.
+  const [fixOpen, setFixOpen] = useState(false);
+  const isInvalid = skill?.status?.includes("invalid") ?? false;
   const refreshSync = (name: string): Promise<void> =>
     api.syncStatusFor(name)
       .then((result) => { setSync(result.status); })
@@ -371,6 +378,21 @@ export function DetailPanel({ skill, lang, emptyTextKey }: DetailPanelProps): JS
             <span>{lang === "zh" ? "无阻断证据" : "No blocking evidence"}</span>
           )}
         </div>
+        {/* R36-C23: only when the skill is actually invalid (missing name/desc,
+            broken YAML, etc.) does the auto-fix button make sense. The
+            underlying core function copies inferred name + description into
+            SKILL.md frontmatter and rewrites the manifest to clear the
+            "invalid" status. */}
+        {isInvalid && (
+          <button
+            type="button"
+            className="ghost fix-frontmatter-button"
+            onClick={() => setFixOpen(true)}
+            title={t.fixFrontmatterAction}
+          >
+            <FileText size={14} /> {t.fixFrontmatterAction}
+          </button>
+        )}
       </div>
       <div className="work-card path-card">
         <h3>{t.path}</h3>
@@ -393,6 +415,20 @@ export function DetailPanel({ skill, lang, emptyTextKey }: DetailPanelProps): JS
               .replace("{agent}", agentTone[result.byAgent]?.label ?? result.byAgent)
               .replace("{drifted}", String(result.otherDrifted.length))
           );
+        }}
+      />
+    )}
+    {fixOpen && (
+      <FixFrontmatterDialog
+        lang={lang}
+        skill={skill}
+        onClose={() => setFixOpen(false)}
+        onApplied={() => {
+          // The skill's issues are now empty and the manifest will list it
+          // as valid. Reload both history (a new commit landed) and the
+          // parent skill list so the Overview / table cells update too.
+          void Promise.all([refreshSync(skill.name), refreshHistory(skill.name)]);
+          setSyncMessage(t.fixFrontmatterAction);
         }}
       />
     )}

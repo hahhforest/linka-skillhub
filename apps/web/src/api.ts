@@ -227,5 +227,26 @@ export const api = {
       throw new Error("Merge stream ended without a result event");
     }
     return finalResult;
-  }
+  },
+  // R36-C23: fix frontmatter — preview returns the proposed new frontmatter
+  // and reasons; apply re-issues with confirmToken="apply" to actually write
+  // the registry and commit. The two-step pattern matches the distribution
+  // plan/apply split so the user sees what will change before committing.
+  fixFrontmatterPreview: (skillId: string, allowUnsafeSource = false) =>
+    request<{ result: unknown; skill: unknown }>("/api/fix/frontmatter/preview", {
+      method: "POST",
+      body: JSON.stringify({ skillId, allowUnsafeSource })
+    }),
+  fixFrontmatterApply: (skillId: string, allowUnsafeSource = false) =>
+    request<{ result: unknown; committed: boolean; committedSha?: string }>("/api/fix/frontmatter", {
+      method: "POST",
+      body: JSON.stringify({ skillId, allowUnsafeSource, confirmToken: "apply" })
+    }),
+  // R36-C23: connect the registry repo to a new GitHub remote. The CLI
+  // already had this; the WebUI just never surfaced it.
+  repoConnect: (remoteUrl: string) =>
+    request<{ ok: boolean; status: string }>("/api/repo/connect", {
+      method: "POST",
+      body: JSON.stringify({ remoteUrl })
+    })
 };

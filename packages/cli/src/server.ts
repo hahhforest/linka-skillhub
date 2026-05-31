@@ -10,6 +10,7 @@ import {
   getAgentDefinitions,
   getDistributionTargets,
   gitCommitAll,
+  gitCommitPaths,
   gitPull,
   gitPush,
   gitStatus,
@@ -18,6 +19,7 @@ import {
   readInstancesIndex,
   readRegistryManifest,
   readSkillHistory,
+  applyFrontmatterFix,
   reviewSkillWithAgent,
   reviewSkillWithRules,
   scanSkills,
@@ -30,6 +32,7 @@ import {
   syncPushToAllInstances,
   syncPushToInstance,
   validateRegistryPath,
+  writeRegistryManifest,
   writeReviewResult,
   type AgentKind,
   type DistributionPlan,
@@ -754,6 +757,96 @@ export const startServer = (options: ServerOptions): http.Server => {
         }
         const run = await applyDistributionPlan(resolveRepoPath(body.registryPath), plan);
         sendJson(response, 200, { ...run, planId: plan.id });
+        return;
+      }
+
+      if (request.method === "POST" && url.pathname === "/api/fix/frontmatter") {
+        const body = await readJsonBody<{ skillId: string; repoPath?: string; allowUnsafeSource?: boolean; confirmToken: string }>(request);
+        if (!body.skillId) {
+          sendJson(response, 400, { error: "skillId is required." });
+          return;
+        }
+        if (!body.confirmToken) {
+          sendJson(response, 400, { error: "confirmToken is required; call /api/fix/frontmatter without confirmToken first to dry-run, then resend with the returned token." });
+          return;
+        }
+        if (body.confirmToken !== "apply") {
+          sendJson(response, 400, { error: "Invalid confirmToken; pass 'apply' to actually write the fix." });
+          return;
+        }
+        const repoPath = resolveRepoPath(body.repoPath);
+        const manifest = await readRegistryManifest(repoPath);
+        const skill = manifest.skills.find((entry) => entry.id === body.skillId);
+        if (!skill) {
+          sendJson(response, 404, { error: `skill not found in registry: ${body.skillId}` });
+          return;
+        }
+        const profileRoot = options.profileName === "mirror"
+          ? path.resolve(options.cwd, ".sandbox")
+          : body.allowUnsafeSource
+            ? options.cwd
+            : options.stateDir;
+        const fixResult = await applyFrontmatterFix(skill, {
+          cwd: options.cwd,
+          profileRoot,
+          allowUnsafeSource: body.allowUnsafeSource === true || options.profileName === "mirror",
+          dryRun: false
+        });
+        if (!fixResult.applied) {
+          sendJson(response, 200, { result: fixResult, committed: false });
+          return;
+        }
+        const updatedSkills = manifest.skills.map((entry) => {
+          if (entry.id !== body.skillId) return entry;
+          return {
+            ...entry,
+            frontmatter: { ...(fixResult.newFrontmatter ?? {}) },
+            issues: [],
+            status: entry.status.filter((s: string) => s !== "invalid"),
+            auto_fixed: true
+          };
+        });
+        const nextManifest = { ...manifest, skills: updatedSkills, generatedAt: new Date().toISOString() };
+        await writeRegistryManifest(repoPath, nextManifest);
+        let committedSha: string | undefined;
+        try {
+          const canonicalRel = path.relative(repoPath, skill.skillDir);
+          const relSkillJson = path.join("registry", "skills.json");
+          const out = await gitCommitPaths(repoPath, [canonicalRel, relSkillJson], `pull ${skill.name} (from rules-autofix)`);
+          committedSha = out;
+        } catch {
+          // Commit failure (e.g. fix ran outside the registry repo) doesn't
+          // mask the successful fix — the manifest is still correct.
+        }
+        sendJson(response, 200, { result: fixResult, committed: true, committedSha });
+        return;
+      }
+
+      if (request.method === "POST" && url.pathname === "/api/fix/frontmatter/preview") {
+        const body = await readJsonBody<{ skillId: string; repoPath?: string; allowUnsafeSource?: boolean }>(request);
+        if (!body.skillId) {
+          sendJson(response, 400, { error: "skillId is required." });
+          return;
+        }
+        const repoPath = resolveRepoPath(body.repoPath);
+        const manifest = await readRegistryManifest(repoPath);
+        const skill = manifest.skills.find((entry) => entry.id === body.skillId);
+        if (!skill) {
+          sendJson(response, 404, { error: `skill not found in registry: ${body.skillId}` });
+          return;
+        }
+        const profileRoot = options.profileName === "mirror"
+          ? path.resolve(options.cwd, ".sandbox")
+          : body.allowUnsafeSource
+            ? options.cwd
+            : options.stateDir;
+        const fixResult = await applyFrontmatterFix(skill, {
+          cwd: options.cwd,
+          profileRoot,
+          allowUnsafeSource: body.allowUnsafeSource === true || options.profileName === "mirror",
+          dryRun: true
+        });
+        sendJson(response, 200, { result: fixResult, skill });
         return;
       }
 
