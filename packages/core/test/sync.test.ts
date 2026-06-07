@@ -1,6 +1,7 @@
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { spawnSync } from "node:child_process";
 import { describe, expect, it } from "vitest";
 import {
   computeSyncStatus,
@@ -92,6 +93,7 @@ describe("syncPullFromInstance", () => {
     const canonicalDir = path.join(repoPath, "registry", "skills", "shared-skill");
     const canonicalContent = await fs.readFile(path.join(canonicalDir, "SKILL.md"), "utf8");
     expect(canonicalContent).toContain("alpha-edit");
+    expectCleanRegistry(repoPath);
   }, TEST_TIMEOUT);
 
   it("refuses to pull from an unknown agent", async () => {
@@ -109,6 +111,7 @@ describe("syncPushToInstance", () => {
     expect(restored.name).toBe("shared-skill");
     const restoredContent = await fs.readFile(path.join(alphaSkill, "SKILL.md"), "utf8");
     expect(restoredContent).not.toContain("alpha-edit");
+    expectCleanRegistry(repoPath);
   }, TEST_TIMEOUT);
 });
 
@@ -131,6 +134,7 @@ describe("syncPushToAllInstances", () => {
     expect(alphaContent).not.toContain("alpha-edit");
     // Beta untouched.
     expect(await fs.stat(path.join(betaSkill, "SKILL.md"))).toBeTruthy();
+    expectCleanRegistry(repoPath);
   }, TEST_TIMEOUT);
 });
 
@@ -147,6 +151,7 @@ describe("syncForkInstance", () => {
     const forkCanonical = path.join(repoPath, "registry", "skills", "shared-skill-v2", "SKILL.md");
     const forkContent = await fs.readFile(forkCanonical, "utf8");
     expect(forkContent).toContain("fork-source");
+    expectCleanRegistry(repoPath);
   }, TEST_TIMEOUT);
 
   it("rejects names that collide with an existing canonical", async () => {
@@ -185,6 +190,11 @@ const makeMockRunner = (writes: readonly string[]): MergeRunner => {
 
 const validMergedSkill = (name: string): string =>
   `---\nname: ${name}\ndescription: Merged across multiple agents.\n---\n# ${name}\nSome merged body.\n`;
+
+const expectCleanRegistry = (repoPath: string): void => {
+  const status = spawnSync("git", ["status", "--short"], { cwd: repoPath, encoding: "utf8" }).stdout.trim();
+  expect(status).toBe("");
+};
 
 describe("prepareMergeWorkspace", () => {
   it("builds the workspace skeleton with one subdir per source agent and an INSTRUCTIONS.md naming each", async () => {
@@ -262,6 +272,7 @@ describe("syncMergeInstances", () => {
     expect(canonicalSkill).toContain("Merged across multiple agents");
     // Workspace persists for inspection.
     expect(await fs.stat(result.workspaceDir)).toBeTruthy();
+    expectCleanRegistry(repoPath);
   }, TEST_TIMEOUT);
 
   it("retries once when the first runner output fails strict validation, succeeds on second", async () => {
@@ -296,7 +307,6 @@ describe("syncMergeInstances", () => {
     const runner = makeMockRunner([validMergedSkill("shared-skill")]);
     await syncMergeInstances(repoPath, "shared-skill", ["claude", "opencode"], "claude", { runner, workspaceId: "iiiii" });
     // git log -1 --format=%s on the canonical path → most recent subject.
-    const { spawnSync } = await import("node:child_process");
     const subject = spawnSync("git", ["log", "-1", "--format=%s", "--", path.join("registry", "skills", "shared-skill")], { cwd: repoPath, encoding: "utf8" }).stdout.trim();
     expect(subject).toBe("merge shared-skill (claude + opencode)");
   }, TEST_TIMEOUT);

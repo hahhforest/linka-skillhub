@@ -71,6 +71,33 @@ export const writeRegistryManifest = async (repoPath: string, manifest: Registry
   return manifestPath;
 };
 
+export const ensureRegistryGitignore = async (repoPath: string): Promise<string> => {
+  const registryDir = path.join(repoPath, "registry");
+  await ensureDir(registryDir);
+  const gitignorePath = path.join(registryDir, ".gitignore");
+  const raw = await fs.readFile(gitignorePath, "utf8").catch(() => "");
+  const lines = raw.split(/\r?\n/).filter((line) => line.length > 0);
+  if (!lines.includes("instances.json")) {
+    lines.push("instances.json");
+    await fs.writeFile(gitignorePath, `${lines.join("\n")}\n`, "utf8");
+  }
+  return gitignorePath;
+};
+
+const existingRepoPaths = async (repoPath: string, relPaths: readonly string[]): Promise<string[]> => {
+  const existing: string[] = [];
+  for (const relPath of relPaths) {
+    if (await pathExists(path.join(repoPath, relPath))) existing.push(relPath);
+  }
+  return existing;
+};
+
+export const commitRegistryMetadata = async (repoPath: string, message = "update registry metadata"): Promise<string> => {
+  await ensureRegistryGitignore(repoPath);
+  const relPaths = await existingRepoPaths(repoPath, [path.join("registry", "skills.json"), path.join("registry", ".gitignore"), "prompts"]);
+  return gitCommitPaths(repoPath, relPaths, message);
+};
+
 export const readRegistryManifest = async (registryPath: string): Promise<RegistryManifest> => {
   const manifestPath = registryPath.endsWith(".json") ? registryPath : path.join(registryPath, "registry", "skills.json");
   const raw = await fs.readFile(manifestPath, "utf8");
@@ -82,6 +109,7 @@ const instancesPath = (repoPath: string): string => path.join(repoPath, "registr
 export const writeInstancesIndex = async (repoPath: string, index: RegistryInstancesIndex): Promise<string> => {
   const registryDir = path.join(repoPath, "registry");
   await ensureDir(registryDir);
+  await ensureRegistryGitignore(repoPath);
   const target = instancesPath(repoPath);
   await fs.writeFile(target, `${JSON.stringify(index, null, 2)}\n`, "utf8");
   return target;
@@ -283,6 +311,7 @@ export const importSkillsToRepository = async (options: ImportOptions): Promise<
     generatedAt: scannedAt,
     byName: instancesByName
   });
+  await commitRegistryMetadata(repoPath);
 
   return { repoPath, manifestPath, imported, skipped, manifest };
 };

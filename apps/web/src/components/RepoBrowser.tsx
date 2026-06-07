@@ -4,6 +4,7 @@ import {
   GitBranch,
   HardDriveDownload,
   Info,
+  Link2,
   Loader2,
   RefreshCw,
   Sparkles,
@@ -18,6 +19,7 @@ import { agentTone } from "./skillVisuals.js";
 import { AgentSelect } from "./AgentSelect.js";
 import { LoadRegistryDialog } from "./LoadRegistryDialog.js";
 import { ImportConfirmDialog } from "./ImportConfirmDialog.js";
+import { ConnectRemoteDialog } from "./ConnectRemoteDialog.js";
 
 export interface RepoBrowserProps {
   readonly skills: SkillPackage[];
@@ -44,6 +46,10 @@ export interface RepoBrowserProps {
   readonly onPull: () => void;
   readonly onPush: () => void;
   readonly onRegistryLoaded: (result: RegistryLoadResponse) => void;
+  // R36-C23: fired after ConnectRemoteDialog succeeds, carrying the new
+  // post-setRemote git status text. The parent uses it to update the meta
+  // bar's branch chip + git-status pre without a full reload.
+  readonly onRemoteConnected: (newGitStatus: string, boundUrl: string) => void;
 }
 
 // First line of `git status --short --branch` is `## <branch>...<remote>` (or
@@ -89,7 +95,8 @@ export function RepoBrowser({
   onRefreshGit,
   onPull,
   onPush,
-  onRegistryLoaded
+  onRegistryLoaded,
+  onRemoteConnected
 }: RepoBrowserProps): JSX.Element {
   const t = messages[lang];
   // Selection scope for "Run review on these skills". Empty Set means "all
@@ -100,6 +107,7 @@ export function RepoBrowser({
   const [agentFilter, setAgentFilter] = useState<string>("all");
   const [showLoadDialog, setShowLoadDialog] = useState(false);
   const [showImportConfirm, setShowImportConfirm] = useState(false);
+  const [showConnectDialog, setShowConnectDialog] = useState(false);
 
   const branch = useMemo(() => extractBranch(gitStatus), [gitStatus]);
   const matchesAgent = (skill: SkillPackage) => agentFilter === "all" || skill.source.agent === agentFilter;
@@ -179,6 +187,13 @@ export function RepoBrowser({
           <span className="repo-action-spacer" />
           <button className="ghost" onClick={onRefreshGit} disabled={busy}>
             <RefreshCw size={14} /> {t.refreshGitStatus}
+          </button>
+          {/* R36-C23: bind this Registry repo to a GitHub remote. The CLI's
+              `lsh repo connect --remote <url>` was the only entry point before
+              — WebUI users had to drop to a terminal. Pairs with the
+              refresh / pull / push trio as the other half of the same flow. */}
+          <button className="ghost" onClick={() => setShowConnectDialog(true)} disabled={busy} title={t.connectRemote}>
+            <Link2 size={14} /> {t.connectRemote}
           </button>
           <button className="ghost" onClick={onPull} disabled={busy}>
             <HardDriveDownload size={14} /> {t.pullRegistry}
@@ -281,6 +296,14 @@ export function RepoBrowser({
           busy={busy}
           onConfirm={() => void confirmImport()}
           onCancel={() => setShowImportConfirm(false)}
+        />
+      )}
+      {showConnectDialog && (
+        <ConnectRemoteDialog
+          lang={lang}
+          registryRepo={registryRepo}
+          onConnected={(status, url) => onRemoteConnected(status, url)}
+          onClose={() => setShowConnectDialog(false)}
         />
       )}
     </section>

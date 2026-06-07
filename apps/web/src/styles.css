@@ -833,8 +833,10 @@ textarea:focus-visible {
   gap: var(--sp-3);
   align-items: start;
 }
+.intersect-body > * { min-width: 0; }
 .intersect-table-card { min-height: 320px; }
 .intersect-table-card .card-head { margin-bottom: var(--sp-3); }
+.intersect-table-card .card-head > div { min-width: 0; }
 .intersect-table-card .path-line {
   margin: var(--sp-1) 0 0;
   color: var(--muted);
@@ -845,6 +847,7 @@ textarea:focus-visible {
   min-width: 0;
 }
 .intersect-table-card .path-line code {
+  flex: 1 1 auto;
   font-family: var(--font-mono);
   font-size: var(--fs-xs);
   color: var(--text);
@@ -1085,27 +1088,35 @@ textarea:focus-visible {
   display: grid;
   gap: var(--sp-3);
   align-content: start;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
 }
+.detail-inline > * { min-width: 0; }
 .detail-inline .detail-head {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
   gap: var(--sp-2);
   padding: var(--sp-2) var(--sp-1);
+  min-width: 0;
+  max-width: 100%;
 }
 .detail-inline .detail-head > div { min-width: 0; flex: 1; }
 .detail-inline .detail-head h2 {
   margin: 0;
   font-size: var(--fs-lg);
   line-height: var(--lh-tight);
-  word-break: break-word;
+  overflow-wrap: anywhere;
+  word-break: normal;
 }
 .detail-inline .detail-head p {
   margin: var(--sp-1) 0 0;
   color: var(--muted);
   font-size: var(--fs-sm);
   line-height: var(--lh-base);
-  word-break: break-word;
+  overflow-wrap: anywhere;
+  word-break: normal;
 }
 .detail-inline .work-card { padding: var(--sp-3); }
 .detail-inline .work-card h3 { font-size: var(--fs-md); margin-bottom: var(--sp-2); }
@@ -1583,6 +1594,10 @@ textarea:focus-visible {
 }
 .merge-instance-row.instance-status-drifted { border-color: var(--warning); }
 .merge-instance-row.instance-status-missing { border-color: var(--danger); opacity: 0.7; }
+/* R36-C22: in-sync rows contribute no diff to a merge. Dim them and remove
+   the pointer cursor so the disabled state is obvious without a tooltip. */
+.merge-instance-row--unselectable { opacity: 0.5; }
+.merge-instance-row--unselectable label { cursor: not-allowed; }
 .merge-instance-row label {
   display: flex;
   align-items: center;
@@ -2005,7 +2020,9 @@ textarea:focus-visible {
   display: grid;
   gap: var(--sp-3);
   align-content: start;
+  min-width: 0;
 }
+.repo-browser-layout > * { min-width: 0; }
 .repo-meta-bar {
   padding: var(--sp-3) var(--sp-4);
   display: flex;
@@ -2019,6 +2036,7 @@ textarea:focus-visible {
   flex-wrap: wrap;
   gap: var(--sp-2);
   align-items: center;
+  min-width: 0;
 }
 .repo-meta-chip {
   display: inline-flex;
@@ -2031,8 +2049,12 @@ textarea:focus-visible {
   color: var(--text-2);
   font-size: var(--fs-xs);
   max-width: 100%;
+  min-width: 0;
 }
 .repo-meta-chip code {
+  display: block;
+  flex: 1 1 auto;
+  min-width: 0;
   font-family: var(--font-mono);
   font-size: var(--fs-xs);
   color: var(--text);
@@ -2058,6 +2080,7 @@ textarea:focus-visible {
   flex-wrap: wrap;
   align-items: center;
   gap: var(--sp-2);
+  min-width: 0;
 }
 .repo-action-row-compact {
   font-size: var(--fs-xs);
@@ -2079,6 +2102,7 @@ textarea:focus-visible {
   gap: var(--sp-2);
   font-size: var(--fs-xs);
   color: var(--muted);
+  min-width: 0;
 }
 .repo-commit-message input {
   height: var(--ctrl-sm);
@@ -2097,7 +2121,14 @@ textarea:focus-visible {
   grid-template-columns: minmax(0, 1.4fr) minmax(280px, 1fr);
   gap: var(--sp-3);
   align-items: start;
+  min-width: 0;
 }
+.repo-body > * { min-width: 0; }
+.repo-table-card .card-head {
+  min-width: 0;
+  flex-wrap: wrap;
+}
+.repo-table-card .card-head > div { min-width: 0; }
 .repo-detail-panel {
   position: sticky;
   top: var(--sp-3);
@@ -2138,6 +2169,30 @@ textarea:focus-visible {
 @media (max-width: 1100px) {
   .repo-body { grid-template-columns: 1fr; }
   .repo-detail-panel { position: static; }
+}
+
+@media (max-width: 620px) {
+  .repo-meta-bar { align-items: stretch; }
+  .repo-meta-chips { width: 100%; }
+  .repo-meta-chip:first-child { flex: 1 1 100%; }
+  .repo-meta-bar button.ghost { width: 100%; }
+  .repo-action-row { align-items: stretch; }
+  .repo-action-row button.ghost,
+  .repo-action-row button.primary {
+    width: 100%;
+    justify-content: center;
+  }
+  .repo-action-spacer { display: none; }
+  .repo-commit-message {
+    width: 100%;
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .repo-commit-message input {
+    width: 100%;
+    min-width: 0;
+  }
+  .repo-review-scope { overflow-wrap: anywhere; }
 }
 
 /* R35-C4: Add Source Directory button on the Overview page header. Sits
@@ -2274,4 +2329,46 @@ textarea:focus-visible {
     gap: var(--sp-2);
   }
   .overview-add-source { width: 100%; justify-content: center; }
+}
+
+/* R36-C23: fix-frontmatter dialog. Inherits .dialog layout, adds a
+   pre-block for the proposed frontmatter and a danger-line for the
+   unsafe-source warning. */
+.fix-frontmatter-preview {
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  padding: var(--sp-3);
+  font-size: 0.85em;
+  max-height: 240px;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+.fix-issues {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 var(--sp-3) 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+}
+.fix-frontmatter-button {
+  margin-top: var(--sp-3);
+}
+
+/* R36-C23: connect-remote dialog. Inherits .dialog layout. */
+.connect-remote-dialog .connect-remote-input {
+  width: 100%;
+  font-family: var(--font-mono);
+  margin: var(--sp-2) 0 var(--sp-3) 0;
+  padding: var(--sp-2) var(--sp-3);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--bg-input);
+  color: var(--fg);
+}
+.connect-remote-dialog .connect-remote-input:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: -1px;
 }

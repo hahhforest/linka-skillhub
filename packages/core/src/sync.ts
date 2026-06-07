@@ -7,6 +7,7 @@ import { ensureDir, pathExists } from "./fs-helpers.js";
 import { assertPathInside, sanitizePathSegment } from "./path-safety.js";
 import { gitCommitPaths } from "./repo.js";
 import {
+  commitRegistryMetadata,
   readInstancesIndex,
   readRegistryManifest,
   registryCanonicalPath,
@@ -197,6 +198,7 @@ export const syncPullFromInstance = async (
     generatedAt: scannedAt,
     byName
   });
+  await commitRegistryMetadata(repoPath, `update ${name} metadata`);
   const otherDrifted = (byName[name] ?? [])
     .filter((entry) => entry.realPath !== instance.realPath && entry.status === "drifted")
     .map((entry) => entry.realPath);
@@ -241,6 +243,7 @@ export const syncPushToInstance = async (
     generatedAt: scannedAt,
     byName
   });
+  await commitRegistryMetadata(repoPath, "update registry metadata");
   return {
     name,
     realPath: instance.realPath,
@@ -329,6 +332,7 @@ export const syncForkInstance = async (
     skills: [...manifest.skills, newSkillPackage].sort((a, b) => a.name.localeCompare(b.name))
   };
   await writeRegistryManifest(repoPath, nextManifest);
+  await commitRegistryMetadata(repoPath, `update ${newName} metadata`);
   // Don't yet register an instance for the fork — there isn't one on the
   // user's filesystem until they distribute it. They can run scan/import
   // again later if they want to surface forks per agent.
@@ -822,6 +826,7 @@ export const syncMergeInstances = async (
       generatedAt: scannedAt,
       byName
     });
+    await commitRegistryMetadata(repoPath, `update ${name} metadata`);
     const otherDrifted = (byName[name] ?? [])
       .filter((entry) => entry.status === "drifted")
       .map((entry) => entry.realPath);

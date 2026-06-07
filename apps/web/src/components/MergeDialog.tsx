@@ -497,14 +497,20 @@ export function MergeDialog({ lang, skill, sync, onMerged, onClose }: MergeDialo
                     instance.status === "in-sync" ? t.instanceStatusInSync :
                     instance.status === "drifted" ? t.instanceStatusDrifted :
                     t.instanceStatusMissing;
+                  // R36-C22: in-sync instances contribute no diff, so the
+                  // checkbox is hard-disabled — an in-sync row that gets
+                  // toggled into selectedFrom would silently pass the size
+                  // check but produce a no-op agent run. Missing stays
+                  // disabled for the same reason (no file on disk to copy).
+                  const isSelectable = instance.status === "drifted";
                   return (
-                    <li key={instance.realPath} className={`merge-instance-row instance-status-${instance.status}`}>
-                      <label>
+                    <li key={instance.realPath} className={`merge-instance-row instance-status-${instance.status}${isSelectable ? "" : " merge-instance-row--unselectable"}`}>
+                      <label title={isSelectable ? undefined : t.mergeFromHint}>
                         <input
                           type="checkbox"
                           checked={checked}
                           onChange={() => toggleFrom(instance.realPath)}
-                          disabled={instance.status === "missing"}
+                          disabled={!isSelectable}
                         />
                         <span className={`instance-badge instance-badge-${instance.status}`}>{statusLabel}</span>
                         <span className="merge-instance-agents">

@@ -208,14 +208,21 @@ function Overview({ skills, focusedSkillId, focusSkill, lang, totalSkillCount, a
         counts.set(keyOf(agent.kind, source.scope), { agent: agent.kind, scope: source.scope, count: 0 });
       }
     }
-    for (const skill of agentOnlySkills) {
+    // Source bars follow the same scope the stat cards + table are showing
+    // (search + agent + source-key), not the agent-only subset. When the
+    // search box has "lark-approval" in it, the cards already say "1"; the
+    // bars saying "Hermes 88" was a stale view that contradicted the table.
+    // When a single (agent, scope) source-key is selected, the unselected
+    // bars correctly go to 0 — that visual emptiness IS the "you narrowed
+    // here" signal.
+    for (const skill of displayedSkills) {
       const key = keyOf(skill.source.agent, skill.source.scope);
       const row = counts.get(key) ?? { agent: skill.source.agent, scope: skill.source.scope, count: 0 };
       row.count += 1;
       counts.set(key, row);
     }
     return [...counts.values()].sort((a, b) => b.count - a.count);
-  }, [agentOnlySkills, agents]);
+  }, [displayedSkills, agents]);
   // R35-C5: bar fill widths use the largest single-bucket count as 100%, NOT
   // cardsSummary.total. When a small bucket is selected cardsSummary.total
   // drops to that bucket's count, which would visually rescale every bar to
@@ -557,7 +564,7 @@ export function App() {
     if (!pendingPlan) return;
     setBusy(true);
     try {
-      const run = await api.distributionApply(pendingPlan.targetAgents, pendingPlan.skillIds, pendingPlan.confirmToken, pendingPlan.plan);
+      const run = await api.distributionApply(pendingPlan.targetAgents, pendingPlan.skillIds, pendingPlan.confirmToken);
       setMessage(`${t.copied} ${run.copied}, ${t.skipped} ${run.skipped}`);
       setPendingPlan(null);
       setDialog(null);
@@ -604,6 +611,7 @@ export function App() {
               onPull={pullRegistry}
               onPush={pushRegistry}
               onRegistryLoaded={(result) => { setRegistryRepo(result.repoPath); if (result.skills) setSkills(result.skills); setMessage(`${messages[lang].loadRegistrySuccess}: ${result.repoPath} (${result.skillCount ?? result.skills?.length ?? 0})`); }}
+              onRemoteConnected={(status, url) => { setGitStatusText(status); setMessage(messages[lang].connectRemoteSuccess.replace("{url}", url)); }}
             />
           )}
           {view === "intersect" && <Intersect skills={visibleSkills} allSkills={skills} targets={targets} lang={lang} plan={plan} onPlan={planDistribution} onApply={applyDistribution} agents={populatedAgents} focusedSkillId={focusedSkillId} onFocus={focusSkill} />}

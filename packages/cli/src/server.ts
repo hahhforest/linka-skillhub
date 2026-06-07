@@ -10,6 +10,7 @@ import {
   getAgentDefinitions,
   getDistributionTargets,
   gitCommitAll,
+  gitCommitPaths,
   gitPull,
   gitPush,
   gitStatus,
@@ -18,6 +19,7 @@ import {
   readInstancesIndex,
   readRegistryManifest,
   readSkillHistory,
+  applyFrontmatterFix,
   reviewSkillWithAgent,
   reviewSkillWithRules,
   scanSkills,
@@ -30,6 +32,7 @@ import {
   syncPushToAllInstances,
   syncPushToInstance,
   validateRegistryPath,
+  writeRegistryManifest,
   writeReviewResult,
   type AgentKind,
   type DistributionPlan,
@@ -102,6 +105,38 @@ const validateSyncBody = (
 type SyncMergeBodyValidation =
   | { ok: true; name: string; fromAgents: AgentKind[]; byAgent: AgentKind; timeoutMs: number | undefined; repoPath: string | undefined }
   | { ok: false; error: { error: string; code: string } };
+
+type DistributionApplyPlanResolution =
+  | { ok: true; plan: DistributionPlan }
+  | { ok: false; status: number; body: { error: string; code: string } };
+
+export const resolveDistributionApplyPlan = (
+  confirmToken: string | undefined,
+  lookupPlan: (planId: string) => DistributionPlan | undefined
+): DistributionApplyPlanResolution => {
+  if (!confirmToken) {
+    return {
+      ok: false,
+      status: 400,
+      body: {
+        error: "confirmToken is required; call /api/distributions/plan first and resend its plan.id.",
+        code: "confirmation_required"
+      }
+    };
+  }
+  const cached = lookupPlan(confirmToken);
+  if (!cached) {
+    return {
+      ok: false,
+      status: 410,
+      body: {
+        error: `Plan ${confirmToken} is expired or unknown; regenerate the preview and retry.`,
+        code: "plan_expired"
+      }
+    };
+  }
+  return { ok: true, plan: cached };
+};
 
 const validateSyncMergeBody = (body: {
   name?: unknown;
@@ -702,46 +737,13 @@ export const startServer = (options: ServerOptions): http.Server => {
           includeUnsafe?: boolean;
           includeAgentBound?: boolean;
           confirmToken?: string;
-          plan?: DistributionPlan;
         }>(request);
-        if (!body.confirmToken) {
-          sendJson(response, 400, {
-            error: "confirmToken is required; call /api/distributions/plan first and resend its plan.id.",
-            code: "confirmation_required"
-          });
+        const resolution = resolveDistributionApplyPlan(body.confirmToken, lookupCachedPlan);
+        if (!resolution.ok) {
+          sendJson(response, resolution.status, resolution.body);
           return;
         }
-        const cached = lookupCachedPlan(body.confirmToken);
-        let plan: DistributionPlan;
-        if (cached) {
-          plan = cached;
-        } else if (body.plan && body.plan.id === body.confirmToken) {
-          plan = body.plan;
-          cachePlan(plan);
-        } else {
-          const recomputed = await createDistributionPlan({
-            registryPath: resolveRepoPath(body.registryPath),
-            cwd: options.cwd,
-            config: currentConfig,
-            profileName: options.profileName,
-            backupDir: options.stateDir ? path.join(options.stateDir, "backups") : undefined,
-            targetAgents: body.targetAgents,
-            skillIds: body.skillIds,
-            includeUnsafe: body.includeUnsafe,
-            includeAgentBound: body.includeAgentBound
-          });
-          if (recomputed.id !== body.confirmToken) {
-            sendJson(response, 409, {
-              error: `confirmToken does not match the current plan (${recomputed.id}); regenerate the preview and retry.`,
-              code: "plan_id_mismatch",
-              expected: body.confirmToken,
-              actual: recomputed.id
-            });
-            return;
-          }
-          plan = recomputed;
-          cachePlan(plan);
-        }
+        const plan = resolution.plan;
         const cachedAt = planCreatedAt.get(plan.id);
         if (cachedAt && Date.now() - cachedAt > PLAN_TTL_MS) {
           planCache.delete(plan.id);
@@ -754,6 +756,96 @@ export const startServer = (options: ServerOptions): http.Server => {
         }
         const run = await applyDistributionPlan(resolveRepoPath(body.registryPath), plan);
         sendJson(response, 200, { ...run, planId: plan.id });
+        return;
+      }
+
+      if (request.method === "POST" && url.pathname === "/api/fix/frontmatter") {
+        const body = await readJsonBody<{ skillId: string; repoPath?: string; allowUnsafeSource?: boolean; confirmToken: string }>(request);
+        if (!body.skillId) {
+          sendJson(response, 400, { error: "skillId is required." });
+          return;
+        }
+        if (!body.confirmToken) {
+          sendJson(response, 400, { error: "confirmToken is required; call /api/fix/frontmatter without confirmToken first to dry-run, then resend with the returned token." });
+          return;
+        }
+        if (body.confirmToken !== "apply") {
+          sendJson(response, 400, { error: "Invalid confirmToken; pass 'apply' to actually write the fix." });
+          return;
+        }
+        const repoPath = resolveRepoPath(body.repoPath);
+        const manifest = await readRegistryManifest(repoPath);
+        const skill = manifest.skills.find((entry) => entry.id === body.skillId);
+        if (!skill) {
+          sendJson(response, 404, { error: `skill not found in registry: ${body.skillId}` });
+          return;
+        }
+        const profileRoot = options.profileName === "mirror"
+          ? path.resolve(options.cwd, ".sandbox")
+          : body.allowUnsafeSource
+            ? options.cwd
+            : options.stateDir;
+        const fixResult = await applyFrontmatterFix(skill, {
+          cwd: options.cwd,
+          profileRoot,
+          allowUnsafeSource: body.allowUnsafeSource === true || options.profileName === "mirror",
+          dryRun: false
+        });
+        if (!fixResult.applied) {
+          sendJson(response, 200, { result: fixResult, committed: false });
+          return;
+        }
+        const updatedSkills = manifest.skills.map((entry) => {
+          if (entry.id !== body.skillId) return entry;
+          return {
+            ...entry,
+            frontmatter: { ...(fixResult.newFrontmatter ?? {}) },
+            issues: [],
+            status: entry.status.filter((s: string) => s !== "invalid"),
+            auto_fixed: true
+          };
+        });
+        const nextManifest = { ...manifest, skills: updatedSkills, generatedAt: new Date().toISOString() };
+        await writeRegistryManifest(repoPath, nextManifest);
+        let committedSha: string | undefined;
+        try {
+          const canonicalRel = path.relative(repoPath, skill.skillDir);
+          const relSkillJson = path.join("registry", "skills.json");
+          const out = await gitCommitPaths(repoPath, [canonicalRel, relSkillJson], `pull ${skill.name} (from rules-autofix)`);
+          committedSha = out;
+        } catch {
+          // Commit failure (e.g. fix ran outside the registry repo) doesn't
+          // mask the successful fix — the manifest is still correct.
+        }
+        sendJson(response, 200, { result: fixResult, committed: true, committedSha });
+        return;
+      }
+
+      if (request.method === "POST" && url.pathname === "/api/fix/frontmatter/preview") {
+        const body = await readJsonBody<{ skillId: string; repoPath?: string; allowUnsafeSource?: boolean }>(request);
+        if (!body.skillId) {
+          sendJson(response, 400, { error: "skillId is required." });
+          return;
+        }
+        const repoPath = resolveRepoPath(body.repoPath);
+        const manifest = await readRegistryManifest(repoPath);
+        const skill = manifest.skills.find((entry) => entry.id === body.skillId);
+        if (!skill) {
+          sendJson(response, 404, { error: `skill not found in registry: ${body.skillId}` });
+          return;
+        }
+        const profileRoot = options.profileName === "mirror"
+          ? path.resolve(options.cwd, ".sandbox")
+          : body.allowUnsafeSource
+            ? options.cwd
+            : options.stateDir;
+        const fixResult = await applyFrontmatterFix(skill, {
+          cwd: options.cwd,
+          profileRoot,
+          allowUnsafeSource: body.allowUnsafeSource === true || options.profileName === "mirror",
+          dryRun: true
+        });
+        sendJson(response, 200, { result: fixResult, skill });
         return;
       }
 
@@ -792,4 +884,3 @@ export const startServer = (options: ServerOptions): http.Server => {
 };
 
 export const defaultRepoPath = (cwd = process.env.INIT_CWD ?? process.cwd()): string => path.join(cwd, ".linka-skillhub", "registry-repo");
-
