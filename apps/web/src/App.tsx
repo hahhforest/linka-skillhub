@@ -564,7 +564,7 @@ export function App() {
     if (!pendingPlan) return;
     setBusy(true);
     try {
-      const run = await api.distributionApply(pendingPlan.targetAgents, pendingPlan.skillIds, pendingPlan.confirmToken, pendingPlan.plan);
+      const run = await api.distributionApply(pendingPlan.targetAgents, pendingPlan.skillIds, pendingPlan.confirmToken);
       setMessage(`${t.copied} ${run.copied}, ${t.skipped} ${run.skipped}`);
       setPendingPlan(null);
       setDialog(null);

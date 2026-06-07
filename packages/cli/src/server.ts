@@ -106,6 +106,38 @@ type SyncMergeBodyValidation =
   | { ok: true; name: string; fromAgents: AgentKind[]; byAgent: AgentKind; timeoutMs: number | undefined; repoPath: string | undefined }
   | { ok: false; error: { error: string; code: string } };
 
+type DistributionApplyPlanResolution =
+  | { ok: true; plan: DistributionPlan }
+  | { ok: false; status: number; body: { error: string; code: string } };
+
+export const resolveDistributionApplyPlan = (
+  confirmToken: string | undefined,
+  lookupPlan: (planId: string) => DistributionPlan | undefined
+): DistributionApplyPlanResolution => {
+  if (!confirmToken) {
+    return {
+      ok: false,
+      status: 400,
+      body: {
+        error: "confirmToken is required; call /api/distributions/plan first and resend its plan.id.",
+        code: "confirmation_required"
+      }
+    };
+  }
+  const cached = lookupPlan(confirmToken);
+  if (!cached) {
+    return {
+      ok: false,
+      status: 410,
+      body: {
+        error: `Plan ${confirmToken} is expired or unknown; regenerate the preview and retry.`,
+        code: "plan_expired"
+      }
+    };
+  }
+  return { ok: true, plan: cached };
+};
+
 const validateSyncMergeBody = (body: {
   name?: unknown;
   fromAgents?: unknown;
@@ -705,46 +737,13 @@ export const startServer = (options: ServerOptions): http.Server => {
           includeUnsafe?: boolean;
           includeAgentBound?: boolean;
           confirmToken?: string;
-          plan?: DistributionPlan;
         }>(request);
-        if (!body.confirmToken) {
-          sendJson(response, 400, {
-            error: "confirmToken is required; call /api/distributions/plan first and resend its plan.id.",
-            code: "confirmation_required"
-          });
+        const resolution = resolveDistributionApplyPlan(body.confirmToken, lookupCachedPlan);
+        if (!resolution.ok) {
+          sendJson(response, resolution.status, resolution.body);
           return;
         }
-        const cached = lookupCachedPlan(body.confirmToken);
-        let plan: DistributionPlan;
-        if (cached) {
-          plan = cached;
-        } else if (body.plan && body.plan.id === body.confirmToken) {
-          plan = body.plan;
-          cachePlan(plan);
-        } else {
-          const recomputed = await createDistributionPlan({
-            registryPath: resolveRepoPath(body.registryPath),
-            cwd: options.cwd,
-            config: currentConfig,
-            profileName: options.profileName,
-            backupDir: options.stateDir ? path.join(options.stateDir, "backups") : undefined,
-            targetAgents: body.targetAgents,
-            skillIds: body.skillIds,
-            includeUnsafe: body.includeUnsafe,
-            includeAgentBound: body.includeAgentBound
-          });
-          if (recomputed.id !== body.confirmToken) {
-            sendJson(response, 409, {
-              error: `confirmToken does not match the current plan (${recomputed.id}); regenerate the preview and retry.`,
-              code: "plan_id_mismatch",
-              expected: body.confirmToken,
-              actual: recomputed.id
-            });
-            return;
-          }
-          plan = recomputed;
-          cachePlan(plan);
-        }
+        const plan = resolution.plan;
         const cachedAt = planCreatedAt.get(plan.id);
         if (cachedAt && Date.now() - cachedAt > PLAN_TTL_MS) {
           planCache.delete(plan.id);
@@ -885,4 +884,3 @@ export const startServer = (options: ServerOptions): http.Server => {
 };
 
 export const defaultRepoPath = (cwd = process.env.INIT_CWD ?? process.cwd()): string => path.join(cwd, ".linka-skillhub", "registry-repo");
-

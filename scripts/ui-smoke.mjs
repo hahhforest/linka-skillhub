@@ -20,24 +20,31 @@ await page.goto(baseUrl, { waitUntil: "networkidle" });
 await page.screenshot({ path: path.join(outDir, "overview.png"), fullPage: true });
 
 const bodyText = await page.textContent("body");
-if (!bodyText?.includes("Profile: mirror")) throw new Error("UI did not show mirror profile.");
+if (!bodyText?.includes("测试镜像")) throw new Error("UI did not show the mirror profile label.");
 if (!bodyText.includes("Skill 管理工具")) throw new Error("UI title missing.");
 
 await page.getByRole("button", { name: /仓库管理/ }).click();
-await page.getByRole("button", { name: /汇总到仓库/ }).click();
-await page.waitForFunction(() => document.body.innerText.includes("Imported"), undefined, { timeout: 30000 });
-await page.screenshot({ path: path.join(outDir, "repo-import.png"), fullPage: true });
+await page.waitForFunction(() => document.body.innerText.includes("导入到 Registry"), undefined, { timeout: 10000 });
+await page.waitForFunction(() => document.body.innerText.includes("Registry Skills"), undefined, { timeout: 10000 });
+await page.getByRole("button", { name: /^导入到 Registry$/ }).click();
+await page.waitForFunction(() => document.body.innerText.includes("确认导入到 Registry"), undefined, { timeout: 10000 });
+await page.screenshot({ path: path.join(outDir, "repo-import-confirm.png"), fullPage: true });
+await page.locator(".dialog .ghost", { hasText: "取消" }).click();
+await page.waitForFunction(() => !document.body.innerText.includes("确认导入到 Registry"), undefined, { timeout: 10000 });
 
 await page.getByRole("button", { name: /总览/ }).click();
 await page.getByPlaceholder("搜索 skills...").fill("1password");
 await page.getByRole("button", { name: /1password/ }).first().click();
 await page.getByRole("button", { name: /分发管理/ }).click();
-await page.getByRole("button", { name: /生成计划/ }).click();
-await page.waitForFunction(() => document.body.innerText.includes("待复制") || document.body.innerText.includes("Plan"), undefined, { timeout: 30000 });
+await page.locator(".distribute-table-card .skill-row").first().locator(".skill-row-check").click();
+await page.getByRole("button", { name: /预览复制结果/ }).click();
+await page.waitForFunction(() => document.body.innerText.includes("复制预览"), undefined, { timeout: 30000 });
 await page.screenshot({ path: path.join(outDir, "distribution-plan.png"), fullPage: true });
-await page.getByRole("button", { name: /执行分发/ }).click();
-await page.waitForFunction(() => document.body.innerText.includes("Applied distribution"), undefined, { timeout: 30000 });
-await page.screenshot({ path: path.join(outDir, "distribution-apply.png"), fullPage: true });
+await page.getByRole("button", { name: /^确认复制到选中的目标 Agent$/ }).click();
+await page.waitForFunction(() => document.body.innerText.includes("Plan Token"), undefined, { timeout: 30000 });
+await page.screenshot({ path: path.join(outDir, "distribution-confirm.png"), fullPage: true });
+await page.locator(".confirm-plan-dialog .dialog-actions button.ghost").click();
+await page.waitForFunction(() => !document.body.innerText.includes("Plan Token"), undefined, { timeout: 10000 });
 
 if (errors.length > 0) throw new Error(`Browser console/page errors:\n${errors.join("\n")}`);
 await browser.close();

@@ -1,6 +1,7 @@
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { spawnSync } from "node:child_process";
 import { describe, expect, it } from "vitest";
 import { discoverSkillSources, importSkillsToRepository, scanSkills, validateRegistryPath, writeRegistryManifest } from "../src/index.js";
 import type { RegistryManifest } from "../src/types.js";
@@ -33,6 +34,8 @@ describe("scanner and registry", () => {
     // registry/ + prompts/.
     expect(await fs.stat(path.join(repoPath, "registry", "skills", "sample-skill", "SKILL.md"))).toBeTruthy();
     expect(await fs.stat(path.join(repoPath, "registry", "instances.json"))).toBeTruthy();
+    const status = spawnSync("git", ["status", "--short"], { cwd: repoPath, encoding: "utf8" }).stdout.trim();
+    expect(status).toBe("");
   });
 });
 

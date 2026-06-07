@@ -10,7 +10,7 @@ Multiple coding agents, each with its own `skills/` directory, each editing skil
 
 - **Scans** every agent's skill source dirs and groups by (agent, scope).
 - **Imports** skills into a single Git-versioned registry (`registry/skills/<name>/`) so you can diff, revert, and share.
-- **Reviews** each skill (deterministic rules + optional code-agent reviews) and tags it `valid` / `portable` / `agent_bound` / `unsafe` / `invalid`.
+- **Reviews** each skill (deterministic rules + optional code-agent reviews) and writes review artifacts; scan-time rules classify skills as `valid` / `portable` / `agent_bound` / `unsafe` / `invalid`.
 - **Distributes** registry skills to one or more agents (`registry → mavis`, `registry → codex + claude`, etc.) with preview-then-confirm.
 - **Reconciles drift** between a registry canonical and the live instances under each agent's source dir (the sync subsystem: pull / push / push-all / fork / merge).
 - **Surfaces the timeline**: per-skill history view backed by `git log` over the registry repo.
@@ -60,7 +60,7 @@ lsh list                           scan + list (alias: `lsh scan` deprecated)
 lsh registry import [--create]     import scanned skills into the registry repo
 lsh registry list                  list registry skills
 lsh registry show <id>             show one skill's frontmatter + evidence
-lsh registry history <name>        show the per-skill history (parsed git log)
+lsh history <name>                 show the per-skill history (parsed git log)
 lsh review --reviewer <kind>       run review (rules | codex | claude | opencode | mavis)
 lsh distribute preview|apply --target <agents> --skill <ids>
 lsh copy preview|apply --from <a> --to <b> --skill <ids>
@@ -78,17 +78,17 @@ lsh config list                    show the resolved config
 lsh profile show                   show the active profile + paths
 ```
 
-`<agents>` and `<a>` are agent kinds: `mavis`, `opencode`, `claude`, `codex`, `cursor`, `openclaw`, `hermes`, `shared` (the `.agents/skills` dir), or any custom kind added via `linka-skillhub.config.json`.
+`<agents>` and `<a>` are built-in agent kinds: `mavis`, `opencode`, `claude`, `codex`, `cursor`, `openclaw`, `hermes`, `shared` (the `.agents/skills` dir). The Web/API scanner can surface custom kinds declared in `linka-skillhub.config.json`; CLI write commands still validate against the built-in list.
 
 ### Write operations
 
-Every state-changing command shows source / target / action and asks for `y/N` confirmation in a TTY. In non-interactive mode the same commands require an explicit `--yes` (or `LINKA_SKILLHUB_FORCE_YES=1`). The Web console enforces the same rule via two-step dialogs (preview → `confirmToken` → apply) backed by `/api/distributions/plan` + `/api/distributions/apply`, `/api/sync/merge/preview` + `/api/sync/merge`, etc.
+Import, copy/distribute apply, repo push, and frontmatter fix show the source / target / action and ask for `y/N` confirmation in a TTY. In non-interactive mode those commands require an explicit `--yes` (or `LINKA_SKILLHUB_FORCE_YES=1`). The Web console enforces copy/distribute writes with a server-side two-step flow: `/api/distributions/plan` creates a cached plan and returns a `confirmToken`; `/api/distributions/apply` only accepts that cached token and never trusts a client-supplied plan body. Sync write commands are direct today; the UI limits them to per-instance drift actions, but adding the same preview-token gate is still a design follow-up.
 
 ```bash
 lsh distribute preview --target codex,claude --skill smart-commit
 lsh distribute apply  --target codex,claude --skill smart-commit --yes
-lsh sync pull   writing-plans --from claude --yes
-lsh sync merge  writing-plans --from claude,hermes --by claude --timeout-ms 600000 --yes
+lsh sync pull   writing-plans --from claude
+lsh sync merge  writing-plans --from claude,hermes --by claude --timeout-ms 600000
 ```
 
 ## Web console
@@ -105,9 +105,9 @@ Per-skill detail panel (visible on every page that lists skills) surfaces:
 - **Metadata**: source agent, scope, hash.
 - **Instances**: live paths under each agent, status (`in-sync` / `drifted` / `missing`), per-instance `pull` / `push` / `fork` actions, plus `push-all` and `merge` at the card level.
 - **History**: parsed `git log` for the canonical — import / pull / merge / fork / other.
-- **Evidence**: review results + parse issues; `fix frontmatter` button appears when status contains `invalid`.
+- **Evidence**: scan-time parse issues + deterministic evidence codes; review artifacts are written under `registry/reviews/`. `fix frontmatter` appears when status contains `invalid`.
 
-The language toggle (zh / en) sits in the top bar. State (focused skill, source bar, agent filter, per-page selection) is page-local — switching views never carries selection across pages.
+The language toggle (zh / en) sits in the top bar. Operational selection is page-local: Intersect and Distribute keep their own checkbox sets and clear them on view changes. The focused detail skill is shared across pages so a user can inspect the same skill while moving from Overview to Repo or Distribute.
 
 ## Registry layout
 
@@ -116,21 +116,22 @@ A v2 registry (created by `lsh registry import`) is a Git repo with this layout:
 ```
 registry/
   skills/<name>/SKILL.md        canonical copy of the skill
-  instances.json                { byName: { "<name>": [ { realPath, viaAgents, lastSeenHash, status } ] } }
-  skills.json                   legacy v1 manifest; v2 is canonical-per-name
-  reviews/<skill>-<ts>.json     per-review artifacts
+  .gitignore                    ignores local derived state such as instances.json
+  instances.json                local derived state; ignored by Git because it stores machine paths
+  skills.json                   v2 manifest; canonical-per-name
+  reviews/<skillId>-<reviewer>.json   per-review artifacts
 prompts/
   skill-review-v1.md            frozen review prompt (zh + en variants)
 ```
 
-`registry/skills/<name>/` is the canonical of record. Every write — import, pull, merge, fork — produces a single `git commit` with one of these subjects so `lsh registry history <name>` can parse the timeline:
+`registry/skills/<name>/` is the canonical of record. Canonical-mutating writes — import, pull, merge, fork — produce per-skill `git commit` subjects that `lsh history <name>` can parse. Registry metadata (`registry/skills.json`, `registry/.gitignore`, and prompt snapshots when present) is committed separately so a registry import/sync does not leave tracked metadata dirty, while machine-local `instances.json` stays out of Git.
 
 ```
 import <name> (origin: <agent>)
 pull   <name> (from <agent>)
-push   <name> (to <agent>)        # not currently emitted; kept for future
 merge  <name> (<a> + <b> + ...)
 fork  <name> (from <agent>)
+update registry metadata
 ```
 
 The merge subject is produced by linka-skillhub, not the user — see `packages/core/src/sync.ts`. Anything that doesn't match a known subject shows up as `other` with the raw subject preserved.
@@ -162,7 +163,7 @@ The merge workspace is git-ignored inside the registry repo (`.merges/`), so age
 }
 ```
 
-CLI / WebUI never accept raw filesystem paths from the user — every write targets a profile's `registryRepo` after path-safety checks (`assertPathInside`). Custom agents can be added by extending the agent definitions; the Web console surfaces whatever the active profile declares.
+CLI / WebUI never accept arbitrary write roots for registry operations — every registry write targets the active session repo after path-safety checks (`assertPathInside`). Custom source directories can be added through the Web console when they live inside the active profile root; the scanner surfaces those custom agent kinds, while some CLI write commands still use the built-in agent enum.
 
 ## Default safety policy
 
@@ -171,16 +172,16 @@ These rules apply in every profile and every interface (CLI + Web):
 - **Real-agent dirs are opt-in.** Default `mirror` writes to a sandbox; `local` profile is the only one that touches `~/.codex/skills`, `~/.claude/skills`, etc.
 - **Reviews are user-driven.** Code-agent reviewers (`codex`, `claude`, `opencode`, `mavis`) are off by default; the dialog surfaces availability per agent and only proceeds after explicit confirmation.
 - **`unsafe` / `invalid` skills are excluded by default** from one-click distribute. `--include-unsafe` / `--include-agent-bound` is the explicit opt-in.
-- **Overwrite is loud.** A pre-flight preview lists every `copy` / `overwrite` / `skip` line with the source / target / reason, and a backup lands in `<stateDir>/backups` before the first overwrite.
+- **Overwrite is loud.** A pre-flight preview lists every `copy` / `overwrite` / `skip` line with the source / target / reason, and a backup lands in `<stateDir>/backups` before the first overwrite. Web apply requires a live server-side `confirmToken`; expired, unknown, or forged plan IDs are rejected.
 - **No exposed internal verbs.** The UI never says "generate plan" or "execute plan" — it says "预览复制结果" / "确认复制到选中的目标 Agent" and equivalent. Same for sync: "用中心覆盖这份", "另存为新 skill", "把这份改动拉回中心".
 - **Server-side validation.** The HTTP layer re-validates every path and agent kind; the WebUI cannot bypass profile safety by constructing a custom URL.
 
 ## Architecture
 
-The monorepo has three packages and one app. The dependency graph is strictly downward: app → cli → core. The CLI is the only thing that imports `node:*` modules — the Web bundle is pure browser.
+The monorepo has two Node packages and one browser app. Runtime dependencies flow from CLI/server to core; the Web app talks to the CLI HTTP server and imports only shared TypeScript types from `@linka-skillhub/core`. The core package is Node-oriented (`fs/promises`, `child_process`, `crypto`), so browser code must not import core values at runtime.
 
 ```
-packages/core    no I/O at module level; pure functions on top of fs/promises
+packages/core    Node-oriented domain/workflow functions on top of fs/promises
                  — registry.ts (read / write manifest + canonical)
                  — scanner.ts   (scan + classify skill frontmatter)
                  — frontmatter.ts, frontmatter-fix.ts
@@ -196,16 +197,16 @@ packages/cli     commander + Node http server; serves /api/* and the static Web 
                  — server.ts: 26 routes (/api/skills, /api/sync/*, /api/repo/*, /api/fix/*, /api/distributions/*, …)
                  — prompts.ts: review prompt templates
 
-apps/web         React + Vite; no node imports
+apps/web         React + Vite; no runtime node imports
                  — App.tsx + 4 page components (Overview / Intersect / Distribute / Repo)
                  — DetailPanel (per-skill metadata + instances + history + fix-frontmatter button)
                  — MergeDialog (multi-instance reconciliation UI with phase machine + log)
                  — FixFrontmatterDialog, ConnectRemoteDialog, LoadRegistryDialog, ImportConfirmDialog
-                 — api.ts: 1:1 thin wrapper around /api/* — no business logic
+                 — api.ts: 1:1 thin wrapper around /api/* server routes — no write business logic
                  — i18n.ts (zh + en), styles.css
 ```
 
-`apps/web/src/api.ts` is the thin client: every method is one `fetch` call to a `core` route. No business logic in the Web — that's deliberate, so a future TUI / VS Code extension can reuse the same endpoints.
+`apps/web/src/api.ts` is the thin client: every method is one `fetch` call to a CLI server route. Write behavior stays server/core-owned; the Web layer owns presentation state, filtering, and localized copy.
 
 ## Verify
 

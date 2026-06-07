@@ -123,8 +123,8 @@ export const api = {
   // out every skill).
   distributionPlan: (targetAgents: string[], skillIds?: string[]) =>
     request<{ plan: DistributionPlan; confirmToken: string; ttlMs: number }>("/api/distributions/plan", { method: "POST", body: JSON.stringify({ targetAgents, skillIds }) }),
-  distributionApply: (targetAgents: string[], skillIds: string[] | undefined, confirmToken: string, plan?: DistributionPlan) =>
-    request<DistributionRun & { planId: string }>("/api/distributions/apply", { method: "POST", body: JSON.stringify({ targetAgents, skillIds, confirmToken, plan }) }),
+  distributionApply: (targetAgents: string[], skillIds: string[] | undefined, confirmToken: string) =>
+    request<DistributionRun & { planId: string }>("/api/distributions/apply", { method: "POST", body: JSON.stringify({ targetAgents, skillIds, confirmToken }) }),
   validateRegistry: (repoPath: string) =>
     request<RegistryValidation>("/api/registry/validate", { method: "POST", body: JSON.stringify({ repoPath }) }),
   loadRegistry: (repoPath: string) =>
