@@ -20,6 +20,7 @@ import {
   readRegistryManifest,
   readSkillHistory,
   applyFrontmatterFix,
+  refreshSkillManifestEntry,
   reviewSkillWithAgent,
   reviewSkillWithRules,
   scanSkills,
@@ -54,6 +55,9 @@ const AGENT_KIND_PATTERN = /^[a-z][a-z0-9-]*$/;
 // hard gate at the HTTP layer; sync.ts re-validates internally for callers
 // that bypass the server.
 const SKILL_NAME_PATTERN = AGENT_KIND_PATTERN;
+
+const needsStaleFrontmatterRefresh = (skill: SkillPackage, reason: string | undefined): boolean =>
+  reason === "frontmatter_already_present" && (skill.status.includes("invalid") || skill.issues.length > 0);
 
 // Body shape for /api/sync/{pull,push,push-all,fork}. The discriminator
 // fields (`requireAgentField`, `requireNewName`) keep the four endpoints
@@ -791,19 +795,15 @@ export const startServer = (options: ServerOptions): http.Server => {
           allowUnsafeSource: body.allowUnsafeSource === true || options.profileName === "mirror",
           dryRun: false
         });
-        if (!fixResult.applied) {
+        const shouldRefreshManifest = fixResult.applied || needsStaleFrontmatterRefresh(skill, fixResult.reason);
+        if (!shouldRefreshManifest) {
           sendJson(response, 200, { result: fixResult, committed: false });
           return;
         }
+        const refreshedSkill = await refreshSkillManifestEntry(skill);
         const updatedSkills = manifest.skills.map((entry) => {
           if (entry.id !== body.skillId) return entry;
-          return {
-            ...entry,
-            frontmatter: { ...(fixResult.newFrontmatter ?? {}) },
-            issues: [],
-            status: entry.status.filter((s: string) => s !== "invalid"),
-            auto_fixed: true
-          };
+          return fixResult.applied ? { ...refreshedSkill, auto_fixed: true } : refreshedSkill;
         });
         const nextManifest = { ...manifest, skills: updatedSkills, generatedAt: new Date().toISOString() };
         await writeRegistryManifest(repoPath, nextManifest);
@@ -811,13 +811,17 @@ export const startServer = (options: ServerOptions): http.Server => {
         try {
           const canonicalRel = path.relative(repoPath, skill.skillDir);
           const relSkillJson = path.join("registry", "skills.json");
-          const out = await gitCommitPaths(repoPath, [canonicalRel, relSkillJson], `pull ${skill.name} (from rules-autofix)`);
+          const paths = fixResult.applied ? [canonicalRel, relSkillJson] : [relSkillJson];
+          const out = await gitCommitPaths(repoPath, paths, `pull ${skill.name} (from rules-autofix)`);
           committedSha = out;
         } catch {
           // Commit failure (e.g. fix ran outside the registry repo) doesn't
           // mask the successful fix — the manifest is still correct.
         }
-        sendJson(response, 200, { result: fixResult, committed: true, committedSha });
+        const responseResult = fixResult.applied
+          ? fixResult
+          : { ...fixResult, applied: true, newFrontmatter: refreshedSkill.frontmatter, writtenPath: skill.skillFile };
+        sendJson(response, 200, { result: responseResult, committed: true, committedSha });
         return;
       }
 
@@ -845,6 +849,19 @@ export const startServer = (options: ServerOptions): http.Server => {
           allowUnsafeSource: body.allowUnsafeSource === true || options.profileName === "mirror",
           dryRun: true
         });
+        if (needsStaleFrontmatterRefresh(skill, fixResult.reason)) {
+          const refreshedSkill = await refreshSkillManifestEntry(skill);
+          sendJson(response, 200, {
+            result: {
+              ...fixResult,
+              reason: "dry_run",
+              newFrontmatter: refreshedSkill.frontmatter,
+              writtenPath: skill.skillFile
+            },
+            skill: refreshedSkill
+          });
+          return;
+        }
         sendJson(response, 200, { result: fixResult, skill });
         return;
       }

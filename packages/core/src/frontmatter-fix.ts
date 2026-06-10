@@ -1,8 +1,10 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import YAML from "yaml";
-import { parseSkillMarkdown } from "./frontmatter.js";
+import { asNonEmptyString, parseSkillMarkdown } from "./frontmatter.js";
+import { hashDirectory } from "./hash.js";
 import { assertPathInside } from "./path-safety.js";
+import { classifySkill } from "./scanner.js";
 import type { ParseIssue, RegistryManifest, SkillFrontmatter, SkillPackage } from "./types.js";
 
 export class UnsafeSourceError extends Error {
@@ -126,6 +128,37 @@ export const applyFrontmatterFix = async (
     applied: true,
     newFrontmatter,
     writtenPath: skill.skillFile
+  };
+};
+
+export const refreshSkillManifestEntry = async (
+  skill: SkillPackage,
+  options: { readonly now?: Date } = {}
+): Promise<SkillPackage> => {
+  const content = await fs.readFile(skill.skillFile, "utf8");
+  const parsed = parseSkillMarkdown(content);
+  const directoryName = path.basename(skill.skillDir);
+  const name = asNonEmptyString(parsed.frontmatter.name) ?? skill.name;
+  const description = asNonEmptyString(parsed.frontmatter.description) ?? "";
+  const classification = classifySkill({
+    name: asNonEmptyString(parsed.frontmatter.name),
+    description: asNonEmptyString(parsed.frontmatter.description),
+    directoryName,
+    content,
+    issues: parsed.issues
+  });
+
+  return {
+    ...skill,
+    name,
+    directoryName,
+    description,
+    hash: await hashDirectory(skill.realPath),
+    frontmatter: parsed.frontmatter,
+    status: classification.status,
+    issues: classification.issues,
+    evidence: classification.evidence,
+    updatedAt: (options.now ?? new Date()).toISOString()
   };
 };
 

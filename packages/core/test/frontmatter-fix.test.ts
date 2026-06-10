@@ -8,6 +8,7 @@ import {
   findInvalidSkills,
   inferDescriptionFromBody,
   inferNameFromDirectory,
+  refreshSkillManifestEntry,
   UnsafeSourceError
 } from "../src/frontmatter-fix.js";
 import { discoverSkillSources, importSkillsToRepository, writeRegistryManifest } from "../src/index.js";
@@ -116,6 +117,24 @@ describe("applyFrontmatterFix", () => {
     expect(fix.newFrontmatter?.name).toBe("dry-skill");
     const after = await fs.readFile(skill.skillFile, "utf8");
     expect(after).toBe(before);
+  });
+
+  it("refreshes a stale invalid manifest entry from valid SKILL.md frontmatter", async () => {
+    const skill = await setupInvalidSkill(cwd, "stale-skill");
+    await fs.writeFile(
+      skill.skillFile,
+      "---\nname: stale-skill\ndescription: Refreshed from disk\n---\n# Body\n",
+      "utf8"
+    );
+
+    const refreshed = await refreshSkillManifestEntry(skill, { now: new Date("2026-01-02T03:04:05.000Z") });
+
+    expect(refreshed.description).toBe("Refreshed from disk");
+    expect(refreshed.status).toContain("valid");
+    expect(refreshed.status).not.toContain("invalid");
+    expect(refreshed.issues).toHaveLength(0);
+    expect(refreshed.frontmatter).toMatchObject({ name: "stale-skill", description: "Refreshed from disk" });
+    expect(refreshed.updatedAt).toBe("2026-01-02T03:04:05.000Z");
   });
 
   it("throws UnsafeSourceError when profileRoot is missing and allowUnsafeSource=false", async () => {

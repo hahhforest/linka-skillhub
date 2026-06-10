@@ -17,6 +17,7 @@ import {
   readInstancesIndex,
   readRegistryManifest,
   readSkillHistory,
+  refreshSkillManifestEntry,
   reviewSkillWithAgent,
   reviewSkillWithRules,
   scanSkills,
@@ -451,6 +452,9 @@ const frontmatterFixReasonText = (reason: FrontmatterFixResult["reason"] | undef
   if (reason === "dry_run") return "dry run";
   return reason ?? "unknown";
 };
+
+const needsStaleFrontmatterRefresh = (skill: SkillPackage, reason: FrontmatterFixResult["reason"] | undefined): boolean =>
+  reason === "frontmatter_already_present" && (skill.status.includes("invalid") || skill.issues.length > 0);
 
 const formatFrontmatterFixHuman = (
   skill: SkillPackage,
@@ -1293,16 +1297,22 @@ fix
       dryRun: options.dryRun
     });
     const manifestPath = path.join(repoPath, "registry", "skills.json");
-    if (fixResult.applied) {
+    const staleRefreshNeeded = needsStaleFrontmatterRefresh(skill, fixResult.reason);
+    const refreshedStaleSkill = staleRefreshNeeded ? await refreshSkillManifestEntry(skill) : undefined;
+    const resultForOutput: FrontmatterFixResult = staleRefreshNeeded
+      ? {
+        ...fixResult,
+        applied: options.dryRun ? false : true,
+        reason: options.dryRun ? "dry_run" : fixResult.reason,
+        newFrontmatter: refreshedStaleSkill?.frontmatter,
+        writtenPath: skill.skillFile
+      }
+      : fixResult;
+    if (fixResult.applied || (!options.dryRun && staleRefreshNeeded)) {
+      const refreshedSkill = refreshedStaleSkill ?? await refreshSkillManifestEntry(skill);
       const updatedSkills = manifest.skills.map((entry) => {
         if (entry.id !== id) return entry;
-        return {
-          ...entry,
-          frontmatter: { ...(fixResult.newFrontmatter ?? {}) },
-          issues: [],
-          status: entry.status.filter((s) => s !== "invalid"),
-          auto_fixed: true
-        };
+        return fixResult.applied ? { ...refreshedSkill, auto_fixed: true } : refreshedSkill;
       });
       await handleConfirmationFailure(
         assertInteractiveOrYes({
@@ -1310,7 +1320,9 @@ fix
           summary: [
             `Skill: ${skill.name} (${id})`,
             `Source dir: ${skill.skillDir}`,
-            `New frontmatter: ${JSON.stringify(fixResult.newFrontmatter)}`,
+            fixResult.applied
+              ? `New frontmatter: ${JSON.stringify(fixResult.newFrontmatter)}`
+              : `Refresh manifest from existing frontmatter: ${JSON.stringify(refreshedSkill.frontmatter)}`,
             `Will rewrite manifest: ${manifestPath}`
           ],
           totalItems: 1,
@@ -1327,7 +1339,7 @@ fix
         const canonicalRel = path.relative(repoPath, skill.skillDir);
         await gitCommitPaths(
           repoPath,
-          [canonicalRel, path.join("registry", "skills.json")],
+          fixResult.applied ? [canonicalRel, path.join("registry", "skills.json")] : [path.join("registry", "skills.json")],
           `pull ${skill.name} (from rules-autofix)`
         );
       } catch {
@@ -1336,10 +1348,10 @@ fix
       }
     }
     if (options.json) {
-      printJson({ id, ...fixResult });
+      printJson({ id, ...resultForOutput });
       return;
     }
-    process.stdout.write(formatFrontmatterFixHuman(skill, manifestPath, fixResult));
+    process.stdout.write(formatFrontmatterFixHuman(skill, manifestPath, resultForOutput));
   });
 
 program
