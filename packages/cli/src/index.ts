@@ -731,7 +731,8 @@ distribute
   .option("--include-agent-bound", "allow agent-bound skills")
   .option("--repo <path>", "Registry path; defaults to profile registryRepo.")
   .option("--yes", "Skip confirmation prompt. Required in non-interactive shells; LINKA_SKILLHUB_FORCE_YES=1 has the same effect.")
-  .action(async (options: { target: string; skill?: string; plan?: string; includeUnsafe?: boolean; includeAgentBound?: boolean; repo?: string; yes?: boolean }) => {
+  .option("--json", "Print full JSON output without human prefixes.")
+  .action(async (options: { target: string; skill?: string; plan?: string; includeUnsafe?: boolean; includeAgentBound?: boolean; repo?: string; yes?: boolean; json?: boolean }) => {
     const targetAgents = parseAgentsStrict(options.target, "agent (--target)");
     if (!targetAgents) return;
     const runtime = await loadRuntimeConfig();
@@ -774,7 +775,7 @@ distribute
       })
     );
     const run = await applyDistributionPlan(repoPath, plan);
-    if (!options.plan) {
+    if (!options.plan && !options.json) {
       process.stdout.write(`${c.cyan("Plan id:")} ${plan.id}\n`);
     }
     printJson({ plan: compactPlan(plan), run });
@@ -828,7 +829,8 @@ copy
   .option("--plan <id>", "plan id from 'copy preview'; recomputes if omitted")
   .option("--repo <path>", "Registry path; defaults to profile registryRepo.")
   .option("--yes", "Skip confirmation prompt. Required in non-interactive shells; LINKA_SKILLHUB_FORCE_YES=1 has the same effect.")
-  .action(async (options: { from: string; to: string; skill?: string; plan?: string; repo?: string; yes?: boolean }) => {
+  .option("--json", "Print full JSON output without human prefixes.")
+  .action(async (options: { from: string; to: string; skill?: string; plan?: string; repo?: string; yes?: boolean; json?: boolean }) => {
     const from = assertKnownAgent(options.from, "agent (--from)");
     if (!from) return;
     const to = assertKnownAgent(options.to, "agent (--to)");
@@ -870,7 +872,7 @@ copy
       })
     );
     const run = await applyDistributionPlan(repoPath, plan);
-    if (!options.plan) {
+    if (!options.plan && !options.json) {
       process.stdout.write(`${c.cyan("Plan id:")} ${plan.id}\n`);
     }
     printJson({ from, to, plan: compactPlan(plan), run });
