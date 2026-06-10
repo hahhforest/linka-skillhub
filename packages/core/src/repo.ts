@@ -64,7 +64,14 @@ export const gitCommitPaths = async (repoPath: string, paths: readonly string[],
 
 export const gitPull = async (repoPath: string): Promise<string> => (await run("git", ["pull", "--ff-only"], { cwd: repoPath })).stdout;
 
-export const gitPush = async (repoPath: string): Promise<string> => (await run("git", ["push"], { cwd: repoPath })).stdout;
+export const gitPush = async (repoPath: string): Promise<string> => {
+  const branch = (await run("git", ["branch", "--show-current"], { cwd: repoPath })).stdout;
+  if (branch) {
+    const upstream = (await run("git", ["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"], { cwd: repoPath }).catch(() => undefined))?.stdout;
+    if (!upstream) return (await run("git", ["push", "--set-upstream", "origin", branch], { cwd: repoPath })).stdout;
+  }
+  return (await run("git", ["push"], { cwd: repoPath })).stdout;
+};
 
 export const setRemote = async (repoPath: string, url: string, name = "origin"): Promise<void> => {
   await ensureGitRepository(repoPath);
