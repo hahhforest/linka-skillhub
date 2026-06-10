@@ -41,7 +41,7 @@ export const gitCommitAll = async (repoPath: string, message = "Update skill reg
   // canonical inside registry/skills/<name>/, so a top-level skills/ entry on
   // disk is no longer ours. registry/ + prompts/ cover everything we write.
   await run("git", ["add", "registry", "prompts"], { cwd: repoPath });
-  const status = (await run("git", ["status", "--porcelain"], { cwd: repoPath })).stdout;
+  const status = (await run("git", ["diff", "--cached", "--name-only", "--", "registry", "prompts"], { cwd: repoPath })).stdout;
   if (!status) return "No changes to commit.";
   await run("git", ["commit", "-m", message], { cwd: repoPath });
   return (await run("git", ["rev-parse", "--short", "HEAD"], { cwd: repoPath })).stdout;

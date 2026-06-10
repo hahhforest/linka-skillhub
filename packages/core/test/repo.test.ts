@@ -32,4 +32,20 @@ describe("registry git helpers", () => {
     expect(git(repoPath, ["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"])).toBe("origin/main");
     expect(git(remotePath, ["show-ref", "--verify", "refs/heads/main"])).toContain("refs/heads/main");
   });
+
+  it("ignores unrelated untracked files when committing registry changes", async () => {
+    const cwd = await fs.mkdtemp(path.join(os.tmpdir(), "linka-skillhub-repo-clean-"));
+    const repoPath = path.join(cwd, "registry-repo");
+    await fs.mkdir(path.join(repoPath, "registry"), { recursive: true });
+    await fs.mkdir(path.join(repoPath, "prompts"), { recursive: true });
+    await fs.writeFile(path.join(repoPath, "registry", "skills.json"), '{"version":2,"generatedAt":"2026-01-01T00:00:00.000Z","skills":[]}\n', "utf8");
+    await fs.writeFile(path.join(repoPath, "prompts", ".gitkeep"), "", "utf8");
+    await ensureGitRepository(repoPath);
+    git(repoPath, ["config", "user.name", "linka-test"]);
+    git(repoPath, ["config", "user.email", "linka-test@example.com"]);
+    await gitCommitAll(repoPath, "seed registry");
+    await fs.writeFile(path.join(repoPath, ".DS_Store"), "noise", "utf8");
+
+    await expect(gitCommitAll(repoPath, "should not commit noise")).resolves.toBe("No changes to commit.");
+  });
 });
