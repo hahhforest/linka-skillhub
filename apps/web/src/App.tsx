@@ -185,8 +185,12 @@ function Overview({ skills, focusedSkillId, focusSkill, lang, totalSkillCount, a
   // back to the wider agent scope and lie about what they're showing.
   const cardsSkills = (!tableEmpty || selectedSourceKey) ? displayedSkills : agentOnlySkills;
   const cardsSummary = (!tableEmpty || selectedSourceKey) ? summary : agentOnlySummary;
+  const selectedSourceLabel = selectedSourceKey ? (() => {
+    const [agent, scope] = selectedSourceKey.split("::") as [string, SkillScope];
+    return `${agentTone[agent]?.label ?? agent} / ${scopeLabel(scope, lang)}`;
+  })() : null;
   const isAgentFiltered = overviewAgentFilter !== "all";
-  const sourceLabel = isAgentFiltered ? (agentTone[overviewAgentFilter]?.label ?? overviewAgentFilter) : t.allSources;
+  const sourceLabel = selectedSourceLabel ?? (isAgentFiltered ? (agentTone[overviewAgentFilter]?.label ?? overviewAgentFilter) : t.allSources);
   // R35-C8: the "已筛选 X / Y · 来源 X · 分布 Y · 清除筛选" banner was deleted.
   // Every piece of info it surfaced is already visible on the page after R35-C5
   // + R35-C7: the selected source-bar carries `.selected` styling, the donut
