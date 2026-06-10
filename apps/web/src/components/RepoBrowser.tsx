@@ -46,6 +46,7 @@ export interface RepoBrowserProps {
   readonly onPull: () => void;
   readonly onPush: () => void;
   readonly onRegistryLoaded: (result: RegistryLoadResponse) => void;
+  readonly onSkillChanged: () => Promise<void> | void;
   // R36-C23: fired after ConnectRemoteDialog succeeds, carrying the new
   // post-setRemote git status text. The parent uses it to update the meta
   // bar's branch chip + git-status pre without a full reload.
@@ -96,6 +97,7 @@ export function RepoBrowser({
   onPull,
   onPush,
   onRegistryLoaded,
+  onSkillChanged,
   onRemoteConnected
 }: RepoBrowserProps): JSX.Element {
   const t = messages[lang];
@@ -253,7 +255,7 @@ export function RepoBrowser({
           )}
         </div>
         <div className="repo-detail-panel">
-          <DetailPanel skill={focusedSkill} lang={lang} />
+          <DetailPanel skill={focusedSkill} lang={lang} onSkillChanged={onSkillChanged} />
           {focusedSkill && focusedHidden && (
             <p className="muted-copy">{t.focusedHidden}</p>
           )}

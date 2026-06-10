@@ -15,6 +15,7 @@ type MessageKey = keyof (typeof messages)["zh"];
 export interface DetailPanelProps {
   readonly skill: SkillPackage | undefined;
   readonly lang: Language;
+  readonly onSkillChanged?: () => Promise<void> | void;
   // Overrides the default "click a skill to see its details" empty hint. Used
   // by pages where the empty state means something more specific (e.g. Repo
   // wants "pick a skill from the registry to inspect").
@@ -71,7 +72,7 @@ const formatTimestamp = (iso: string, lang: Language): string => {
 // Sticky right-side panel that mirrors the focused skill's metadata. Every
 // page that has a skill list pairs a SkillTable with one of these — Overview
 // today, Intersect after this commit, Distribute and Repo in later commits.
-export function DetailPanel({ skill, lang, emptyTextKey }: DetailPanelProps): JSX.Element {
+export function DetailPanel({ skill, lang, onSkillChanged, emptyTextKey }: DetailPanelProps): JSX.Element {
   const t = messages[lang];
   // R36-C20: history is fetched lazily per focused skill. Cancelled across
   // focus changes via the request-id race guard so a slow earlier request
@@ -427,7 +428,7 @@ export function DetailPanel({ skill, lang, emptyTextKey }: DetailPanelProps): JS
           // The skill's issues are now empty and the manifest will list it
           // as valid. Reload both history (a new commit landed) and the
           // parent skill list so the Overview / table cells update too.
-          void Promise.all([refreshSync(skill.name), refreshHistory(skill.name)]);
+          void Promise.all([refreshSync(skill.name), refreshHistory(skill.name), onSkillChanged?.()]);
           setSyncMessage(t.fixFrontmatterAction);
         }}
       />

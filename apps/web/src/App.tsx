@@ -139,7 +139,7 @@ function Sidebar({ view, setView, lang }: {
   );
 }
 
-function Overview({ skills, focusedSkillId, focusSkill, lang, totalSkillCount, allSkills, query, agents, overviewAgentFilter, setOverviewAgentFilter, onOpenAddSource }: {
+function Overview({ skills, focusedSkillId, focusSkill, lang, totalSkillCount, allSkills, query, agents, overviewAgentFilter, setOverviewAgentFilter, onOpenAddSource, onSkillChanged }: {
   readonly skills: SkillPackage[];
   readonly focusedSkillId: string | null;
   readonly focusSkill: (id: string) => void;
@@ -151,6 +151,7 @@ function Overview({ skills, focusedSkillId, focusSkill, lang, totalSkillCount, a
   readonly overviewAgentFilter: string;
   readonly setOverviewAgentFilter: (value: string) => void;
   readonly onOpenAddSource: () => void;
+  readonly onSkillChanged: () => Promise<void> | void;
 }) {
   const t = messages[lang];
   // R34 commit 2: agent filtering moved off the sidebar and into this header
@@ -393,7 +394,7 @@ function Overview({ skills, focusedSkillId, focusSkill, lang, totalSkillCount, a
           />
         </div>
         <div className="overview-detail-panel">
-          <DetailPanel skill={focusedSkill ?? undefined} lang={lang} />
+          <DetailPanel skill={focusedSkill ?? undefined} lang={lang} onSkillChanged={onSkillChanged} />
           {focusedSkill && focusedHidden && (
             <p className="muted-copy">{t.focusedHidden}</p>
           )}
@@ -596,7 +597,7 @@ export function App() {
       <div className="workspace">
         <Sidebar view={view} setView={setView} lang={lang} />
         <div className="content">
-          {view === "overview" && <Overview skills={visibleSkills} focusedSkillId={focusedSkillId} focusSkill={focusSkill} lang={lang} totalSkillCount={skills.length} allSkills={skills} query={query} agents={populatedAgents} overviewAgentFilter={overviewAgentFilter} setOverviewAgentFilter={setOverviewAgentFilter} onOpenAddSource={() => setDialog("addSource")} />}
+          {view === "overview" && <Overview skills={visibleSkills} focusedSkillId={focusedSkillId} focusSkill={focusSkill} lang={lang} totalSkillCount={skills.length} allSkills={skills} query={query} agents={populatedAgents} overviewAgentFilter={overviewAgentFilter} setOverviewAgentFilter={setOverviewAgentFilter} onOpenAddSource={() => setDialog("addSource")} onSkillChanged={loadShell} />}
           {view === "repo" && (
             <RepoBrowser
               skills={visibleSkills}
@@ -620,10 +621,11 @@ export function App() {
               onPush={pushRegistry}
               onRegistryLoaded={(result) => { setRegistryRepo(result.repoPath); if (result.skills) setSkills(result.skills); setMessage(`${messages[lang].loadRegistrySuccess}: ${result.repoPath} (${result.skillCount ?? result.skills?.length ?? 0})`); }}
               onRemoteConnected={(status, url) => { setGitStatusText(status); setMessage(messages[lang].connectRemoteSuccess.replace("{url}", url)); }}
+              onSkillChanged={loadShell}
             />
           )}
-          {view === "intersect" && <Intersect skills={visibleSkills} allSkills={skills} targets={targets} lang={lang} plan={plan} onPlan={planDistribution} onApply={applyDistribution} agents={populatedAgents} focusedSkillId={focusedSkillId} onFocus={focusSkill} />}
-          {view === "distribute" && <Distribute skills={visibleSkills} allSkills={skills} totalSkillCount={skills.length} targets={targets} onPlan={planDistribution} onApply={applyDistribution} plan={plan} busy={busy} lang={lang} focusedSkillId={focusedSkillId} onFocus={focusSkill} query={query} />}
+          {view === "intersect" && <Intersect skills={visibleSkills} allSkills={skills} targets={targets} lang={lang} plan={plan} onPlan={planDistribution} onApply={applyDistribution} agents={populatedAgents} focusedSkillId={focusedSkillId} onFocus={focusSkill} onSkillChanged={loadShell} />}
+          {view === "distribute" && <Distribute skills={visibleSkills} allSkills={skills} totalSkillCount={skills.length} targets={targets} onPlan={planDistribution} onApply={applyDistribution} plan={plan} busy={busy} lang={lang} focusedSkillId={focusedSkillId} onFocus={focusSkill} query={query} onSkillChanged={loadShell} />}
           <footer className="status-footer"><span>{populatedAgents.length} agents</span><span>{focusedSkillId ? 1 : 0} {t.focusedCount}</span><span className="status-message" title={message}>{message}</span></footer>
         </div>
       </div>
@@ -663,7 +665,7 @@ export function App() {
   );
 }
 
-function Intersect({ skills, allSkills, targets, lang, plan, onPlan, onApply, agents: agentDefs, focusedSkillId, onFocus }: { readonly skills: SkillPackage[]; readonly allSkills: SkillPackage[]; readonly targets: DistributionTarget[]; readonly lang: Language; readonly plan?: DistributionPlan; readonly onPlan: (agents: string[], skillIds?: string[]) => void; readonly onApply: (agents: string[], skillIds?: string[]) => void; readonly agents: AgentDefinition[]; readonly focusedSkillId: string | null; readonly onFocus: (id: string) => void }) {
+function Intersect({ skills, allSkills, targets, lang, plan, onPlan, onApply, agents: agentDefs, focusedSkillId, onFocus, onSkillChanged }: { readonly skills: SkillPackage[]; readonly allSkills: SkillPackage[]; readonly targets: DistributionTarget[]; readonly lang: Language; readonly plan?: DistributionPlan; readonly onPlan: (agents: string[], skillIds?: string[]) => void; readonly onApply: (agents: string[], skillIds?: string[]) => void; readonly agents: AgentDefinition[]; readonly focusedSkillId: string | null; readonly onFocus: (id: string) => void; readonly onSkillChanged: () => Promise<void> | void }) {
   const t = messages[lang];
   // R35-C14 follow-up: defaults derive from the populated-agent list passed in
   // (agentDefs is App's populatedAgents filter), not hardcoded "mavis" /
@@ -800,7 +802,7 @@ function Intersect({ skills, allSkills, targets, lang, plan, onPlan, onApply, ag
         </div>
       </div>
       <div className="intersect-detail-panel">
-        <DetailPanel skill={focusedSkill} lang={lang} />
+        <DetailPanel skill={focusedSkill} lang={lang} onSkillChanged={onSkillChanged} />
         {focusedSkill && focusedHidden && (
           <p className="muted-copy">{t.focusedHidden}</p>
         )}
@@ -809,7 +811,7 @@ function Intersect({ skills, allSkills, targets, lang, plan, onPlan, onApply, ag
   );
 }
 
-function Distribute({ skills, allSkills, totalSkillCount, targets, onPlan, onApply, plan, busy, lang, focusedSkillId, onFocus, query }: {
+function Distribute({ skills, allSkills, totalSkillCount, targets, onPlan, onApply, plan, busy, lang, focusedSkillId, onFocus, query, onSkillChanged }: {
   readonly skills: SkillPackage[];
   readonly allSkills: SkillPackage[];
   readonly totalSkillCount: number;
@@ -822,6 +824,7 @@ function Distribute({ skills, allSkills, totalSkillCount, targets, onPlan, onApp
   readonly focusedSkillId: string | null;
   readonly onFocus: (id: string) => void;
   readonly query: string;
+  readonly onSkillChanged: () => Promise<void> | void;
 }) {
   const t = messages[lang];
   // chosen = which target agents to distribute to. Defaults to codex+claude
@@ -922,7 +925,7 @@ function Distribute({ skills, allSkills, totalSkillCount, targets, onPlan, onApp
           />
         </div>
         <div className="distribute-detail-panel">
-          <DetailPanel skill={focusedSkill} lang={lang} />
+          <DetailPanel skill={focusedSkill} lang={lang} onSkillChanged={onSkillChanged} />
           {focusedSkill && focusedHidden && (
             <p className="muted-copy">{t.focusedHidden}</p>
           )}
