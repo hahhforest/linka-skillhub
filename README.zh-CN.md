@@ -19,7 +19,7 @@
 
 <br /><br />
 
-<img src="docs/assets/web-console.png" alt="linka-skillhub Web 控制台" width="820" />
+<img src="docs/assets/web-console-zh.png" alt="linka-skillhub Web 控制台" width="820" />
 
 </div>
 
