@@ -7,6 +7,7 @@ import { messages, type Language } from "../i18n.js";
 import { AgentLogo, agentTone, bucketLabel, statusClass } from "./skillVisuals.js";
 import { MergeDialog } from "./MergeDialog.js";
 import { FixFrontmatterDialog } from "./FixFrontmatterDialog.js";
+import { ForkSkillDialog } from "./ForkSkillDialog.js";
 
 // Typed key into the messages map so callers cannot pass a string that does
 // not exist in i18n. Both `zh` and `en` share the same shape.
@@ -87,6 +88,8 @@ export function DetailPanel({ skill, lang, onSkillChanged, emptyTextKey }: Detai
   const [syncBusy, setSyncBusy] = useState(false);
   const [syncMessage, setSyncMessage] = useState<string>("");
   const [mergeDialogOpen, setMergeDialogOpen] = useState(false);
+  const [forkInstance, setForkInstance] = useState<RegistryInstance | null>(null);
+  const [forkError, setForkError] = useState("");
   // R36-C23: open only when the focused skill has at least one "invalid" issue
   // (missing name/description in SKILL.md, broken YAML, etc.). After a
   // successful apply we refetch the same skill so the issues list / status
@@ -175,23 +178,33 @@ export function DetailPanel({ skill, lang, onSkillChanged, emptyTextKey }: Detai
     });
 
   const handleFork = (instance: RegistryInstance) => {
-    // Use a native prompt for the fork name — keeps C21 scope tight; a
-    // proper dialog would belong with the merge UI in C22. Empty or invalid
-    // input simply aborts after surfacing a message.
-    const proposed = window.prompt(`${t.syncForkPromptTitle}\n\n${t.syncForkPromptBody}`, `${skill!.name}-fork`);
-    if (proposed == null) return;
-    const newName = proposed.trim();
-    if (!/^[a-z][a-z0-9-]*$/.test(newName)) {
-      setSyncMessage(t.syncForkInvalidName);
-      return;
-    }
-    void runSyncAction(async () => {
-      const agent = instance.viaAgents[0]!;
-      const result = await api.syncFork(skill!.name, agent, newName);
-      return t.syncDoneForked
-        .replace("{name}", result.newName)
-        .replace("{agent}", agentTone[agent]?.label ?? agent);
-    });
+    setForkError("");
+    setForkInstance(instance);
+  };
+
+  const submitFork = (newName: string) => {
+    if (!skill || !forkInstance || syncBusy) return;
+    const currentSkill = skill;
+    const currentInstance = forkInstance;
+    void (async () => {
+      setSyncBusy(true);
+      setSyncMessage("");
+      setForkError("");
+      try {
+        const agent = currentInstance.viaAgents[0]!;
+        const result = await api.syncFork(currentSkill.name, agent, newName);
+        await Promise.all([refreshSync(currentSkill.name), refreshHistory(currentSkill.name)]);
+        setForkInstance(null);
+        setForkError("");
+        setSyncMessage(t.syncDoneForked
+          .replace("{name}", result.newName)
+          .replace("{agent}", agentTone[agent]?.label ?? agent));
+      } catch (error) {
+        setForkError(humanizeError(error, lang));
+      } finally {
+        setSyncBusy(false);
+      }
+    })();
   };
 
   if (!skill) {
@@ -417,6 +430,17 @@ export function DetailPanel({ skill, lang, onSkillChanged, emptyTextKey }: Detai
               .replace("{drifted}", String(result.otherDrifted.length))
           );
         }}
+      />
+    )}
+    {forkInstance && skill && (
+      <ForkSkillDialog
+        lang={lang}
+        skill={skill}
+        instance={forkInstance}
+        busy={syncBusy}
+        error={forkError}
+        onFork={submitFork}
+        onClose={() => { if (!syncBusy) { setForkInstance(null); setForkError(""); } }}
       />
     )}
     {fixOpen && (

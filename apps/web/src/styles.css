@@ -1566,6 +1566,60 @@ textarea:focus-visible {
   margin-top: var(--sp-4);
 }
 
+.fork-skill-dialog { width: min(560px, 100%); }
+.fork-source-card {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: var(--sp-2);
+  align-items: center;
+  padding: var(--sp-3);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--surface-2);
+  margin: var(--sp-3) 0;
+}
+.fork-source-card code {
+  grid-column: 1 / -1;
+  display: block;
+  min-width: 0;
+  overflow-x: auto;
+  white-space: nowrap;
+  font-size: var(--fs-xs);
+  color: var(--text-2);
+}
+.fork-source-agent {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+  font-size: var(--fs-sm);
+  color: var(--text-2);
+}
+.fork-source-agent .agent-logo { width: 16px; height: 16px; font-size: 8px; }
+.fork-source-agent .agent-logo.agent-image img { width: 16px; height: 16px; }
+.fork-name-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+}
+.fork-name-field span {
+  font-size: var(--fs-xs);
+  color: var(--muted);
+  font-weight: var(--fw-medium);
+}
+.fork-name-field input {
+  width: 100%;
+  height: var(--ctrl-md);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  padding: 0 var(--sp-3);
+  font: inherit;
+}
+.fork-name-field input:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: var(--ring-primary);
+}
+
 /* R36-C22: merge dialog. Wider than the default to fit the multi-select
    instance list with their realPaths; sections stack with a small gap. */
 .merge-dialog { width: min(640px, 100%); }
