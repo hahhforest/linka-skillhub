@@ -2,6 +2,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { scanSkills } from "./scanner.js";
 import { ensureDir, pathExists } from "./fs-helpers.js";
+import { refreshSkillManifestEntry } from "./frontmatter-fix.js";
 import { hashDirectory } from "./hash.js";
 import { assertNoPathSeparators, assertPathInside, sanitizePathSegment } from "./path-safety.js";
 import { ensureGitRepository, gitCommitPaths } from "./repo.js";
@@ -283,7 +284,8 @@ export const importSkillsToRepository = async (options: ImportOptions): Promise<
       originScannedAt = existing.updatedAt;
     }
 
-    const canonicalView = toCanonicalSkillPackage(seed, canonicalDir, canonicalHash, didCommit ? scannedAt : originScannedAt);
+    const canonicalSeed = toCanonicalSkillPackage(seed, canonicalDir, canonicalHash, didCommit ? scannedAt : originScannedAt);
+    const canonicalView = didCommit ? canonicalSeed : await refreshSkillManifestEntry(canonicalSeed, { now: new Date(originScannedAt) });
     canonicalEntries.push(canonicalView);
     instancesByName[name] = buildInstances(canonicalHash, scannedAt, ordered);
   }

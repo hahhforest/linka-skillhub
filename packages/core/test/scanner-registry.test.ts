@@ -11,6 +11,11 @@ const writeSkill = async (dir: string, name: string, description: string): Promi
   await fs.writeFile(path.join(dir, "SKILL.md"), `---\nname: ${name}\ndescription: ${description}\n---\n# ${name}\n`, "utf8");
 };
 
+const writeRawSkill = async (dir: string, body: string): Promise<void> => {
+  await fs.mkdir(dir, { recursive: true });
+  await fs.writeFile(path.join(dir, "SKILL.md"), body, "utf8");
+};
+
 describe("scanner and registry", () => {
   it("scans project OpenCode skills and imports original packages", async () => {
     const cwd = await fs.mkdtemp(path.join(os.tmpdir(), "linka-skillhub-"));
@@ -36,6 +41,26 @@ describe("scanner and registry", () => {
     expect(await fs.stat(path.join(repoPath, "registry", "instances.json"))).toBeTruthy();
     const status = spawnSync("git", ["status", "--short"], { cwd: repoPath, encoding: "utf8" }).stdout.trim();
     expect(status).toBe("");
+  });
+
+  it("keeps existing canonical metadata on re-import instead of reverting to stale source metadata", async () => {
+    const cwd = await fs.mkdtemp(path.join(os.tmpdir(), "linka-skillhub-reimport-"));
+    const skillDir = path.join(cwd, ".opencode", "skills", "stale-skill");
+    await writeRawSkill(skillDir, "# stale-skill\n\nSource still has no frontmatter.\n");
+    const sources = await discoverSkillSources(cwd);
+    const selected = sources.filter((source) => source.rootPath.includes(`${path.sep}.opencode${path.sep}skills`)).map((source) => source.id);
+    const repoPath = path.join(cwd, "registry-repo");
+
+    await importSkillsToRepository({ repoPath, cwd, selectedSourceIds: selected });
+    await writeSkill(path.join(repoPath, "registry", "skills", "stale-skill"), "stale-skill", "Canonical frontmatter is valid");
+
+    const result = await importSkillsToRepository({ repoPath, cwd, selectedSourceIds: selected });
+    const manifestSkill = result.manifest.skills.find((skill) => skill.name === "stale-skill");
+
+    expect(manifestSkill?.description).toBe("Canonical frontmatter is valid");
+    expect(manifestSkill?.status).toContain("valid");
+    expect(manifestSkill?.status).not.toContain("invalid");
+    expect(manifestSkill?.issues).toHaveLength(0);
   });
 });
 
