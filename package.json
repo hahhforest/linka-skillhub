@@ -11,7 +11,7 @@
     "build": "pnpm -r build",
     "typecheck": "pnpm --filter @linka-skillhub/core build && pnpm --filter @linka-skillhub/cli typecheck && pnpm --filter @linka-skillhub/web typecheck",
     "test": "pnpm -r test",
-    "verify": "pnpm typecheck && pnpm test && pnpm build && node scripts/ui-audit.mjs && node scripts/ui-flow-test.mjs",
+    "verify": "pnpm typecheck && pnpm test && pnpm build && node scripts/verify-ui.mjs",
     "dev": "pnpm --filter @linka-skillhub/web dev",
     "serve": "pnpm --filter @linka-skillhub/cli start -- serve",
     "seed:sandbox": "node scripts/seed-sandbox.mjs",
