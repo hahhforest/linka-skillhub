@@ -463,6 +463,10 @@ export function App() {
     setAgents(agentData.agents); setTargets(agentData.targets); setProfile(agentData.profile ?? "unknown"); setRegistryRepo(agentData.registryRepo ?? ""); setSkills(registry.skills);
     if (registry.missingRegistry) setMessage(lang === "zh" ? "Registry 还没有导入记录，请先扫描或导入。" : "Registry is empty. Scan or import first.");
   };
+  const loadShellMeta = async () => {
+    const agentData = await api.agents();
+    setAgents(agentData.agents); setTargets(agentData.targets); setProfile(agentData.profile ?? "unknown"); setRegistryRepo(agentData.registryRepo ?? "");
+  };
 
   useEffect(() => { setCommitMessage(messages[lang].commitMessageDefault); }, [lang]);
 
@@ -645,8 +649,8 @@ export function App() {
             // Server has already reloaded its own config snapshot in /api/sources.
             try {
               const scan = await api.scan(includeBuiltin);
+              await loadShellMeta();
               setSkills(scan.skills);
-              await loadShell();
               setMessage(`${t.addSourceSuccess} (${result.agentKind} / ${scopeLabel(result.scope, lang)})`);
             } catch (error) {
               setMessage(humanizeError(error, lang));
