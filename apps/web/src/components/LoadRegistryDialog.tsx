@@ -22,6 +22,8 @@ export function LoadRegistryDialog({ lang, currentRepoPath, onLoaded, onClose }:
   const [path, setPath] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const pathInputId = "load-registry-path";
+  const pathHelpId = "load-registry-help";
   const dialogRef = useRef<HTMLDivElement>(null);
   useModalFocusTrap(dialogRef);
   useEffect(() => {
@@ -56,12 +58,15 @@ export function LoadRegistryDialog({ lang, currentRepoPath, onLoaded, onClose }:
       <div ref={dialogRef} tabIndex={-1} className="dialog" onClick={(event) => event.stopPropagation()}>
         <button className="dialog-close" onClick={onClose} aria-label={t.cancel}><X size={16} /></button>
         <h2 id="load-registry-title">{t.loadRegistryTitle}</h2>
-        <p className="muted-copy">{t.loadRegistryHelp}</p>
+        <p id={pathHelpId} className="muted-copy">{t.loadRegistryHelp}</p>
         {currentRepoPath ? (
           <p className="current-registry"><code>{currentRepoPath}</code></p>
         ) : null}
         <div className="load-registry-row">
           <input
+            id={pathInputId}
+            aria-label={t.loadRegistryTitle}
+            aria-describedby={pathHelpId}
             value={path}
             placeholder={t.loadRegistryPlaceholder}
             autoFocus
