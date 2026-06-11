@@ -133,7 +133,7 @@ export function DetailPanel({ skill, lang, onSkillChanged, emptyTextKey }: Detai
     setSyncMessage("");
     try {
       const message = await action();
-      await Promise.all([refreshSync(skill.name), refreshHistory(skill.name)]);
+      await Promise.all([refreshSync(skill.name), refreshHistory(skill.name), onSkillChanged?.()]);
       setSyncMessage(message);
     } catch (error) {
       setSyncMessage(humanizeError(error, lang));
@@ -193,7 +193,7 @@ export function DetailPanel({ skill, lang, onSkillChanged, emptyTextKey }: Detai
       try {
         const agent = currentInstance.viaAgents[0]!;
         const result = await api.syncFork(currentSkill.name, agent, newName);
-        await Promise.all([refreshSync(currentSkill.name), refreshHistory(currentSkill.name)]);
+        await Promise.all([refreshSync(currentSkill.name), refreshHistory(currentSkill.name), onSkillChanged?.()]);
         setForkInstance(null);
         setForkError("");
         setSyncMessage(t.syncDoneForked
@@ -421,7 +421,7 @@ export function DetailPanel({ skill, lang, onSkillChanged, emptyTextKey }: Detai
         onClose={() => setMergeDialogOpen(false)}
         onMerged={(result: SyncMergeResult) => {
           setMergeDialogOpen(false);
-          void Promise.all([refreshSync(skill.name), refreshHistory(skill.name)]);
+          void Promise.all([refreshSync(skill.name), refreshHistory(skill.name), onSkillChanged?.()]);
           setSyncMessage(
             t.mergeDoneSuccess
               .replace("{name}", result.name)
