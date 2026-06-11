@@ -96,6 +96,7 @@ export function DetailPanel({ skill, lang, onSkillChanged, emptyTextKey }: Detai
   // pill / sync state all reflect the now-valid skill.
   const [fixOpen, setFixOpen] = useState(false);
   const isInvalid = skill?.status?.includes("invalid") ?? false;
+  const mergeableInstanceCount = sync?.instances.filter((instance) => instance.status === "drifted").length ?? 0;
   const refreshSync = (name: string): Promise<void> =>
     api.syncStatusFor(name)
       .then((result) => { setSync(result.status); })
@@ -244,7 +245,7 @@ export function DetailPanel({ skill, lang, onSkillChanged, emptyTextKey }: Detai
             {/* R36-C22: merge is gated stricter than push-all because it
                 spawns an agent and writes a new canonical — only show when
                 there's actual drift across at least 2 instances to reconcile. */}
-            {sync && sync.hasDrift && sync.instances.length >= 2 && (
+            {sync && mergeableInstanceCount >= 2 && (
               <button
                 type="button"
                 className="ghost instances-merge"
