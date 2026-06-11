@@ -108,6 +108,18 @@ describe("applyFrontmatterFix", () => {
     expect(rewritten).toContain("name: collab-canvas");
   });
 
+  it("allows fixing canonical skills inside a registry repo root", async () => {
+    const skill = await setupInvalidSkill(cwd, "registry-skill");
+    const repoRoot = path.join(cwd, "registry");
+    const fix = await applyFrontmatterFix(skill, { profileRoot: repoRoot });
+
+    expect(fix.applied).toBe(true);
+    expect(fix.writtenPath).toBe(skill.skillFile);
+    const rewritten = await fs.readFile(skill.skillFile, "utf8");
+    expect(rewritten.startsWith("---\n")).toBe(true);
+    expect(rewritten).toContain("name: registry-skill");
+  });
+
   it("dryRun returns a new frontmatter without writing", async () => {
     const skill = await setupInvalidSkill(cwd, "dry-skill");
     const before = await fs.readFile(skill.skillFile, "utf8");

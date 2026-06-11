@@ -784,15 +784,11 @@ export const startServer = (options: ServerOptions): http.Server => {
           sendJson(response, 404, { error: `skill not found in registry: ${body.skillId}` });
           return;
         }
-        const profileRoot = options.profileName === "mirror"
-          ? path.resolve(options.cwd, ".sandbox")
-          : body.allowUnsafeSource
-            ? options.cwd
-            : options.stateDir;
+        const profileRoot = body.allowUnsafeSource ? options.cwd : repoPath;
         const fixResult = await applyFrontmatterFix(skill, {
           cwd: options.cwd,
           profileRoot,
-          allowUnsafeSource: body.allowUnsafeSource === true || options.profileName === "mirror",
+          allowUnsafeSource: body.allowUnsafeSource === true,
           dryRun: false
         });
         const shouldRefreshManifest = fixResult.applied || needsStaleFrontmatterRefresh(skill, fixResult.reason);
@@ -838,15 +834,11 @@ export const startServer = (options: ServerOptions): http.Server => {
           sendJson(response, 404, { error: `skill not found in registry: ${body.skillId}` });
           return;
         }
-        const profileRoot = options.profileName === "mirror"
-          ? path.resolve(options.cwd, ".sandbox")
-          : body.allowUnsafeSource
-            ? options.cwd
-            : options.stateDir;
+        const profileRoot = body.allowUnsafeSource ? options.cwd : repoPath;
         const fixResult = await applyFrontmatterFix(skill, {
           cwd: options.cwd,
           profileRoot,
-          allowUnsafeSource: body.allowUnsafeSource === true || options.profileName === "mirror",
+          allowUnsafeSource: body.allowUnsafeSource === true,
           dryRun: true
         });
         if (needsStaleFrontmatterRefresh(skill, fixResult.reason)) {

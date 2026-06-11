@@ -1267,9 +1267,9 @@ profileCmd
 const fix = program.command("fix").description("Repair or annotate registry content in place.");
 fix
   .command("frontmatter <id>")
-  .description("Auto-fill SKILL.md frontmatter for an invalid skill. By default, only writes under the active profile's sandbox sources.")
+  .description("Auto-fill SKILL.md frontmatter for an invalid registry skill. By default, only writes inside the active registry repo.")
   .option("--repo <path>", "Registry path; defaults to profile registryRepo.")
-  .option("--allow-unsafe-source", "Allow writing to skill sources outside the active profile's sandbox.")
+  .option("--allow-unsafe-source", "Allow writing to manifest skill paths outside the active registry repo.")
   .option("--dry-run", "Print what would be written without modifying any files.")
   .option("--yes", "Skip confirmation prompt. Required in non-interactive shells; LINKA_SKILLHUB_FORCE_YES=1 has the same effect.")
   .option("--json", "Print full JSON output instead of the human summary.")
@@ -1285,15 +1285,13 @@ fix
     }
     const profileRoot = options.dryRun
       ? undefined
-      : runtime.profileName === "mirror"
-        ? path.resolve(invocationCwd, ".sandbox")
-        : options.allowUnsafeSource
-          ? invocationCwd
-          : runtime.profile.stateDir;
+      : options.allowUnsafeSource
+        ? invocationCwd
+        : repoPath;
     const fixResult = await applyFrontmatterFix(skill, {
       cwd: invocationCwd,
       profileRoot,
-      allowUnsafeSource: options.allowUnsafeSource === true || options.dryRun === true || runtime.profileName === "mirror",
+      allowUnsafeSource: options.allowUnsafeSource === true || options.dryRun === true,
       dryRun: options.dryRun
     });
     const manifestPath = path.join(repoPath, "registry", "skills.json");
