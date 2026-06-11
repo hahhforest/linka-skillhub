@@ -612,7 +612,11 @@ export function App() {
       setBusy(false);
     }
   };
-  const refreshGit = async () => { setBusy(true); try { const result = await api.repoStatus(); setGitStatusText(result.status || "clean"); } catch (error) { setMessage(humanizeError(error, lang)); } finally { setBusy(false); } };
+  const refreshGitStatusText = async () => {
+    const result = await api.repoStatus();
+    setGitStatusText(result.status || "clean");
+  };
+  const refreshGit = async () => { setBusy(true); try { await refreshGitStatusText(); } catch (error) { setMessage(humanizeError(error, lang)); } finally { setBusy(false); } };
   const pullRegistry = async () => { setBusy(true); try { const result = await api.repoPull(); setMessage(result.output || "pull ok"); await refreshGit(); } catch (error) { setMessage(humanizeError(error, lang)); } finally { setBusy(false); } };
   const pushRegistry = async () => { setBusy(true); try { const result = await api.repoPush(commitMessage || t.commitMessageDefault); setMessage(`${result.commit}\n${result.output}`); await refreshGit(); } catch (error) { setMessage(humanizeError(error, lang)); } finally { setBusy(false); } };
 
@@ -647,7 +651,13 @@ export function App() {
               onRefreshGit={refreshGit}
               onPull={pullRegistry}
               onPush={pushRegistry}
-              onRegistryLoaded={(result) => { setRegistryRepo(result.repoPath); if (result.skills) { setRegistrySkills(result.skills); setScannedSkills(null); } setMessage(`${messages[lang].loadRegistrySuccess}: ${result.repoPath} (${result.skillCount ?? result.skills?.length ?? 0})`); }}
+              onRegistryLoaded={(result) => {
+                setRegistryRepo(result.repoPath);
+                setGitStatusText("");
+                if (result.skills) { setRegistrySkills(result.skills); setScannedSkills(null); }
+                setMessage(`${messages[lang].loadRegistrySuccess}: ${result.repoPath} (${result.skillCount ?? result.skills?.length ?? 0})`);
+                void refreshGitStatusText().catch((error) => setMessage(humanizeError(error, lang)));
+              }}
               onRemoteConnected={(status, url) => { setGitStatusText(status); setMessage(messages[lang].connectRemoteSuccess.replace("{url}", url)); }}
               onSkillChanged={loadShell}
             />
