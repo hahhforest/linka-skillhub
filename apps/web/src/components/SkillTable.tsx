@@ -78,11 +78,14 @@ export function SkillTable({ skills, lang, focusedId, onFocus, selectedIds, onTo
                 type="checkbox"
                 className="skill-row-check"
                 checked={isChecked}
-                onChange={() => onToggleSelect?.(skill.id)}
+                onChange={() => { /* controlled by onClick below */ }}
                 // stopPropagation: a checkbox click toggles selection only. We
                 // do NOT also flip the row's focus, so the user can queue rows
                 // without losing whatever skill they're currently inspecting.
-                onClick={(event) => event.stopPropagation()}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onToggleSelect?.(skill.id);
+                }}
                 aria-label={skill.name}
               />
             )}
