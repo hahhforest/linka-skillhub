@@ -62,6 +62,12 @@ export function AddSourceDialog({ lang, agents, onAdded, onClose }: AddSourceDia
   const [showAdvanced, setShowAdvanced] = useState<boolean>(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const pathInputId = "add-source-path";
+  const pathHelpId = "add-source-path-help";
+  const groupSelectId = "add-source-group";
+  const groupHelpId = "add-source-group-help";
+  const customAgentInputId = "add-source-custom-agent";
+  const customAgentHelpId = "add-source-custom-agent-help";
 
   const effectiveAgentKind = (agentKind === CUSTOM_OPTION ? customAgentKind.trim() : agentKind).trim();
   // Disable submit until the form is at least syntactically valid. Server-side
@@ -126,38 +132,42 @@ export function AddSourceDialog({ lang, agents, onAdded, onClose }: AddSourceDia
         <h2 id="add-source-title"><FolderPlus size={18} /> {t.addSourceTitle}</h2>
         <p className="muted-copy">{t.addSourceBody}</p>
         <div className="add-source-form">
-          <label className="add-source-field">
+          <label className="add-source-field" htmlFor={pathInputId}>
             <span className="add-source-field-label">{t.addSourcePathLabel}</span>
             <input
+              id={pathInputId}
               type="text"
               value={pathInput}
               placeholder={t.addSourcePathPlaceholder}
+              aria-describedby={pathHelpId}
               autoFocus
               onChange={(event) => setPathInput(event.target.value)}
               onKeyDown={(event) => { if (event.key === "Enter" && canSubmit) void submit(); }}
             />
-            <small className="add-source-field-help">{t.addSourcePathHelp}</small>
+            <small id={pathHelpId} className="add-source-field-help">{t.addSourcePathHelp}</small>
           </label>
-          <label className="add-source-field">
+          <label className="add-source-field" htmlFor={groupSelectId}>
             <span className="add-source-field-label">{t.addSourceGroupLabel}</span>
-            <select value={agentKind} onChange={(event) => setAgentKind(event.target.value)}>
+            <select id={groupSelectId} value={agentKind} aria-describedby={groupHelpId} onChange={(event) => setAgentKind(event.target.value)}>
               <option value={CUSTOM_OPTION}>{t.addSourceGroupCustomOption}</option>
               {agentOptions.map((option) => (
                 <option key={option.kind} value={option.kind}>{option.label}</option>
               ))}
             </select>
-            <small className="add-source-field-help">{t.addSourceGroupHelp}</small>
+            <small id={groupHelpId} className="add-source-field-help">{t.addSourceGroupHelp}</small>
           </label>
           {agentKind === CUSTOM_OPTION && (
-            <label className="add-source-field">
+            <label className="add-source-field" htmlFor={customAgentInputId}>
               <span className="add-source-field-label">{t.addSourceCustomAgentLabel}</span>
               <input
+                id={customAgentInputId}
                 type="text"
                 value={customAgentKind}
                 placeholder={t.addSourceCustomAgentPlaceholder}
+                aria-describedby={customAgentHelpId}
                 onChange={(event) => setCustomAgentKind(event.target.value)}
               />
-              <small className="add-source-field-help">{t.addSourceCustomAgentHelp}</small>
+              <small id={customAgentHelpId} className="add-source-field-help">{t.addSourceCustomAgentHelp}</small>
             </label>
           )}
           <div className="add-source-advanced">
