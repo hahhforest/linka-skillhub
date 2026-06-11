@@ -63,10 +63,13 @@ export function AddSourceDialog({ lang, agents, onAdded, onClose }: AddSourceDia
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const pathInputId = "add-source-path";
+  const pathLabelId = "add-source-path-label";
   const pathHelpId = "add-source-path-help";
   const groupSelectId = "add-source-group";
+  const groupLabelId = "add-source-group-label";
   const groupHelpId = "add-source-group-help";
   const customAgentInputId = "add-source-custom-agent";
+  const customAgentLabelId = "add-source-custom-agent-label";
   const customAgentHelpId = "add-source-custom-agent-help";
 
   const effectiveAgentKind = (agentKind === CUSTOM_OPTION ? customAgentKind.trim() : agentKind).trim();
@@ -133,12 +136,13 @@ export function AddSourceDialog({ lang, agents, onAdded, onClose }: AddSourceDia
         <p className="muted-copy">{t.addSourceBody}</p>
         <div className="add-source-form">
           <label className="add-source-field" htmlFor={pathInputId}>
-            <span className="add-source-field-label">{t.addSourcePathLabel}</span>
+            <span id={pathLabelId} className="add-source-field-label">{t.addSourcePathLabel}</span>
             <input
               id={pathInputId}
               type="text"
               value={pathInput}
               placeholder={t.addSourcePathPlaceholder}
+              aria-labelledby={pathLabelId}
               aria-describedby={pathHelpId}
               autoFocus
               onChange={(event) => setPathInput(event.target.value)}
@@ -147,8 +151,8 @@ export function AddSourceDialog({ lang, agents, onAdded, onClose }: AddSourceDia
             <small id={pathHelpId} className="add-source-field-help">{t.addSourcePathHelp}</small>
           </label>
           <label className="add-source-field" htmlFor={groupSelectId}>
-            <span className="add-source-field-label">{t.addSourceGroupLabel}</span>
-            <select id={groupSelectId} value={agentKind} aria-describedby={groupHelpId} onChange={(event) => setAgentKind(event.target.value)}>
+            <span id={groupLabelId} className="add-source-field-label">{t.addSourceGroupLabel}</span>
+            <select id={groupSelectId} value={agentKind} aria-labelledby={groupLabelId} aria-describedby={groupHelpId} onChange={(event) => setAgentKind(event.target.value)}>
               <option value={CUSTOM_OPTION}>{t.addSourceGroupCustomOption}</option>
               {agentOptions.map((option) => (
                 <option key={option.kind} value={option.kind}>{option.label}</option>
@@ -158,12 +162,13 @@ export function AddSourceDialog({ lang, agents, onAdded, onClose }: AddSourceDia
           </label>
           {agentKind === CUSTOM_OPTION && (
             <label className="add-source-field" htmlFor={customAgentInputId}>
-              <span className="add-source-field-label">{t.addSourceCustomAgentLabel}</span>
+              <span id={customAgentLabelId} className="add-source-field-label">{t.addSourceCustomAgentLabel}</span>
               <input
                 id={customAgentInputId}
                 type="text"
                 value={customAgentKind}
                 placeholder={t.addSourceCustomAgentPlaceholder}
+                aria-labelledby={customAgentLabelId}
                 aria-describedby={customAgentHelpId}
                 onChange={(event) => setCustomAgentKind(event.target.value)}
               />
