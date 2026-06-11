@@ -107,8 +107,11 @@ The browser UI is intentionally thin. It presents the same operations the CLI ru
 pnpm typecheck
 pnpm test
 pnpm build
+pnpm test:webui:functional
 pnpm verify
 ```
+
+`pnpm test:webui:functional` builds the Web console, starts an isolated sandbox server, and clicks through language switching, registry loading, import, distribute, intersect, sync pull/push/push-all, merge gating, and remote push flows.
 
 `pnpm verify` runs typecheck, tests, production build, UI audit, and UI flow checks.
 

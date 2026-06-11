@@ -17,6 +17,7 @@
     "seed:sandbox": "node scripts/seed-sandbox.mjs",
     "mirror:local": "node scripts/mirror-local-skills.mjs",
     "smoke:ui": "node scripts/ui-smoke.mjs",
+    "test:webui:functional": "node scripts/webui-functional-test.mjs",
     "scan": "pnpm --filter @linka-skillhub/cli start -- scan",
     "lsh": "node packages/cli/dist/index.js",
     "lsh:dev": "pnpm --filter @linka-skillhub/cli start --",

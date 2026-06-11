@@ -759,7 +759,10 @@ function Intersect({ skills, allSkills, targets, lang, planSnapshot, onPlan, onA
   // Switching `from` therefore yields a fresh-feeling lane even if the user
   // checked rows under a different `from` earlier in the same Intersect visit.
   const selectedSkills = skills.filter((skill) => selectedForCopy.has(skill.id) && skill.source.agent === from);
-  const selectedIds = selectedSkills.map((skill) => skill.id);
+  // Intersect selects from freshly-scanned source rows, but the distribution
+  // API filters against Registry canonical ids. Registry v2 uses the skill
+  // name as that id, so translate the local scan ids before planning/apply.
+  const selectedIds = selectedSkills.map((skill) => skill.name);
   const currentPlan = planSnapshot?.key === planKeyOf([to], selectedIds) ? planSnapshot.plan : undefined;
   const sourcePath = left[0]?.source.rootPath ?? "-";
   const targetPath = targets.find((target) => target.agent === to)?.targetDir ?? "-";

@@ -107,8 +107,11 @@ Web UI 只负责呈现和交互，底层仍然调用 CLI 使用的 core workflow
 pnpm typecheck
 pnpm test
 pnpm build
+pnpm test:webui:functional
 pnpm verify
 ```
+
+`pnpm test:webui:functional` 会构建 Web 控制台，启动隔离的 sandbox 服务，并真实点击语言切换、加载 Registry、导入、分发、交汇、sync pull/push/push-all、merge gating 和 remote push 流程。
 
 `pnpm verify` 会运行类型检查、测试、生产构建、UI audit 和 UI flow checks。
 
