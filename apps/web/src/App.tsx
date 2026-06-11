@@ -33,6 +33,18 @@ import { humanizeError } from "./humanize-error.js";
 
 type View = "overview" | "intersect" | "distribute" | "repo";
 type Dialog = "scan" | "review" | "confirmPlan" | "addSource" | null;
+type PlanOwner = "intersect" | "distribute";
+type PlanSnapshot = {
+  readonly owner: PlanOwner;
+  readonly key: string;
+  readonly plan: DistributionPlan;
+};
+
+const planKeyOf = (targetAgents: readonly string[], skillIds?: readonly string[]): string =>
+  JSON.stringify({
+    targetAgents: [...targetAgents].sort(),
+    skillIds: skillIds ? [...skillIds].sort() : null
+  });
 
 // Mirrors @linka-skillhub/core's summarizeSkills semantics (kept local because
 // the core barrel imports node:* modules that don't survive a browser bundle).
@@ -442,7 +454,7 @@ export function App() {
   // switches (otherwise Overview unmounts and the dropdown resets on every
   // tab change). Intersect / Distribute / Repo never see this value.
   const [overviewAgentFilter, setOverviewAgentFilter] = useState<string>("all");
-  const [plan, setPlan] = useState<DistributionPlan | undefined>();
+  const [planSnapshot, setPlanSnapshot] = useState<PlanSnapshot | null>(null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [query, setQuery] = useState("");
@@ -543,11 +555,12 @@ export function App() {
   // its local selectedForCopy; Distribute now also supplies an explicit list
   // from its local selectedForDistribute (R34 commit 4 ends the placeholder
   // omission that briefly distributed the whole registry by default).
-  const planDistribution = async (targetAgents: string[], skillIds?: string[]) => {
+  const planDistribution = async (owner: PlanOwner, targetAgents: string[], skillIds?: string[]) => {
     setBusy(true);
     try {
+      const key = planKeyOf(targetAgents, skillIds);
       const result = await api.distributionPlan(targetAgents, skillIds);
-      setPlan(result.plan);
+      setPlanSnapshot({ owner, key, plan: result.plan });
       setMessage(`${t.planSummary}: ${result.plan.items.length}`);
     } catch (error) {
       setMessage(humanizeError(error, lang));
@@ -555,11 +568,12 @@ export function App() {
       setBusy(false);
     }
   };
-  const applyDistribution = async (targetAgents: string[], skillIds?: string[]) => {
+  const applyDistribution = async (owner: PlanOwner, targetAgents: string[], skillIds?: string[]) => {
     setBusy(true);
     try {
+      const key = planKeyOf(targetAgents, skillIds);
       const result = await api.distributionPlan(targetAgents, skillIds);
-      setPlan(result.plan);
+      setPlanSnapshot({ owner, key, plan: result.plan });
       setPendingPlan({ plan: result.plan, confirmToken: result.confirmToken, targetAgents, skillIds });
       setDialog("confirmPlan");
       setMessage(`${t.planSummary}: ${result.plan.items.length}`);
@@ -576,6 +590,7 @@ export function App() {
       const run = await api.distributionApply(pendingPlan.targetAgents, pendingPlan.skillIds, pendingPlan.confirmToken);
       setMessage(`${t.copied} ${run.copied}, ${t.skipped} ${run.skipped}`);
       setPendingPlan(null);
+      setPlanSnapshot(null);
       setDialog(null);
       await loadShell();
     } catch (error) {
@@ -624,8 +639,8 @@ export function App() {
               onSkillChanged={loadShell}
             />
           )}
-          {view === "intersect" && <Intersect skills={visibleSkills} allSkills={skills} targets={targets} lang={lang} plan={plan} onPlan={planDistribution} onApply={applyDistribution} agents={populatedAgents} focusedSkillId={focusedSkillId} onFocus={focusSkill} onSkillChanged={loadShell} />}
-          {view === "distribute" && <Distribute skills={visibleSkills} allSkills={skills} totalSkillCount={skills.length} targets={targets} onPlan={planDistribution} onApply={applyDistribution} plan={plan} busy={busy} lang={lang} focusedSkillId={focusedSkillId} onFocus={focusSkill} query={query} onSkillChanged={loadShell} />}
+          {view === "intersect" && <Intersect skills={visibleSkills} allSkills={skills} targets={targets} lang={lang} planSnapshot={planSnapshot?.owner === "intersect" ? planSnapshot : undefined} onPlan={(agents, ids) => void planDistribution("intersect", agents, ids)} onApply={(agents, ids) => void applyDistribution("intersect", agents, ids)} agents={populatedAgents} focusedSkillId={focusedSkillId} onFocus={focusSkill} onSkillChanged={loadShell} />}
+          {view === "distribute" && <Distribute skills={visibleSkills} allSkills={skills} totalSkillCount={skills.length} targets={targets} onPlan={(agents, ids) => void planDistribution("distribute", agents, ids)} onApply={(agents, ids) => void applyDistribution("distribute", agents, ids)} planSnapshot={planSnapshot?.owner === "distribute" ? planSnapshot : undefined} busy={busy} lang={lang} focusedSkillId={focusedSkillId} onFocus={focusSkill} query={query} onSkillChanged={loadShell} />}
           <footer className="status-footer"><span>{populatedAgents.length} agents</span><span>{focusedSkillId ? 1 : 0} {t.focusedCount}</span><span className="status-message" title={message}>{message}</span></footer>
         </div>
       </div>
@@ -665,7 +680,7 @@ export function App() {
   );
 }
 
-function Intersect({ skills, allSkills, targets, lang, plan, onPlan, onApply, agents: agentDefs, focusedSkillId, onFocus, onSkillChanged }: { readonly skills: SkillPackage[]; readonly allSkills: SkillPackage[]; readonly targets: DistributionTarget[]; readonly lang: Language; readonly plan?: DistributionPlan; readonly onPlan: (agents: string[], skillIds?: string[]) => void; readonly onApply: (agents: string[], skillIds?: string[]) => void; readonly agents: AgentDefinition[]; readonly focusedSkillId: string | null; readonly onFocus: (id: string) => void; readonly onSkillChanged: () => Promise<void> | void }) {
+function Intersect({ skills, allSkills, targets, lang, planSnapshot, onPlan, onApply, agents: agentDefs, focusedSkillId, onFocus, onSkillChanged }: { readonly skills: SkillPackage[]; readonly allSkills: SkillPackage[]; readonly targets: DistributionTarget[]; readonly lang: Language; readonly planSnapshot?: PlanSnapshot; readonly onPlan: (agents: string[], skillIds?: string[]) => void; readonly onApply: (agents: string[], skillIds?: string[]) => void; readonly agents: AgentDefinition[]; readonly focusedSkillId: string | null; readonly onFocus: (id: string) => void; readonly onSkillChanged: () => Promise<void> | void }) {
   const t = messages[lang];
   // R35-C14 follow-up: defaults derive from the populated-agent list passed in
   // (agentDefs is App's populatedAgents filter), not hardcoded "mavis" /
@@ -722,6 +737,7 @@ function Intersect({ skills, allSkills, targets, lang, plan, onPlan, onApply, ag
   // checked rows under a different `from` earlier in the same Intersect visit.
   const selectedSkills = skills.filter((skill) => selectedForCopy.has(skill.id) && skill.source.agent === from);
   const selectedIds = selectedSkills.map((skill) => skill.id);
+  const currentPlan = planSnapshot?.key === planKeyOf([to], selectedIds) ? planSnapshot.plan : undefined;
   const sourcePath = left[0]?.source.rootPath ?? "-";
   const targetPath = targets.find((target) => target.agent === to)?.targetDir ?? "-";
   // The right sticky panel mirrors `focusedSkillId` from App. We resolve
@@ -771,12 +787,12 @@ function Intersect({ skills, allSkills, targets, lang, plan, onPlan, onApply, ag
           <p className="target-path-line">{t.targetPath}:</p>
           <code className="target-path-code" title={targetPath}>{targetPath}</code>
           <button className="primary action-bar-button" disabled={selectedSkills.length === 0 || sameSourceTarget} onClick={() => onPlan([to], selectedIds)}><UploadCloud size={16} /> {t.previewIntersection}</button>
-          {plan && selectedSkills.length > 0 && !sameSourceTarget && <button className="primary action-bar-button" onClick={() => onApply([to], selectedIds)}><Check size={16} /> {t.applyIntersection}</button>}
+          {currentPlan && selectedSkills.length > 0 && !sameSourceTarget && <button className="primary action-bar-button" onClick={() => onApply([to], selectedIds)}><Check size={16} /> {t.applyIntersection}</button>}
           {selectedSkills.length === 0 && <p className="muted-copy">{t.noSourceSelection}</p>}
-          {plan && (
+          {currentPlan && (
             <div className="action-bar-plan">
               <h3>{t.planSummary}</h3>
-              <PlanItems plan={plan} lang={lang} />
+              <PlanItems plan={currentPlan} lang={lang} />
             </div>
           )}
         </div>
@@ -811,14 +827,14 @@ function Intersect({ skills, allSkills, targets, lang, plan, onPlan, onApply, ag
   );
 }
 
-function Distribute({ skills, allSkills, totalSkillCount, targets, onPlan, onApply, plan, busy, lang, focusedSkillId, onFocus, query, onSkillChanged }: {
+function Distribute({ skills, allSkills, totalSkillCount, targets, onPlan, onApply, planSnapshot, busy, lang, focusedSkillId, onFocus, query, onSkillChanged }: {
   readonly skills: SkillPackage[];
   readonly allSkills: SkillPackage[];
   readonly totalSkillCount: number;
   readonly targets: DistributionTarget[];
   readonly onPlan: (agents: string[], skillIds?: string[]) => void;
   readonly onApply: (agents: string[], skillIds?: string[]) => void;
-  readonly plan?: DistributionPlan;
+  readonly planSnapshot?: PlanSnapshot;
   readonly busy: boolean;
   readonly lang: Language;
   readonly focusedSkillId: string | null;
@@ -859,6 +875,7 @@ function Distribute({ skills, allSkills, totalSkillCount, targets, onPlan, onApp
   const focusedHidden = focusedSkill ? !skills.some((skill) => skill.id === focusedSkill.id) : false;
   const selectedIds = useMemo(() => [...selectedForDistribute], [selectedForDistribute]);
   const targetAgents = useMemo(() => [...chosen], [chosen]);
+  const currentPlan = planSnapshot?.key === planKeyOf(targetAgents, selectedIds) ? planSnapshot.plan : undefined;
   // Empty registry beats any other state — until the user imports there's
   // nothing to distribute regardless of how many target agents they pick.
   if (totalSkillCount === 0) {
@@ -876,7 +893,7 @@ function Distribute({ skills, allSkills, totalSkillCount, targets, onPlan, onApp
     );
   }
   const canPreview = !busy && chosen.size > 0 && selectedForDistribute.size > 0;
-  const canApply = !busy && !!plan && chosen.size > 0 && selectedForDistribute.size > 0;
+  const canApply = !busy && !!currentPlan && chosen.size > 0 && selectedForDistribute.size > 0;
   const tableCount = skills.length === totalSkillCount ? `${totalSkillCount}` : `${skills.length} / ${totalSkillCount}`;
   return (
     <section className="distribute-layout">
@@ -942,10 +959,10 @@ function Distribute({ skills, allSkills, totalSkillCount, targets, onPlan, onApp
         </div>
         {chosen.size === 0 && <p className="muted-copy">{t.noTargetSelection}</p>}
         {chosen.size > 0 && selectedForDistribute.size === 0 && <p className="muted-copy">{t.noDistributeSelection}</p>}
-        {plan && (
+        {currentPlan && (
           <div className="action-bar-plan">
-            <h3>{t.planSummary}<span className="title-count">{plan.items.filter((item) => item.action !== "skip").length} {t.toCopyOrOverwrite}</span></h3>
-            <PlanItems plan={plan} lang={lang} />
+            <h3>{t.planSummary}<span className="title-count">{currentPlan.items.filter((item) => item.action !== "skip").length} {t.toCopyOrOverwrite}</span></h3>
+            <PlanItems plan={currentPlan} lang={lang} />
           </div>
         )}
       </div>
