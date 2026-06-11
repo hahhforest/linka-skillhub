@@ -439,7 +439,8 @@ export function App() {
   const [lang, setLang] = useState<Language>("zh");
   const t = messages[lang];
   const [view, setView] = useState<View>("overview");
-  const [skills, setSkills] = useState<SkillPackage[]>([]);
+  const [registrySkills, setRegistrySkills] = useState<SkillPackage[]>([]);
+  const [scannedSkills, setScannedSkills] = useState<SkillPackage[] | null>(null);
   const [agents, setAgents] = useState<AgentDefinition[]>([]);
   const [targets, setTargets] = useState<DistributionTarget[]>([]);
   const [profile, setProfile] = useState("unknown");
@@ -473,7 +474,7 @@ export function App() {
 
   const loadShell = async () => {
     const [agentData, registry] = await Promise.all([api.agents(), api.skills()]);
-    setAgents(agentData.agents); setTargets(agentData.targets); setProfile(agentData.profile ?? "unknown"); setRegistryRepo(agentData.registryRepo ?? ""); setSkills(registry.skills);
+    setAgents(agentData.agents); setTargets(agentData.targets); setProfile(agentData.profile ?? "unknown"); setRegistryRepo(agentData.registryRepo ?? ""); setRegistrySkills(registry.skills);
     if (registry.missingRegistry) setMessage(lang === "zh" ? "Registry 还没有导入记录，请先扫描或导入。" : "Registry is empty. Scan or import first.");
   };
   const loadShellMeta = async () => {
@@ -500,26 +501,38 @@ export function App() {
   // briefly vanish from the dropdowns. Targets (write-side, in Distribute)
   // intentionally still show every configured agent — initializing an empty
   // agent by copying skills into it is a real use case.
-  const populatedAgents = useMemo(
-    () => agents.filter((agent) => skills.some((skill) => skill.source.agent === agent.kind)),
-    [agents, skills]
+  const sourceSkills = scannedSkills ?? registrySkills;
+  const sourcePopulatedAgents = useMemo(
+    () => agents.filter((agent) => sourceSkills.some((skill) => skill.source.agent === agent.kind)),
+    [agents, sourceSkills]
   );
+  const registryPopulatedAgents = useMemo(
+    () => agents.filter((agent) => registrySkills.some((skill) => skill.source.agent === agent.kind)),
+    [agents, registrySkills]
+  );
+  const footerAgents = view === "repo" || view === "distribute" ? registryPopulatedAgents : sourcePopulatedAgents;
 
   // R34 commit 2: the global agent filter that used to live in the sidebar is
   // gone. visibleSkills now only narrows by the topbar search query; agent
   // narrowing happens inside Overview / Intersect / Distribute / Repo, each
   // owning their own scope. summary is computed in Overview from its own
   // displayedSkills, so it no longer needs to live in App state.
-  const visibleSkills = useMemo(() => {
+  const visibleSourceSkills = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return skills;
-    return skills.filter((skill) => `${skill.name} ${skill.description} ${skill.source.agent}`.toLowerCase().includes(q));
-  }, [query, skills]);
+    if (!q) return sourceSkills;
+    return sourceSkills.filter((skill) => `${skill.name} ${skill.description} ${skill.source.agent}`.toLowerCase().includes(q));
+  }, [query, sourceSkills]);
+
+  const visibleRegistrySkills = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return registrySkills;
+    return registrySkills.filter((skill) => `${skill.name} ${skill.description} ${skill.source.agent}`.toLowerCase().includes(q));
+  }, [query, registrySkills]);
 
   // Single-focus toggle: clicking the row that is already focused clears it
   // (so the detail panel returns to the empty state), otherwise replace.
   const focusSkill = (id: string) => setFocusedSkillId(id === focusedSkillId ? null : id);
-  const runScan = async () => { setBusy(true); try { const scan = await api.scan(includeBuiltin); setSkills(scan.skills); setMessage(`${t.scan}: ${scan.summary.total}`); setDialog(null); } catch (error) { setMessage(humanizeError(error, lang)); } finally { setBusy(false); } };
+  const runScan = async () => { setBusy(true); try { const scan = await api.scan(includeBuiltin); setScannedSkills(scan.skills); setMessage(`${t.scan}: ${scan.summary.total}`); setDialog(null); } catch (error) { setMessage(humanizeError(error, lang)); } finally { setBusy(false); } };
   const importRepo = async () => { setBusy(true); try { const result = await api.import(); setMessage(`${t.imported} ${result.imported} skills → ${result.repoPath}`); await loadShell(); } catch (error) { setMessage(humanizeError(error, lang)); } finally { setBusy(false); } };
   const runReview = async () => {
     setBusy(true);
@@ -529,7 +542,7 @@ export function App() {
       // whole Registry" default that the four-action-card layout used to
       // implicitly mean, while letting power users narrow it via the
       // checkbox column added in R34 commit 5.
-      const ids = reviewScopeIds.length > 0 ? reviewScopeIds : skills.map((skill) => skill.id);
+      const ids = reviewScopeIds.length > 0 ? reviewScopeIds : registrySkills.map((skill) => skill.id);
       const result = await api.review(ids, reviewer, lang);
       setMessage(`${t.reviewed} ${result.reviews.length} skills`);
       setDialog(null);
@@ -612,13 +625,13 @@ export function App() {
       <div className="workspace">
         <Sidebar view={view} setView={setView} lang={lang} />
         <div className="content">
-          {view === "overview" && <Overview skills={visibleSkills} focusedSkillId={focusedSkillId} focusSkill={focusSkill} lang={lang} totalSkillCount={skills.length} allSkills={skills} query={query} agents={populatedAgents} overviewAgentFilter={overviewAgentFilter} setOverviewAgentFilter={setOverviewAgentFilter} onOpenAddSource={() => setDialog("addSource")} onSkillChanged={loadShell} />}
+          {view === "overview" && <Overview skills={visibleSourceSkills} focusedSkillId={focusedSkillId} focusSkill={focusSkill} lang={lang} totalSkillCount={sourceSkills.length} allSkills={sourceSkills} query={query} agents={sourcePopulatedAgents} overviewAgentFilter={overviewAgentFilter} setOverviewAgentFilter={setOverviewAgentFilter} onOpenAddSource={() => setDialog("addSource")} onSkillChanged={loadShell} />}
           {view === "repo" && (
             <RepoBrowser
-              skills={visibleSkills}
-              allSkills={skills}
-              totalSkillCount={skills.length}
-              agents={populatedAgents}
+              skills={visibleRegistrySkills}
+              allSkills={registrySkills}
+              totalSkillCount={registrySkills.length}
+              agents={registryPopulatedAgents}
               focusedSkillId={focusedSkillId}
               onFocus={focusSkill}
               lang={lang}
@@ -634,18 +647,18 @@ export function App() {
               onRefreshGit={refreshGit}
               onPull={pullRegistry}
               onPush={pushRegistry}
-              onRegistryLoaded={(result) => { setRegistryRepo(result.repoPath); if (result.skills) setSkills(result.skills); setMessage(`${messages[lang].loadRegistrySuccess}: ${result.repoPath} (${result.skillCount ?? result.skills?.length ?? 0})`); }}
+              onRegistryLoaded={(result) => { setRegistryRepo(result.repoPath); if (result.skills) { setRegistrySkills(result.skills); setScannedSkills(null); } setMessage(`${messages[lang].loadRegistrySuccess}: ${result.repoPath} (${result.skillCount ?? result.skills?.length ?? 0})`); }}
               onRemoteConnected={(status, url) => { setGitStatusText(status); setMessage(messages[lang].connectRemoteSuccess.replace("{url}", url)); }}
               onSkillChanged={loadShell}
             />
           )}
-          {view === "intersect" && <Intersect skills={visibleSkills} allSkills={skills} targets={targets} lang={lang} planSnapshot={planSnapshot?.owner === "intersect" ? planSnapshot : undefined} onPlan={(agents, ids) => void planDistribution("intersect", agents, ids)} onApply={(agents, ids) => void applyDistribution("intersect", agents, ids)} agents={populatedAgents} focusedSkillId={focusedSkillId} onFocus={focusSkill} onSkillChanged={loadShell} />}
-          {view === "distribute" && <Distribute skills={visibleSkills} allSkills={skills} totalSkillCount={skills.length} targets={targets} onPlan={(agents, ids) => void planDistribution("distribute", agents, ids)} onApply={(agents, ids) => void applyDistribution("distribute", agents, ids)} planSnapshot={planSnapshot?.owner === "distribute" ? planSnapshot : undefined} busy={busy} lang={lang} focusedSkillId={focusedSkillId} onFocus={focusSkill} query={query} onSkillChanged={loadShell} />}
-          <footer className="status-footer"><span>{populatedAgents.length} agents</span><span>{focusedSkillId ? 1 : 0} {t.focusedCount}</span><span className="status-message" title={message}>{message}</span></footer>
+          {view === "intersect" && <Intersect skills={visibleSourceSkills} allSkills={sourceSkills} targets={targets} lang={lang} planSnapshot={planSnapshot?.owner === "intersect" ? planSnapshot : undefined} onPlan={(agents, ids) => void planDistribution("intersect", agents, ids)} onApply={(agents, ids) => void applyDistribution("intersect", agents, ids)} agents={sourcePopulatedAgents} focusedSkillId={focusedSkillId} onFocus={focusSkill} onSkillChanged={loadShell} />}
+          {view === "distribute" && <Distribute skills={visibleRegistrySkills} allSkills={registrySkills} totalSkillCount={registrySkills.length} targets={targets} onPlan={(agents, ids) => void planDistribution("distribute", agents, ids)} onApply={(agents, ids) => void applyDistribution("distribute", agents, ids)} planSnapshot={planSnapshot?.owner === "distribute" ? planSnapshot : undefined} busy={busy} lang={lang} focusedSkillId={focusedSkillId} onFocus={focusSkill} query={query} onSkillChanged={loadShell} />}
+          <footer className="status-footer"><span>{footerAgents.length} agents</span><span>{focusedSkillId ? 1 : 0} {t.focusedCount}</span><span className="status-message" title={message}>{message}</span></footer>
         </div>
       </div>
       {dialog === "scan" && <DialogFrame title={t.scanDialogTitle} onClose={() => setDialog(null)} closeLabel={t.cancel}><p>{t.scanDialogBody}</p><label className="checkbox-line"><input type="checkbox" checked={includeBuiltin} onChange={(event) => setIncludeBuiltin(event.target.checked)} /> {t.includeBuiltin}</label><div className="dialog-actions"><button className="ghost" onClick={() => setDialog(null)}>{t.cancel}</button><button className="primary" onClick={runScan} disabled={busy}>{t.confirmScan}</button></div></DialogFrame>}
-      {dialog === "review" && <DialogFrame title={t.reviewDialogTitle} onClose={() => setDialog(null)} closeLabel={t.cancel}><p>{t.reviewDialogBody}</p><div className="review-meta"><span>{t.reviewScope}: {reviewScopeIds.length > 0 ? t.reviewScopeSelected.replace("{n}", String(reviewScopeIds.length)) : t.reviewScopeAllRegistry.replace("{n}", String(skills.length))}</span><span>{t.reviewOutputLanguage}: {lang === "zh" ? "中文" : "English"}</span><span>{t.reviewWriteTarget}: registry/reviews/*.json</span></div><div className="reviewer-list">{reviewers.map((item) => <label key={item.kind} className={`reviewer-option ${reviewer === item.kind ? "active" : ""} ${!item.available ? "disabled" : ""}`}><input type="radio" name="reviewer" value={item.kind} checked={reviewer === item.kind} disabled={!item.available} onChange={() => setReviewer(item.kind)} /><strong>{item.kind === "rules" ? t.reviewerRules : item.label}</strong><span>{item.available ? t.reviewerAvailable : t.reviewerUnavailable}</span><small>{localizedReviewerReason(item, lang)}</small></label>)}</div><p className="muted-copy">{t.agentUnavailable}</p><div className="dialog-actions"><button className="ghost" onClick={() => setDialog(null)}>{t.cancel}</button><button className="primary" onClick={runReview} disabled={busy || !reviewers.find((item) => item.kind === reviewer)?.available}>{t.startReview}</button></div></DialogFrame>}
+      {dialog === "review" && <DialogFrame title={t.reviewDialogTitle} onClose={() => setDialog(null)} closeLabel={t.cancel}><p>{t.reviewDialogBody}</p><div className="review-meta"><span>{t.reviewScope}: {reviewScopeIds.length > 0 ? t.reviewScopeSelected.replace("{n}", String(reviewScopeIds.length)) : t.reviewScopeAllRegistry.replace("{n}", String(registrySkills.length))}</span><span>{t.reviewOutputLanguage}: {lang === "zh" ? "中文" : "English"}</span><span>{t.reviewWriteTarget}: registry/reviews/*.json</span></div><div className="reviewer-list">{reviewers.map((item) => <label key={item.kind} className={`reviewer-option ${reviewer === item.kind ? "active" : ""} ${!item.available ? "disabled" : ""}`}><input type="radio" name="reviewer" value={item.kind} checked={reviewer === item.kind} disabled={!item.available} onChange={() => setReviewer(item.kind)} /><strong>{item.kind === "rules" ? t.reviewerRules : item.label}</strong><span>{item.available ? t.reviewerAvailable : t.reviewerUnavailable}</span><small>{localizedReviewerReason(item, lang)}</small></label>)}</div><p className="muted-copy">{t.agentUnavailable}</p><div className="dialog-actions"><button className="ghost" onClick={() => setDialog(null)}>{t.cancel}</button><button className="primary" onClick={runReview} disabled={busy || !reviewers.find((item) => item.kind === reviewer)?.available}>{t.startReview}</button></div></DialogFrame>}
       {dialog === "confirmPlan" && pendingPlan && (
         <ConfirmPlanModal
           plan={pendingPlan.plan}
@@ -667,7 +680,7 @@ export function App() {
             try {
               const scan = await api.scan(includeBuiltin);
               await loadShellMeta();
-              setSkills(scan.skills);
+              setScannedSkills(scan.skills);
               setMessage(`${t.addSourceSuccess} (${result.agentKind} / ${scopeLabel(result.scope, lang)})`);
             } catch (error) {
               setMessage(humanizeError(error, lang));
